@@ -303,8 +303,14 @@ site with the rubric complete outranks it on the deadline.)
   data on every open-market Friday (the two gaps are US market holidays). Note LSEG
   returns split-*adjusted* equity prices, so the price check alone is weak — the strike
   grid and expiry coverage carry the conclusion, and neither is retroactively adjusted.
-- **OQ-4:** Pages mechanism: Actions workflow vs `gh-pages` branch (decide during FR-9;
-  workflow preferred so export stays reproducible).
+- **OQ-4:** ~~Pages mechanism: Actions workflow vs `gh-pages` branch.~~ **Actions workflow,
+  shipped 2026-08-31** (`.github/workflows/pages.yml`). Superseded by a larger question:
+  **OQ-7**.
+- **OQ-7 (blocking FR-9):** A Reflex static export cannot run on Pages — the bundle needs a
+  live backend over a websocket and the page renders blank without one. Does the
+  instructor want the frontend on Pages with a backend hosted elsewhere, `reflex deploy`
+  to Reflex Cloud, or a static Plotly page? See ARCHITECTURE AD-4's 2026-08-31 note and
+  DEMO-SCRIPT question 5.
 - **OQ-5:** `pivot_trade_settle` drops rows whose `spot` is NaN (pandas `pivot_table` discards
   NaN index keys), contradicting SPEC §7.2's "one row per (date, ric)". Only reachable when the
   stock frame does not cover the option dates. Recorded as an `xfail` in

@@ -246,9 +246,37 @@ Price continuity, an unbroken $0.50 strike grid, and option data on every open-m
 all agree. Worth mentioning only as evidence you did the pre-flight — README:129 asks you to
 check and switch underlyings if it split, not to write split-handling code.
 
-**5. Deployment.** Is a static Reflex export on GitHub Pages, with the interactivity
-client-side in Plotly, an acceptable reading of "the site must render from your GitHub repo"?
-Or do you expect a live backend?
+**5. Deployment — I deployed it and the page is blank. Which way do you want this done?**
+
+Say it plainly, because it is a real blocker and you have the evidence:
+
+> "I got the Pages deploy working — tests, export and publish all green. But the page renders
+> blank. Reflex splits into a Python backend and a compiled frontend, and the frontend talks
+> to the backend over a websocket. The exported bundle still points at
+> `ws://localhost:8000/_event`, so on GitHub Pages it can't connect and the app never
+> hydrates. Reflex's own docs say to deploy the frontend statically and run the backend
+> separately, pointing at it with `api_url`. Which do you want us to do?"
+
+Then give him the three, because they lead to very different work:
+
+| | what it means | URL |
+|---|---|---|
+| **a** | Frontend on Pages, backend hosted elsewhere (Reflex Cloud / Railway / Render), `REFLEX_API_URL` baked in at export | stays `github.io` |
+| **b** | `reflex deploy` — Reflex Cloud runs both halves | not GitHub |
+| **c** | Static Plotly page, no backend, interactivity Plotly-native | stays `github.io` |
+
+*(a) and (b) keep every Reflex widget working. (c) works today but loses the switches until
+they are rebuilt as Plotly `updatemenus`.*
+
+**The thing to actually ask:** *"The rubric says the site must render from my GitHub repo —
+does a hosted backend still satisfy that, or does it need to be self-contained on Pages?"*
+That is the part only he can answer, and it decides the rest.
+
+*If he says Pages can do more than static now — he is right, and it doesn't resolve this.*
+Deploy-from-Actions and rich client-side apps are both real. What Pages still won't do is
+execute Python at request time, which is what Reflex state needs. Worth agreeing on that
+distinction rather than arguing it. And he may have deployed Reflex this way himself and know
+a trick — ask.
 
 **6.** *(if time)* Committed sub-MB pickle in the repo — fine, or prefer something else?
 

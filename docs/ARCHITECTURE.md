@@ -219,6 +219,18 @@ the published page shows real data with no backend; import gets slower (fine —
 build); base-path config becomes deployment-critical; anything only reachable through an
 event handler is invisible in production, which forces AD-5.
 
+> ⚠ **Measured 2026-08-31 — this decision's central assumption is wrong.** The first real
+> deploy renders a *blank page*, not a populated one. A Reflex static export bakes
+> `ws://localhost:8000/_event` into the bundle; on Pages the websocket cannot connect, React
+> hydration fails, and the pre-rendered markup is unmounted. The app's text *is* in the
+> exported HTML — this is a hydration failure, not an export failure. Import-time baking
+> (T-14) would not have fixed it: baking figures as State defaults does not help when the
+> state runtime cannot start. Reflex 0.9.8's config exposes no static/no-backend mode.
+> Reflex's documented pattern is frontend-static + backend hosted separately, with `api_url`
+> (overridable as `REFLEX_API_URL` at export) pointing at it. **Blocked on the instructor:
+> DEMO-SCRIPT question 5.** Do not spend effort on T-14/T-15 for deployment reasons until
+> that is answered — they remain justified for the local app, but they do not unblock Pages.
+
 **AD-5 — Interactivity is Plotly-native on the published site.**
 *Context:* AD-4 removes server-side event handling from production. *Decision:* series
 toggles ride Plotly legends; date / C-P / axis-mode switches are `updatemenus` over
