@@ -1,0 +1,114 @@
+name: Test and deploy to Pages
+
+# FR-9 / T-9. Two jobs on purpose: the tests run in a clean container with no LSEG
+# credentials and no Workspace, which is what actually proves NFR-4 — "the app, tests,
+# preview and export all work offline". If that job ever needs a secret to pass, the
+# offline guarantee has been broken and the deploy should not happen.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race. Don't cancel a run in progress — a half-finished
+# Pages deploy is worse than a queued one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # Belt and braces: forces the synthetic path and makes any attempt to reach LSEG
+  # impossible, so a network call can never sneak into a build.
+  OSL_OFFLINE: "1"
+
+jobs:
+  test:
+    name: pytest (no credentials — proves NFR-4)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run the suite
+        run: python -m pytest tests/ -q
+
+  build:
+    name: Export static frontend
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Reflex wants Node 22+. The local dev machine has 12.x, which is why
+      # `reflex export` fails to compress there — CI is deliberately newer.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Export
+        run: reflex export --frontend-only --no-zip
+
+      # rxconfig sets frontend_path="/options-surface-lab" so asset URLs resolve under
+      # the project-Pages subpath. Side effect: it also moves the app's "/" route down
+      # one level, leaving no index.html at the build root — so the site root would 404
+      # and the page would only exist at /options-surface-lab/options-surface-lab/.
+      # Lifting the page back to the root fixes it. Verified against a local simulation
+      # of the Pages layout: root serves the app and every asset returns 200.
+      - name: Lift the page to the site root
+        run: |
+          set -euo pipefail
+          root=.web/build/client
+          test -f "$root/options-surface-lab/index.html"
+          cp "$root/options-surface-lab/index.html" "$root/index.html"
+          # SPA fallback: Pages serves 404.html for unknown paths.
+          cp "$root/options-surface-lab/index.html" "$root/404.html"
+          # Pages runs Jekyll by default, which strips files and dirs beginning with "_".
+          touch "$root/.nojekyll"
+
+      - name: Fail if the root page is missing or assets are not prefixed
+        run: |
+          set -euo pipefail
+          root=.web/build/client
+          test -f "$root/index.html" || { echo "::error::no index.html at build root"; exit 1; }
+          grep -q '/options-surface-lab/assets/' "$root/index.html" \
+            || { echo "::error::assets are not prefixed with the Pages base path"; exit 1; }
+          echo "root page present and assets correctly prefixed"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .web/build/client
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

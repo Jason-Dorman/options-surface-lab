@@ -4,6 +4,7 @@ import reflex as rx
 
 config = rx.Config(
     app_name="options_surface_lab",
+    frontend_path="/options-surface-lab",
     # No sitemap needed for a single-page class project; silences the default-plugin warning
     disable_plugins=["reflex.plugins.sitemap.SitemapPlugin"],
 )

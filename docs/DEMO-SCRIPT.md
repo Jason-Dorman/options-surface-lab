@@ -241,8 +241,10 @@ The README's example has 10 digits where Appendix A's grammar gives 9. The 9-dig
 what LSEG actually accepted — 296 live series built that way. Almost certainly a typo, but
 worth confirming.
 
-**4. Did UUUU split in the window?** If it did, the synthetic RICs miss the adjusted
-contracts and switching roots is the fix — is that acceptable?
+**4.** *(answered — ask only if it comes up)* **Did UUUU split in the window?** Checked: no.
+Price continuity, an unbroken $0.50 strike grid, and option data on every open-market Friday
+all agree. Worth mentioning only as evidence you did the pre-flight — README:129 asks you to
+check and switch underlyings if it split, not to write split-handling code.
 
 **5. Deployment.** Is a static Reflex export on GitHub Pages, with the interactivity
 client-side in Plotly, an acceptable reading of "the site must render from your GitHub repo"?

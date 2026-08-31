@@ -123,8 +123,10 @@ never commit it, never print its contents, never copy it into anything that ship
 
 ## Working style
 
-- Small, verifiable steps; run tests after each change; commit frequently once the repo is
-  under git (FR-9 initializes it).
+- Small, verifiable steps; run tests after each change; commit frequently — the repo is live
+  at `Jason-Dorman/options-surface-lab` (T-8, 2026-08-31). Push auth is the WSL SSH key;
+  Git Credential Manager on this machine is broken (needs .NET 7/8, only 5.0.14 present), so
+  HTTPS pushes fail silently. Use the SSH remote.
 - Route changes via ARCHITECTURE §7's table; if a change fits no row, it's an architecture
   question for the PO.
 - Prefer editing existing modules to adding new ones; the module set and their

@@ -297,7 +297,12 @@ site with the rubric complete outranks it on the deadline.)
 - **OQ-1:** Exact Class 2 date (checkpoint) — pins M1.
 - **OQ-2:** Constant rate for FR-11 (pick something defensible, e.g. a current short T-bill
   yield, and write it down — the writing-down matters more than the number).
-- **OQ-3:** Confirm UUUU has no split in the 12-week window (blocks FR-2 commit).
+- **OQ-3:** ~~Confirm UUUU has no split in the 12-week window (blocks FR-2 commit).~~
+  **Closed 2026-08-31 — no split.** Evidence in BACKLOG T-6: price continuity (max
+  overnight move +10.2%), an unbroken $0.50 strike grid across all expiries, and option
+  data on every open-market Friday (the two gaps are US market holidays). Note LSEG
+  returns split-*adjusted* equity prices, so the price check alone is weak — the strike
+  grid and expiry coverage carry the conclusion, and neither is retroactively adjusted.
 - **OQ-4:** Pages mechanism: Actions workflow vs `gh-pages` branch (decide during FR-9;
   workflow preferred so export stays reproducible).
 - **OQ-5:** `pivot_trade_settle` drops rows whose `spot` is NaN (pandas `pivot_table` discards
