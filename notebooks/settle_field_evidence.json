@@ -1,0 +1,175 @@
+{
+  "captured_at": "2026-08-30 00:50:21",
+  "window": [
+    "2026-06-08",
+    "2026-08-21"
+  ],
+  "sample_call": "UUUUF122601100.U^F26",
+  "sample_put": "UUUUR122601100.U^F26",
+  "n_sample_rics": 40,
+  "settle_candidates": {
+    "_scope": "all 294 series x 53 trading days = 15582 contract-days",
+    "n_rics": 294,
+    "n_contract_days": 15582,
+    "method": "each name requested PAIRED with TRDPRC_1 so an absent field returns empty instead of raising; every RIC returned data on the paired field",
+    "counts": {
+      "SETTLE": 0,
+      "SETTLEMENTPRICE": 0,
+      "SETTLE_PRC": 0,
+      "OFFCL_CLOSE": 0,
+      "CF_CLOSE": 0,
+      "HST_CLOSE": 0,
+      "CLOSE": 0
+    },
+    "rics_alive_per_candidate": {
+      "SETTLEMENTPRICE": 294,
+      "SETTLE_PRC": 294,
+      "OFFCL_CLOSE": 294,
+      "CF_CLOSE": 294,
+      "HST_CLOSE": 294,
+      "CLOSE": 294
+    }
+  },
+  "control": {
+    "crude front-month future": {
+      "universe": "CLc1",
+      "columns": [
+        "TRDPRC_1",
+        "SETTLE"
+      ],
+      "settle_values": 15
+    },
+    "underlying equity": {
+      "universe": "UUUU.K",
+      "columns": [
+        "TRDPRC_1"
+      ],
+      "settle_values": 0
+    },
+    "expired UUUU call": {
+      "universe": "UUUUF122601100.U^F26",
+      "columns": [],
+      "settle_values": 0
+    }
+  },
+  "settle_alone_on_option": "LDError: No data to return, please check errors: ERROR: No successful response. (TSCC.QS.",
+  "contract_days": 920,
+  "coverage": {
+    "TRDPRC_1": 339,
+    "MID_PRICE": 431,
+    "BID": 431,
+    "ASK": 460,
+    "THEO_VALUE": 460,
+    "IMP_VOLT": 459,
+    "OPINT_1": 382
+  },
+  "mark_without_print": {
+    "MID_PRICE": {
+      "both": 310,
+      "mark_only": 121
+    },
+    "THEO_VALUE": {
+      "both": 339,
+      "mark_only": 121
+    },
+    "ASK": {
+      "both": 339,
+      "mark_only": 121
+    }
+  },
+  "field_list": {
+    "_scope": "14 RICs spread across 7 expiries and both rights",
+    "n_rics_checked": 14,
+    "distinct_field_sets": 1,
+    "settle_in_any": false,
+    "fields": [
+      "TRDPRC_1",
+      "OPEN_PRC",
+      "HIGH_1",
+      "LOW_1",
+      "ACVOL_UNS",
+      "BID",
+      "ASK",
+      "OPINT_1",
+      "MID_PRICE",
+      "ASK_INDCTV",
+      "BID_INDCTV",
+      "IMP_VOLTA",
+      "IMP_VOLTB",
+      "IMP_VOLT",
+      "DELTA",
+      "GAMMA",
+      "VEGA",
+      "RHO",
+      "THEO_VALUE",
+      "THETA",
+      "PCTCHNG",
+      "NETCHNG_1"
+    ]
+  },
+  "coverage_scope": "40 RICs x 53 days = 920 contract-days",
+  "claim_boundary": "Measured: every expired UUUU contract in the 2026-06-08..2026-08-21 window (294 series, 12 expiries, both rights). NOT measured: other underlyings, other windows, live (unexpired) contracts, other venues. The step from 'UUUU expired options' to 'US listed equity options generally' is an inference from the instrument class, supported by the CLc1 control, not a measurement. Also tested and excluded: the TR. field namespace (TR.SETTLEMENTPRICE is a futures field; TR.CLOSEPRICE is TRDPRC_1 re-served).",
+  "tr_namespace_probe": {
+    "_why": "Web search surfaced TR.SETTLEMENTPRICE and TR.CLOSEPRICE as the documented route for historical settlement data. Both were tested; both are dead ends here.",
+    "TR.SETTLEMENTPRICE": {
+      "on_expired_option": "1 value via get_data, 0 via get_history",
+      "on_CLc1_future": "15 values \u2014 the field works, it is a futures field",
+      "verdict": "futures settlement; not carried for expired equity options"
+    },
+    "TR.CLOSEPRICE": {
+      "raw_row_count": "55 rows for a contract with 3 trade days \u2014 MISLEADING",
+      "trap": "output is padded with repeated rows; 2026-06-11 repeats ~50x with the same value. Deduplicate on (ric, date) before counting anything.",
+      "after_dedup_vs_TRDPRC_1": {
+        "n_rics": 50,
+        "overlapping_observations": 356,
+        "identical": 356,
+        "differ": 0,
+        "close_with_no_trade": 5,
+        "aligned_contract_days": 2657
+      },
+      "verdict": "TR.CLOSEPRICE IS the last trade price, not an independent mark. Exactly what README line 143 warns about: CLOSE and SETTLE are not synonyms."
+    },
+    "TR.OptionSettlementPrice": "LDError: unable to resolve field \u2014 does not exist",
+    "lseg_official_example": {
+      "url": "https://developers.lseg.com/en/article-catalog/article/finding-expired-options-and-backtesting-a-short-iron-condor-stra",
+      "note": "LSEG's own worked example for EXPIRED options uses BID, ASK and TRDPRC_1 \u2014 no settle field. TR.PriceClose is used only for the UNDERLYING. Independent corroboration that expired equity options carry no settle here.",
+      "ric_suffix": "confirms the expired suffix is the EXPIRATION month code + year, consistent with the measured ^F26-for-puts result"
+    }
+  },
+  "why_no_settle_exists": {
+    "finding": "There is no official closing or settlement price for US listed equity options \u2014 none is distributed by the options exchanges, by OPRA, or by the OCC. The field is absent from LSEG because the thing does not exist in the market.",
+    "consequence": "Every end-of-day option mark is derived by whoever needs one. There are two documented industry approaches.",
+    "industry_methods": {
+      "mechanical": "closing bid/ask (midpoint) or the last print \u2014 LSEG already ships this as MID_PRICE / BID / ASK",
+      "theoretical": "snapshot the quotes shortly before the close, fit a pricing surface, and read consistent marks off it \u2014 LSEG ships this as THEO_VALUE"
+    },
+    "note_for_AD9": "The 'theoretical' method is precisely what this app's interpolated sheet does. Using THEO_VALUE as the mark AND drawing an interpolated sheet would be model-on-model; MID_PRICE keeps the mark market-derived so the sheet stays visibly the assumption (AD-9).",
+    "sources": [
+      "https://spiderrock.net/the-quagmire-of-historical-options-closing-price/",
+      "https://www.theocc.com/Clearance-and-Settlement/Clearing/Equity-Options-Product-Specifications"
+    ],
+    "occ_settlement_is_different": "The OCC 'settlement price' for equity options refers to the EXPIRATION settlement of the UNDERLYING (VWAP over the last 30 minutes on the primary exchange), used to decide exercise. It is not a daily mark for each option series."
+  },
+  "mark_derivation": {
+    "field": "MID_PRICE",
+    "claim": "LSEG's MID_PRICE is exactly the midpoint of the closing bid and ask \u2014 not a model.",
+    "verification": {
+      "cells_with_both_sides": 6724,
+      "cells_where_mid_equals_bid_plus_ask_over_two": 6724,
+      "percent_exact": 100.0,
+      "max_absolute_difference": 0.0
+    },
+    "holes_are_honest": {
+      "mid_non_null": 6724,
+      "bid_non_null": 6724,
+      "ask_non_null": 7458,
+      "ask_present_but_no_bid": 734,
+      "note": "No bid means no midpoint, so the mark is empty there \u2014 deep OTM contracts nobody will bid on. Those render as holes rather than being filled in (AD-9)."
+    },
+    "code": {
+      "field_choice": "option_surface_utils.py:79 (MARK_FIELD_DEFAULT)",
+      "requested_from_lseg": "options_surface_app.py:280",
+      "mapped_into_MARK": "option_surface_utils.py:316"
+    }
+  }
+}

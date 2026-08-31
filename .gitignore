@@ -1,0 +1,27 @@
+.states
+assets/external/
+.web
+*.db
+# Secrets — lseg-data.config.json holds the LSEG app-key; it must NEVER be committed
+lseg-data.config.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Reflex build output
+.web/
+.states/
+reflex.lock/
+
+# Superseded pulls — kept locally as evidence for checkpoint_audit.md §3, but the findings
+# they support are already captured in notebooks/settle_field_evidence.json
+option_pipeline_data.trade-only-puts.pkl
+option_pipeline_data.trdprc-only.pkl
+
+# OS noise
+.DS_Store
+Thumbs.db

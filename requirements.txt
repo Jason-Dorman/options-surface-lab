@@ -1,0 +1,16 @@
+# Options Surface Lab — dependencies
+# Course environment: conda env `algo` (Python 3.12)
+reflex
+pandas
+numpy
+scipy
+plotly
+
+# Dev / test
+pytest
+ipykernel   # run notebooks/ in VS Code
+nbformat    # plotly inline rendering inside notebooks
+
+# Data acquisition only (dev-time, requires LSEG Workspace running locally;
+# app-key lives in lseg-data.config.json, which is gitignored)
+# lseg-data
