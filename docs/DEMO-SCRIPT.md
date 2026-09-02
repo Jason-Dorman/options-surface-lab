@@ -1,5 +1,19 @@
 # Checkpoint Demo Script — Class 2 (3 minutes)
 
+> **DELIVERED 2026-09-01.** Kept as the record of what was asked and answered.
+>
+> **Answered by the revised README:** the mark question (Q5's subject) — `MID_PRICE` is now
+> named in the brief, and the required numbers are stated as `MID_PRICE` vs `TRDPRC_1`. The
+> deployment question too: serving a static HTML file is explicitly sanctioned.
+>
+> **Still unanswered, and both still wrong in the revised README:**
+> - **Q3 — the example RIC.** `UUUUA1502601250.U^A26` still carries 10 digits where the
+>   grammar table gives 9. It does not parse; the 9-digit form does, and is what LSEG accepted.
+> - **Q2 — the expired-contract suffix.** Still documented as *"repeats the month letter and
+>   year"*. Measured: that form returns **zero** puts. Puts only resolve when the suffix carries
+>   the **call** letter (`UUUUR122601100.U^F26`). Anyone following the README as written gets
+>   calls only — which is exactly what happened here on the first pull.
+
 The brief says: **show progress, ask questions.** The site doesn't need to be published yet.
 Date: start of Class 2 (exact date = OQ-1).
 

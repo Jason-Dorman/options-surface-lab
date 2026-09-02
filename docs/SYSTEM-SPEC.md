@@ -36,8 +36,8 @@ The same codebase runs three ways. Every design decision below must hold in all 
 | Mode | Command | Backend? | Interactivity | Purpose |
 |---|---|---|---|---|
 | **Local dev** | `reflex run` | Yes (Python, websocket) | Full: `State` event handlers | Development, checkpoint demo |
-| **Static production** | `reflex export` → Pages | **No** | Client-side only (Plotly legend, `updatemenus`, pre-baked variants) | Graded submission (FR-9) |
-| **Preview fallback** | `python build_preview.py` | No Reflex at all | Plotly-native only | Emergency artifact, sanity checks |
+| **Static production** | `python build_preview.py` → Pages | **No** | Plotly-native only: as-of slider, legend toggles, pre-baked traces | **Graded submission (FR-9)** |
+| ~~Reflex export~~ | ~~`reflex export`~~ | — | — | **Abandoned 2026-08-31** — the bundle needs a live backend and renders blank on Pages (AD-4) |
 
 **The static-mode consequence that shapes the architecture:** with no backend, `on_mount`
 handlers never fire and `State` defaults are what ships. Therefore default figures are
@@ -198,7 +198,8 @@ Design facts worth knowing:
   same session). Requesting it yields an empty column when paired and `LDError` when asked
   for alone. Marks that *do* exist: `MID_PRICE`, `BID`, `ASK`, `THEO_VALUE`, `IMP_VOLT`,
   `OPINT_1`, plus the greeks. Evidence: `notebooks/settle_field_evidence.json`, exhibit in
-  notebook 01 §10. **Which mark replaces SETTLE for FR-6/AD-9 is an open PO decision (T-32).**
+  notebook 01 §10. **Settled 2026-09-01: the revised README names `MID_PRICE` as the mark** and
+  states outright that no exchange settlement price is exposed for these contracts.
 
 ### 5.1 Payload schema (the pickle contract)
 
@@ -483,7 +484,7 @@ The system's posture: **degrade to an honest empty, never fabricate, never crash
 flowchart LR
     push["git push main"] --> ci["GitHub Actions"]
     ci --> test["pytest on clean checkout, no LSEG creds"]
-    test --> export["reflex export frontend, base path /repo-name/"]
+    test --> export["build_preview.py → single self-contained index.html"]
     export --> bundle["Static bundle: baked default state + curated pre-rendered variants"]
     bundle --> deploy["Publish to GitHub Pages"]
     deploy --> url["Pages URL — submitted on Canvas"]

@@ -10,10 +10,11 @@ from options_surface_lab.option_surface_plot import (
     candlestick_figure,
     coverage_heatmap,
     spread_heatmap,
-    price_surface_figure,
     settle_vs_trade_figure,
+    static_surface_figure,
 )
 from options_surface_lab.option_surface_utils import (
+    MARK_FIELD_DEFAULT,
     attach_underlying,
     flatten_lseg_options,
     load_payload,
@@ -34,8 +35,11 @@ def main() -> Path:
     asof = wide.groupby(wide["date"].dt.normalize()).size().idxmax() if len(wide) else None
     stats = summarize_sparsity(wide[wide["date"] == asof] if asof is not None else wide)
 
-    fig_px = price_surface_figure(wide, asof, cp="C", ticker=ticker)
-    fig_px_p = price_surface_figure(wide, asof, cp="P", ticker=ticker)
+    # One figure carrying every (date, right) combination: a date slider plus legend toggles.
+    # The published page has no backend, so this is the only interactivity that survives
+    # (AD-5 / T-15). Its own as-of selector is independent of `asof` below, which fixes the
+    # supporting figures and the headline numbers to a single representative date.
+    fig_surface = static_surface_figure(wide, ticker=ticker)
     fig_cmp = settle_vs_trade_figure(wide, asof, ticker=ticker)
     fig_hm_s = coverage_heatmap(wide, asof, cp="C", field="MARK")
     fig_hm_t = coverage_heatmap(wide, asof, cp="C", field="TRDPRC_1")
@@ -44,6 +48,8 @@ def main() -> Path:
 
     out = Path(__file__).resolve().parent / "options_surface_preview.html"
 
+    asof_txt = str(pd.Timestamp(asof).date()) if asof is not None else "n/a"
+    mark_label = MARK_FIELD_DEFAULT
     med = stats["median_abs_diff"]
     med_txt = "n/a" if med is None else f"${med:.3f}"
     rel = stats["median_rel_diff_pct"]
@@ -64,6 +70,10 @@ def main() -> Path:
           if payload.get('synthetic') else '(loaded from option_pipeline_data.pkl)'}.
         Cyan marks are the quoted <b>mark</b> (MID_PRICE). Magenta diamonds are <b>TRDPRC_1</b> prints. US listed equity options have no exchange settlement price — every mark is derived.
         The interpolated sheet is a convenience, not a market.
+        <b>Drag the slider under the 3D figure</b> to change the as-of date — every trading day
+        in the window is there. Puts start hidden: click <b>{mark_label} · puts</b> or
+        <b>TRDPRC_1 · puts</b> in the legend to bring them in, or click any legend entry to hide
+        it. The numbers above and the supporting charts below are fixed to {asof_txt}.
       </p>
       <div style="display:flex; gap:16px; flex-wrap:wrap; margin:12px 0 8px 0;">
         {_card('Series on this date', stats['n_quotes'])}
@@ -82,7 +92,7 @@ def main() -> Path:
         "<style>body{margin:0;background:#0d1117;}</style></head><body>",
         banner,
     ]
-    for fig in (fig_cs, fig_px, fig_px_p, fig_cmp, fig_hm_s, fig_hm_t, fig_spread):
+    for fig in (fig_cs, fig_surface, fig_cmp, fig_hm_s, fig_hm_t, fig_spread):
         parts.append(fig.to_html(full_html=False, include_plotlyjs="cdn"))
     parts.append("</body></html>")
     out.write_text("\n".join(parts), encoding="utf-8")

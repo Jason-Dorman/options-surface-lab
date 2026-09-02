@@ -164,6 +164,15 @@ interpolated sheet already does — using `THEO_VALUE` as the mark *and* drawing
 be a model on a model. `MID_PRICE` keeps the mark market-derived so the sheet stays visibly the
 assumption, which is the page's whole argument.
 
+> **RESOLVED — the README was revised 2026-09-01.** The brief now names `MID_PRICE` itself:
+> *"the closing NBBO midpoint — (bid + ask) / 2 at the exchange close. LSEG does not expose a
+> true exchange settlement price for expired US equity options (the SETTLE field returns
+> 'universe does not support' on this RIC space, and TR.SettlementPrice comes back empty), so
+> MID_PRICE is the closest mark-of-the-close we get."* That is our finding, adopted. The two
+> required numbers are now stated as percent-with-a-mid-and-no-trade and
+> median |MID_PRICE − TRDPRC_1|, which is exactly what the code computes. **Nothing further
+> to ask on this question.**
+>
 > **OUTCOME — Class 2 checkpoint, 2026-09-01.** The instructors accepted that `SETTLE` is not
 > available at this endpoint for expired US listed equity options. It took some pushing; what
 > carried it was the control (SETTLE returning 15 of 15 rows for `CLc1` in the same session)

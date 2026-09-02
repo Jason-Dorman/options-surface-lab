@@ -19,7 +19,7 @@ Reference requirements by ID (e.g. "implement FR-6") when prompting.
 
 One Reflex site that grows all semester. Each homework adds a layer to the same app:
 
-- **1.1 (this PRD):** historical expired-options data, sparsity made visible, mark vs last trade (the README says SETTLE; no such field exists for these instruments — see FR-6).
+- **1.1 (this PRD):** historical expired-options data, sparsity made visible, `MID_PRICE` (the closing NBBO midpoint) vs `TRDPRC_1` (the last print) — the pairing the revised README names directly.
 - **1.2 (next):** volatility surface + simulated fills on strikes that never printed.
 - **Later:** unknown, but the pattern is set — each assignment becomes a page or section.
 
@@ -90,8 +90,15 @@ What exists — this is instructor starter code plus a synthetic data cache:
 
 ## 5. Deployment decision (made)
 
-**Reflex static export → GitHub Pages.** The GitHub repo holds the code; GitHub Pages serves
-the exported frontend; the Canvas link points at the Pages URL.
+**A static page built from the pickle → GitHub Pages.** *(revised 2026-09-01 — see OQ-7 / AD-4.)*
+CI runs `build_preview.py`, which reads the committed pickle at **build time**, renders the
+Plotly figures and embeds their data as JSON in a single self-contained `index.html`. Pages
+serves that one file. The Canvas link points at the Pages URL.
+
+> **Superseded:** this section previously read *"Reflex static export → GitHub Pages … Pages
+> serves the exported frontend."* A Reflex export ships a client that opens a websocket to a
+> Python backend, so on Pages it renders blank (measured 2026-08-31). The revised assignment
+> README sanctions serving an HTML file directly. The Reflex app remains the local dev app.
 
 **Hard constraint this creates:** Reflex `State` event handlers execute on a Python backend
 over websocket. GitHub Pages hosts static files only — there is no backend. Therefore **every
@@ -133,7 +140,7 @@ paths already exist). The pull therefore only ever fires with no cache to clobbe
 > ban on the first-run pull. Cache-first-then-pull is the intended behaviour. Two guards were
 > added in T-26 after the pull fired invisibly during the T-5 smoke test: the page now
 > announces the pull before it blocks (it looked like a failed load for ~90 s), and
-> `OSL_OFFLINE=1` forces the synthetic path so CI and `reflex export` satisfy NFR-4 by
+> `OSL_OFFLINE=1` forces the synthetic path so CI and the page build satisfy NFR-4 by
 > construction. Sequencing is unchanged: T-6's split check comes before any pull. Execute the real UUUU pull once on a machine with LSEG access and
 **commit the pickle** so the deployed site and graders get real data. Before committing:
 verify the underlying did not split inside the window (if it did, pick another name — the
@@ -173,10 +180,18 @@ settles and which are actual prints, using only the on-page legend/captions.
 
 **FR-6 — The two required numbers, printed on the page** *(fixes G-3)*
 For the selected as-of date, display prominently:
-(a) **percent** of listed series with a mark and **no** trade — the percent, not just the count;
-(b) **median absolute mark-minus-trade gap** across series that have both.
+(a) **percent** of listed series with a **mid** and **no** trade — the percent, not just the count;
+(b) **median absolute `MID_PRICE` minus `TRDPRC_1` gap** across series that have both.
 
-> **The mark is `MID_PRICE`, not `SETTLE` — changed 2026-08-30, pending instructor sign-off.**
+> **Settled 2026-09-01 by the revised README — no longer a substitution.** The assignment now
+> names `MID_PRICE` itself: *"the closing NBBO midpoint — (bid + ask) / 2 at the exchange
+> close. LSEG does not expose a true exchange settlement price for expired US equity options
+> … so MID_PRICE is the closest mark-of-the-close we get."* Our independent finding and the
+> brief now agree, and the required numbers are stated in terms of `MID_PRICE`, exactly what
+> the code computes. The earlier "pending instructor sign-off" caveat is resolved.
+
+> **Historical note (superseded by the line above).** Written 2026-08-30, before the README
+> was revised, when this was still an unsanctioned substitution:
 > The README names `SETTLE`, but there is no settlement price for US listed equity options:
 > none is published by the exchanges, OPRA or the OCC, and the field is absent from the 22
 > these RICs return (measured across 296 series; `SETTLE` works on `CLc1` in the same
@@ -210,13 +225,17 @@ module; changing one token restyles everything; the result is distinct from the 
 and I'd put my name on it.
 
 **FR-9 — Ship it** *(fixes G-6)*
-`git init` → GitHub repo → Reflex static export → GitHub Pages (Actions workflow or
-`gh-pages` branch) → Pages URL submitted on Canvas. Repo contains the committed
-`option_pipeline_data.pkl`, this docs folder, and a short repo README section (above or
-alongside the assignment brief) saying how to run locally and where the live site is.
-*Accepted when:* the Pages URL renders in a fresh incognito browser with all figures and
-client-side interactivity working (FR-4), assets loading under the `/<repo>/` base path,
-and the Canvas submission is in.
+`git init` → GitHub repo → `build_preview.py` static page → GitHub Pages (Actions workflow)
+→ Pages URL submitted on Canvas. Repo contains the committed `option_pipeline_data.pkl`, this
+docs folder, and a short repo README section (above or alongside the assignment brief) saying
+how to run locally and where the live site is.
+*Accepted when:* the Pages URL renders in a fresh incognito browser with every figure present
+and Plotly-native interactivity working (FR-4) — the as-of slider moves and the legend toggles
+series — and the Canvas submission is in.
+
+> The old acceptance criterion said "assets loading under the `/<repo>/` base path". That is
+> not merely stale but **unmeetable**: the page is one self-contained file with no relatively
+> pathed assets, only an absolute Plotly CDN URL. There is no base path to get wrong.
 
 ### P1 — stretch goals (committed, build after all P0 pass)
 
@@ -286,7 +305,7 @@ site with the rubric complete outranks it on the deadline.)
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Static export breaks interactivity | Rubric's "widget switches" don't work on Pages | Client-side strategy in §5; verify on a deployed test branch *early* (during M1/M2, not Sep 04); `build_preview.py` static page is the emergency fallback artifact. |
-| Pages base-path (`/<repo>/`) breaks assets | Blank page at the submitted URL | Set the export's base/asset path for project pages; incognito check in FR-9 acceptance. |
+| ~~Pages base-path breaks assets~~ | — | **Retired 2026-09-01:** the page is one self-contained file; there is no base path. The live risk is now a build that publishes a settle-less or synthetic panel — see the workflow guards. |
 | LSEG pull slow / batches failing | M1 slips | Single-RIC fallback already exists; band strikes per expiry; pull is one-time — run it early, commit the pickle. |
 | UUUU split inside the window | Synthetic RICs miss adjusted contracts; panel is garbage | FR-2 pre-check; switch underlyings if needed (parser/pipeline are root-agnostic). |
 | Pre-baked figure bloat | Slow Pages load | Curate as-of dates; drop per-figure plotly.js duplication (one bundle/CDN). |
@@ -310,10 +329,10 @@ site with the rubric complete outranks it on the deadline.)
   page.** Pages serves one self-contained `index.html` built from the committed pickle at
   build time. See the revised AD-4. Consequence: T-15 is now on the critical path, because no
   Reflex event handler runs in production.
-- **OQ-8 (open):** SETTLE is confirmed unavailable at the endpoint — the instructor conceded
-  this at the Class 2 checkpoint. What should stand in as the mark is still outstanding.
-  Currently `MID_PRICE`; the alternative is `THEO_VALUE`. One constant plus a re-pull either
-  way (T-42). Nothing else is blocked on it — the pipeline is field-agnostic.
+- **OQ-8:** ~~What stands in for SETTLE as the mark?~~ **Closed 2026-09-01 — `MID_PRICE`,
+  named by the revised README.** The brief now states that LSEG exposes no exchange
+  settlement price for expired US equity options and that `MID_PRICE` is the mark. No code
+  change needed; `MARK_FIELD_DEFAULT` was already `MID_PRICE`.
 - **OQ-5:** `pivot_trade_settle` drops rows whose `spot` is NaN (pandas `pivot_table` discards
   NaN index keys), contradicting SPEC §7.2's "one row per (date, ric)". Only reachable when the
   stock frame does not cover the option dates. Recorded as an `xfail` in

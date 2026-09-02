@@ -41,7 +41,7 @@ Run everything **from the repo root**.
 
 ```bash
 python build_preview.py    # static HTML preview → options_surface_preview.html (verified)
-python -m pytest tests/ -q # test suite - 76 tests, all green (no xfail since 2026-08-30)
+python -m pytest tests/ -q # test suite - 90 tests, all green
 reflex run                 # local dev server — see §4 for first-run expectations
 ```
 
@@ -173,19 +173,42 @@ Troubleshooting: port already in use → `reflex run --frontend-port 3001`; tool
 download blocked by firewall → rerun on a different network; anything importing
 `options_surface_lab` fails → you are not at repo root or not in `algo`.
 
-## 5. Export & deploy to GitHub Pages (T-9 / T-19) — *verify on first use*
+## 5. Deploy to GitHub Pages — *live since 2026-09-01*
 
-- `reflex export --frontend-only` produces the static frontend bundle.
-- **Base path is the known trap:** project Pages serve under `/<repo>/`; the exact
-  mechanism to make the export respect that (config `deploy_url` / post-processing the
-  bundle) must be pinned during T-9 — do it with a skeleton deploy days early, not on
-  Sep 04. Acceptance is always the same: the Pages URL renders in an **incognito** window
-  with working client-side toggles.
-- CI shape (T-19): on push → pytest (clean env, no creds — proves NFR-4) → export → deploy
-  to Pages.
-- **Emergency fallback:** `python build_preview.py` output is a self-contained page;
-  publishing it to Pages satisfies "the site renders" if the Reflex export misbehaves near
-  the deadline.
+**https://jason-dorman.github.io/options-surface-lab/** — published by
+`.github/workflows/pages.yml` on every push to `main`.
+
+The published site is **one self-contained `index.html`**, written by `build_preview.py`.
+Python reads the committed pickle *at build time* in CI, renders the Plotly figures, and
+embeds their data as JSON. The browser never reads a pickle; there is no server at run time.
+The revised README sanctions this directly: *"you can serve it as an html file … probably
+simplest."*
+
+```
+push to main
+  → pytest in a clean container, no credentials      (proves NFR-4)
+  → python build_preview.py → _site/index.html
+  → guards: refuse a synthetic build; refuse < 6 figures
+  → deploy-pages
+```
+
+- **`reflex export` is not used.** Its bundle bakes `ws://localhost:8000/_event` and needs a
+  live Python backend; on Pages hydration fails and the page renders blank. Measured
+  2026-08-31 — see AD-4. The Reflex app stays as the local dev app.
+- **The guards matter more than they look.** A build that silently fell back to the synthetic
+  panel would deploy a page that renders beautifully and invents settles that do not exist.
+  The workflow fails instead. Do not weaken them to get a green run.
+- **FR-4/FR-5 are met without a backend (T-15).** The 3D figure carries an as-of **slider**
+  over all 53 trading days; the **legend** toggles MID_PRICE / TRDPRC_1 / the interpolated
+  sheet for calls and puts (puts start hidden). All of it is figure JSON, so it works on a
+  static host. The supporting charts and the headline numbers stay fixed to one representative
+  date — the page says so.
+- **The page is ~2.4 MB and carries ~308 traces.** That is deliberate: the PO chose full date
+  coverage over load time. If it ever needs slimming, pass explicit dates —
+  `static_surface_figure(wide, dates=curated_asof_dates(wide, n=10))` — rather than dropping
+  figures.
+- Acceptance is unchanged: the Pages URL renders in an **incognito** window with working
+  client-side toggles.
 
 ## 6. Quick troubleshooting
 

@@ -59,8 +59,7 @@ flowchart TB
     end
     subgraph delivery["Delivery"]
         local["reflex run — full backend"]
-        static["reflex export → GitHub Pages"]
-        prev["build_preview.py → single HTML"]
+        static["build_preview.py → single HTML → GitHub Pages"]
     end
 
     lseg --> cache
@@ -211,21 +210,30 @@ cost is discipline — display formatting keeps trying to creep in and must be p
 the app layer.
 
 **AD-4 — Static page on GitHub Pages, rendered at build time.** *(revised 2026-09-01)*
-*Context:* the site must render from the GitHub repo; user chose Pages over hosted Reflex;
-Pages runs no Python, so `on_mount` never fires there. *Decision:* compute default
-figures/metrics at module import from the committed pickle so `reflex export` serializes a
-fully-populated page; keep `build_preview.py` as the emergency artifact. *Consequences:*
-the published page shows real data with no backend; import gets slower (fine — it runs at
-build); base-path config becomes deployment-critical; anything only reachable through an
-event handler is invisible in production, which forces AD-5.
+*Context:* the site must render from the GitHub repo; Pages runs no Python, so nothing
+server-side executes there. The revised assignment README sanctions serving an HTML file
+directly. *Decision:* CI runs `build_preview.py`, which reads the committed pickle at **build
+time**, renders the Plotly figures and embeds their data as JSON in one self-contained
+`index.html`; Pages serves that single file. The Reflex app remains the local development app.
+*Consequences:* the published page shows real data with no backend and no run-time pickle
+read; there are no relatively-pathed assets, so no base path to misconfigure; anything
+reachable only through a Reflex event handler does not exist in production at all, which
+forces AD-5; and the build must refuse to publish a synthetic or markless panel, since such a
+page renders plausibly and is wrong.
 
-> **Resolved 2026-09-01 (PO, after the checkpoint).** The published artifact is a single
-> self-contained `index.html` built by `build_preview.py` in CI: Python reads the committed
-> pickle at *build* time, renders the Plotly figures, and embeds their data as JSON. The
-> browser never reads the pickle and there is no server at run time. The Reflex app remains
-> the local development app; only the published artifact differs. Import-time baking (T-14)
-> is superseded — there is no Reflex State in production to bake into. `frontend_path` is
-> removed, since there is no Reflex export to path-correct.
+> **Superseded 2026-08-31/09-01 — what this decision originally said, and why it was wrong.**
+> It read: *"compute default figures/metrics at module import from the committed pickle so
+> `reflex export` serializes a fully-populated page; keep `build_preview.py` as the emergency
+> artifact"*, with base-path config called deployment-critical.
+>
+> Measured: a Reflex static export renders a **blank page** on Pages. The bundle bakes
+> `ws://localhost:8000/_event`; with no backend the websocket fails, React hydration fails,
+> and the pre-rendered markup is unmounted. The app's text *is* in the exported HTML — this is
+> a hydration failure, not an export failure. Import-time baking (T-14) would not have helped:
+> baking figures into State defaults does nothing when the state runtime cannot start. Reflex
+> 0.9.8 exposes no static/no-backend mode; its documented pattern is frontend-static plus a
+> separately hosted backend, rejected here as out of scope. `frontend_path` has been removed
+> and `build_preview.py` is promoted from fallback to **the deliverable**.
 >
 > ⚠ **Why, measured 2026-08-31 — the original assumption was wrong.** The first real
 > deploy renders a *blank page*, not a populated one. A Reflex static export bakes
@@ -245,10 +253,19 @@ pre-rendered trace sets, curated (~5 dates) to cap bundle size; the backend-depe
 variants (bigger JSON, watch the bundle); Reflex switches remain for local dev and must not
 fight the legend; the checkpoint demo can still use full server-side interactivity.
 
-> **Promoted 2026-09-01.** With AD-4 settled as a static page, this is no longer polish —
-> it is the *only* route to interactivity on the published site. FR-4/FR-5 are graded and are
-> currently unmet in production: the as-of select, the C/P select and the three switches are
-> inert there. T-15 is on the critical path.
+> **Implemented 2026-09-01 (T-15).** `static_surface_figure()` in `option_surface_plot.py`.
+> The as-of date is a **slider** over every trading day; calls/puts and the three series ride
+> the **legend**, with puts opening as `legendonly`. Splitting the two controls across
+> different mechanisms is what makes them compose: Plotly buttons apply a fixed visibility
+> array and cannot read another menu's state, so a second dropdown would fight the first,
+> whereas the legend is orthogonal by construction. Known limitation — moving the slider
+> re-applies visibility, so legend choices reset on a date change.
+>
+> **The "~5 curated dates" cap in this decision's original wording is withdrawn.** It was
+> written to protect bundle size; measured, the whole panel costs 2.4 MB and ~308 traces, and
+> the PO chose full coverage over load time (2026-09-01). `curated_asof_dates()` survives as
+> the documented trim lever if that ever needs revisiting. The Reflex switches remain for
+> local dev and are untouched.
 
 **AD-6 — One theme module owns every visual constant.**
 *Context:* the starter hardcodes the same hex values in every figure (duplicated-code
@@ -271,9 +288,10 @@ market data.
 *Consequences:* both conventions hold; the shim must stay logic-free.
 
 **AD-9 — Honest holes: never extrapolate, never fabricate, never crash.**
-*Amended 2026-08-30:* the pairing this decision protects is **mark vs last trade**, not
-"SETTLE vs TRDPRC_1" — there is no settlement price for US listed equity options, so the mark
-is derived (`MARK_FIELD_DEFAULT`, currently `MID_PRICE`). Two consequences. The mark and the
+*Amended 2026-08-30, confirmed 2026-09-01:* the pairing this decision protects is
+**`MID_PRICE` vs `TRDPRC_1`**, not "SETTLE vs TRDPRC_1". The revised README now says so
+itself — LSEG exposes no exchange settlement price for expired US equity options, and
+`MID_PRICE` (the closing NBBO midpoint) is the mark. `MARK_FIELD_DEFAULT` is `MID_PRICE`. Two consequences. The mark and the
 print must stay distinct in colour *and* symbol as before. And the mark itself must stay
 *market-derived*: using a model value (`THEO_VALUE`) as the mark while also drawing the
 interpolated sheet would be a model compared against a model, which destroys the contrast the

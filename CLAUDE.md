@@ -66,13 +66,16 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 (verified 2026-08-29); the bare `pytest` command works once the env is activated.
 
 ```bash
-python build_preview.py    # static HTML preview — verified working from the package layout
-pytest                     # 76 tests in tests/ — green (1 xfail records PRD OQ-5)
-reflex run                 # local dev server — imports verified; first full run still pending
-reflex export              # static bundle for GitHub Pages (FR-9)
+python build_preview.py    # THE DELIVERABLE — builds the static index.html that Pages serves
+pytest                     # 90 tests in tests/ — all green, no xfail
+reflex run                 # local dev server (FR-1); not what gets published
 ```
 
-Current state (2026-08-29): FR-1 package layout landed (`options_surface_lab/` package,
+`reflex export` is **not** part of the build any more — see AD-4. The published site is the
+single self-contained page `build_preview.py` writes, rendered from the committed pickle at
+build time by `.github/workflows/pages.yml`.
+
+Current state (2026-09-01): FR-1 package layout landed (`options_surface_lab/` package,
 `rxconfig.py`, entry shim, `__file__`-anchored cache paths — imports verified, preview builds
 end-to-end). `option_pipeline_data.synthetic.pkl` is **dead weight** — no code reads it and it no longer
 unpickles under the installed pandas (`StringDtype` state error); the fallback panel is
@@ -80,7 +83,7 @@ generated in-process by `synthesize_demo_payload()`. `option_pipeline_data.pkl`
 holds the working panel: **296 series (148 calls + 148 puts)** with
 `TRDPRC_1, MID_PRICE, BID, ASK, OPINT_1`. **There is no SETTLE for US listed equity options** —
 none is published by the exchanges, OPRA or the OCC — so the mark is derived: `MARK_FIELD_DEFAULT`
-= `MID_PRICE` fills a slot the wide table calls `MARK` (pending instructor sign-off, PRD FR-6).
+= `MID_PRICE` fills a slot the wide table calls `MARK` — named by the revised README (PRD FR-6).
 Headline: **1,601 of 7,458 listed contract-days (21.5%) carry a mark with no trade**, median
 gap $0.040. Median bid-ask spread is 20% of the mark, so the mark itself is soft — `spread`
 and `spread_pct` are on the wide table and drive `spread_heatmap()`.
@@ -88,10 +91,18 @@ Puts came from fixing the RIC suffix — it takes the *call* month letter for bo
 (`UUUUR122601100.U^F26`), contradicting the README (T-31). Superseded pulls kept as evidence:
 `.trdprc-only.pkl` (first, calls only) and `.trade-only-puts.pkl` (second, no mark). FR-3's transform suite is in
 (T-3/T-4): `tests/test_ric_parsing.py` + `tests/test_transforms.py`, plus `test_ric_building.py`
-`test_acquisition.py` and `test_app_figures.py` — 76 tests green, no xfail, so the
-NFR-2 gate for the FR-8 restyle is satisfied. `theme.py` (FR-8) and CI/Pages (FR-9) still to come; T-5 is ◐ pending one clean
-re-run on the synthetic panel. Update this paragraph as things land
-(lockstep rule).
+`test_acquisition.py` and `test_app_figures.py` — 83 tests green, no xfail, so the
+NFR-2 gate for the FR-8 restyle is satisfied. CI and Pages are live: `Jason-Dorman/options-surface-lab`, deployed at
+https://jason-dorman.github.io/options-surface-lab/ — pytest runs in a clean container with no
+credentials (NFR-4 proven), then the page is built and published.
+
+T-15 landed 2026-09-01: the published page's 3D figure carries an as-of **slider** over all
+53 trading days plus **legend** toggles for calls/puts and each series (`static_surface_figure`),
+so FR-4/FR-5 are met without a backend.
+
+**Next up:** **T-13** (`theme.py`, FR-8 — needs the PO's design direction first) and **T-12**
+(the three PO-authored sentences, FR-7). 90 tests green. Update this paragraph
+as things land (lockstep rule).
 
 **Secrets:** `lseg-data.config.json` (repo root) holds the LSEG app-key. It is gitignored —
 never commit it, never print its contents, never copy it into anything that ships.
@@ -106,14 +117,17 @@ never commit it, never print its contents, never copy it into anything that ship
   announces the pull before it blocks — an invisible one read as a failed load for ~90 s on
   2026-08-30 (RUNBOOK §4). `OSL_OFFLINE=1` forces the synthetic path for CI/export (NFR-4).
   `fetch_from_lseg()` refuses to overwrite an existing cache.
-- **GitHub Pages has no Python backend.** Anything only reachable through a Reflex event
-  handler is invisible in production — every published interaction must be Plotly-native, and
-  default figures bake at import time (AD-4, AD-5).
-- **Mark ≠ TRDPRC_1 is the whole point.** The wide table's mark column is `MARK` (a slot, fed
-  by `MARK_FIELD_DEFAULT` = `MID_PRICE`); there is no `SETTLE` for these instruments. Keep mark
-  and print distinct in color *and* symbol; keep the mark market-derived, not a model, or the
-  interpolated sheet becomes model-vs-model; label interpolation as interpolation; never
-  extrapolate; holes render as holes and never vanish (AD-9).
+- **The published site is one static `index.html`.** Built by `build_preview.py` in CI from
+  the committed pickle at *build* time; no backend, no run-time pickle read. The revised README
+  sanctions this ("you can serve it as an html file … probably simplest"). Consequence: no
+  Reflex event handler runs in production, so **every published interaction must be
+  Plotly-native** (AD-5, T-15 — currently unmet and on the critical path).
+- **`MID_PRICE` ≠ `TRDPRC_1` is the whole point.** The revised README (2026-09-01) names
+  `MID_PRICE` — the closing NBBO midpoint — as the mark, and states LSEG exposes no exchange
+  settlement price for expired US equity options. The wide table's column is `MARK`, a slot fed
+  by `MARK_FIELD_DEFAULT` = `MID_PRICE`. Keep mid and print distinct in color *and* symbol;
+  label interpolation as interpolation; never extrapolate; holes render as holes and never
+  vanish (AD-9).
 - **No visual literals outside `theme.py`** once FR-8 lands (AD-6).
 - **Anchor paths to `__file__`, never CWD.**
 - **Tests before refactoring** (NFR-2, ENGINEERING-PRINCIPLES) — the pure functions in

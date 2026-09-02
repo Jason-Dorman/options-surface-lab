@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from options_surface_lab.option_surface_utils import (
+    curated_asof_dates,
     attach_underlying,
     flatten_lseg_options,
     pivot_trade_settle,
@@ -457,3 +458,48 @@ def test_sparsity_flags_marks_you_should_not_believe():
     stats = summarize_sparsity(pivot_trade_settle(tidy))
     # R1's spread is 181% of its mark; R2's is 3%. Exactly half the rows are untrustworthy.
     assert stats["pct_spread_over_half"] == pytest.approx(50.0)
+
+
+# --------------------------------------------------------------- curated as-of dates
+
+
+def _panel(dates_expiries):
+    """dates_expiries: {date -> n_expiries}."""
+    weeklies = pd.date_range("2026-07-03", periods=12, freq="W-FRI")
+    rows = [
+        {"date": pd.Timestamp(d), "expiry": weeklies[e], "ric": f"R{e}", "strike": 10.0 + e}
+        for d, n in dates_expiries.items()
+        for e in range(n)
+    ]
+    return pd.DataFrame(rows)
+
+
+def test_curated_dates_skips_days_too_thin_to_draw_a_surface():
+    """A day with one or two expiries is a flat cloud — surface_grid returns None there."""
+    w = _panel({"2026-06-08": 5, "2026-06-09": 1, "2026-06-10": 4})
+    picked = [str(d.date()) for d in curated_asof_dates(w, n=5, min_expiries=3)]
+    assert "2026-06-09" not in picked
+    assert picked == ["2026-06-08", "2026-06-10"]
+
+
+def test_curated_dates_spread_across_the_window_not_clustered():
+    w = _panel({f"2026-06-{d:02d}": 4 for d in range(1, 21)})
+    picked = [d.date().day for d in curated_asof_dates(w, n=5)]
+    assert len(picked) == 5
+    assert picked[0] == 1 and picked[-1] == 20, "must span the whole window"
+    gaps = [b - a for a, b in zip(picked, picked[1:])]
+    assert max(gaps) - min(gaps) <= 1, f"picks should be evenly spaced, got {picked}"
+
+
+def test_curated_dates_caps_the_bundle():
+    w = _panel({f"2026-06-{d:02d}": 4 for d in range(1, 29)})
+    assert len(curated_asof_dates(w, n=5)) == 5
+
+
+def test_curated_dates_falls_back_when_nothing_is_rich_enough():
+    w = _panel({"2026-06-08": 1, "2026-06-09": 2})
+    assert len(curated_asof_dates(w, n=5, min_expiries=9)) > 0
+
+
+def test_curated_dates_on_empty_input():
+    assert curated_asof_dates(pd.DataFrame()) == []

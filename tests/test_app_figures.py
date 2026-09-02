@@ -56,3 +56,49 @@ def test_default_asof_picks_the_busiest_date_not_the_last(wide):
     counts = wide.groupby(wide["date"].dt.normalize()).size()
     busiest, last = counts.idxmax(), counts.index.max()
     assert counts[busiest] >= counts[last]
+
+
+# ------------------------------------------------- the published page's only interactivity
+
+
+def test_static_surface_carries_its_controls_in_the_figure(wide):
+    """T-15/AD-5: no backend in production, so the selectors must be Plotly-native.
+
+    Everything the published page can do has to live inside the figure JSON.
+    """
+    from options_surface_lab.option_surface_plot import static_surface_figure
+
+    fig = static_surface_figure(wide, ticker="UUUU")
+
+    sliders = fig.layout.sliders
+    assert sliders and len(sliders[0].steps) >= 2, "the as-of slider must exist"
+
+    shown = [t for t in fig.data if t.visible is True]
+    parked = [t for t in fig.data if t.visible == "legendonly"]
+    assert shown, "one date must be visible on open"
+    assert parked, "puts must be present but parked on the legend"
+    assert len(shown) + len(parked) < len(fig.data), "other dates must be hidden"
+
+    assert any("TRDPRC_1" in t.name for t in shown), "the print series must be legend-toggleable"
+    assert any("TRDPRC_1" not in t.name for t in shown), "the mark must be a separate trace"
+
+    # no slider step may land on an empty figure
+    for step in sliders[0].steps:
+        vis = step.args[0]["visible"]
+        assert len(vis) == len(fig.data)
+        assert any(v is True or v == "legendonly" for v in vis), f"step {step.label!r} is empty"
+
+
+def test_static_surface_opens_on_the_busiest_date(wide):
+    from options_surface_lab.option_surface_plot import static_surface_figure
+
+    fig = static_surface_figure(wide, ticker="UUUU")
+    sl = fig.layout.sliders[0]
+    counts = wide.groupby(wide["date"].dt.normalize()).size()
+    assert str(counts.idxmax().date()) == sl.steps[sl.active].label
+
+
+def test_static_surface_degrades_instead_of_raising():
+    from options_surface_lab.option_surface_plot import static_surface_figure
+
+    assert static_surface_figure(pd.DataFrame()) is not None

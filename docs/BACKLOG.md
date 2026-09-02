@@ -31,7 +31,7 @@ update status in the same session as the work (lockstep rule); PO-owned tasks ar
 | T-30 | Re-probe the mark field. **Answered 2026-08-30:** `SETTLE` is absent for expired US equity options under all 7 candidate names and is not in the field list these RICs return; control shows `SETTLE` works for `CLc1` in the same session. Available marks: `MID_PRICE`/`BID` 46.8%, `ASK`/`THEO_VALUE` 50.0%, `OPINT_1` 41.5% vs `TRDPRC_1` 36.8%; **121 of 920 contract-days have a mark and no print**. Exhibit + captured evidence: notebook 01 §10. | FR-2, FR-6 | ✅ 2026-08-30 |
 | T-33 | Web/doc search for an alternative settle route — **closed 2026-08-30, no route exists**: `TR.SETTLEMENTPRICE` is futures-only, `TR.OptionSettlementPrice` does not resolve, `TR.CLOSEPRICE` is `TRDPRC_1` re-served (identical 356/356 after dedup; raw rows are padded repeats). LSEG's own expired-options article uses BID/ASK/TRDPRC_1. Notebook 01 §10a. | FR-2, FR-6 | ✅ 2026-08-30 |
 | T-34 | Establish *why* no settle exists — **closed 2026-08-30**: no official close/settlement for US listed equity options is published by the exchanges, OPRA or the OCC. Not a data-access problem; every mark is derived (mechanical vs theoretical). Notebook 01 §10b. | FR-6, FR-7 | ✅ 2026-08-30 |
-| T-32 | Adopt `MID_PRICE` as the mark. **Done 2026-08-30:** re-pulled with `TRDPRC_1, MID_PRICE, BID, ASK, OPINT_1` (296 series); wide-table slot renamed `SETTLE`→`MARK` with `has_mark`/`n_mark_only`/`pct_mark_no_trade`; plot + app labels name the source field; FR-6, AD-9, SYSTEM-SPEC updated. **Instructor sign-off still outstanding** — revert is one constant. | FR-6, AD-9 | ◐ awaiting sign-off |
+| T-32 | Adopt `MID_PRICE` as the mark. **Done 2026-08-30:** re-pulled with `TRDPRC_1, MID_PRICE, BID, ASK, OPINT_1` (296 series); wide-table slot renamed `SETTLE`→`MARK` with `has_mark`/`n_mark_only`/`pct_mark_no_trade`; plot + app labels name the source field; FR-6, AD-9, SYSTEM-SPEC updated. **Sign-off received 2026-09-01** — the revised README names `MID_PRICE` as the mark. | FR-6, AD-9 | ✅ |
 | T-35 | Stop `pivot_trade_settle()` deleting rows with an unknown spot (checkpoint_audit §1) — pivot on `(date, ric)`, re-attach descriptors by merge. xfail removed, test strengthened. | AD-9, FR-3 | ✅ 2026-08-30 |
 | T-36 | Default as-of = busiest date, not last. These are expired weeklies: the final date has one expiry alive (33 quotes, 6.1%) vs 216 quotes / 7 expiries mid-window (2026-07-10). Neutral criterion, every date still selectable. | FR-4, FR-6 | ✅ 2026-08-30 |
 | T-40 | Adversarial review of the session's changes (15 agents, 37 candidates, 5 verified, 1 survived). Found: the demo script and audit doc quoted the median relative gap as **2.8%** — that was the *superseded* cache's as-of-2026-08-21 slice, carried into a panel-wide sentence. True panel figure is 4.6%; the on-screen card's 4.0% is the as-of slice and is correct. Also corrected an open-interest pair that mixed two row populations (166 vs 28 → 157 vs 28). No code defects survived review. | NFR-2 | ✅ 2026-08-31 |
@@ -48,16 +48,23 @@ update status in the same session as the work (lockstep rule); PO-owned tasks ar
 | T-24 | Checkpoint exhibits in notebook 01 (§8): live RIC-grammar demo + settle-no-print table; notebook is the demo deep-dive tab | AD-3 | ✅ 2026-08-29 |
 | T-10 | Checkpoint prep + demo | M1 | ✅ 2026-09-01 — demo delivered. **Instructor conceded SETTLE is not available at the endpoint** (took some convincing; the evidence pack did the work). What replaces it is still outstanding — see T-32/T-42. |
 
+> **Note 2026-09-01 — provenance of four constraints.** The revised README (Canvas only, no
+> `.md` provided) dropped its "What the 3D plot is doing", "Files in this lab", "Stretch (not
+> required)" and "Do not" sections. **[PO] elected to keep them as build constraints anyway.**
+> They are therefore *our* standards now, not the instructor's: the `*app.py` / `*utils.py` /
+> `*plot.py` layout, the interpolation warnings, and the do-not list all still bind, but cite
+> them as project decisions rather than as assignment requirements.
+
 ## M2 — Rubric complete (~Sep 02)
 
 | ID | Task | Maps to | Status |
 |---|---|---|---|
-| T-42 | **[PO, awaiting instructor]** With SETTLE confirmed unavailable, what fills the mark slot? Currently `MID_PRICE` (the mechanical industry derivation). Alternative is `THEO_VALUE`. One constant + a re-pull either way — [option_surface_utils.py:79](../options_surface_lab/option_surface_utils.py#L79). Blocks nothing else; the code is field-agnostic. | FR-6, AD-9 | ☐ |
+| T-42 | With SETTLE confirmed unavailable, what fills the mark slot? | FR-6, AD-9 | ✅ 2026-09-01 — **`MID_PRICE`, named by the revised README.** The brief now defines it as the closing NBBO midpoint and states LSEG exposes no settlement price for these contracts. No code change: `MARK_FIELD_DEFAULT` was already `MID_PRICE`. Labels that still say "mark" may now say "mid". |
 | T-11 | Display the settle-no-trade **percent** on the page (currently computed, not shown) | FR-6, G-3 | ✅ 2026-09-01 — "Mark, no print" card now shows count **and** percent in both the Reflex app and the published page. Field-agnostic: it reads from the MARK slot, so it re-computes if the mark field changes. |
 | T-12 | Commentary block under the 3D figure; **[PO]** writes the three sentences (sessions scaffold placement only) | FR-7, G-4 | ☐ |
 | T-13 | **[PO decision]** Pick graphical-identity direction (create DESIGN-BRIEF.md at that point); then build `theme.py`, strip all hardcoded hex/fonts from plot + app, verify settle/trade stay distinct | FR-8, G-5 | ☐ |
 | T-14 | ~~Import-time baking into State defaults~~ | AD-4 | ⊘ **superseded 2026-09-01.** Existed only to populate Reflex State for the static export. The published artifact is now a build-time-rendered HTML page with no Reflex runtime, so there is no State to bake. No work required. |
-| T-15 | Static interactivity: Plotly legend toggles for series; `updatemenus` for as-of date + C/P over curated (~5) dates | FR-4/5, AD-5 | ☐ **CRITICAL PATH as of 2026-09-01.** With no backend in production the app's selects and switches do nothing on the published page — FR-4/FR-5 are graded and currently unmet there. Was optional polish; now the only route to published interactivity. |
+| T-15 | Static interactivity for the published page | FR-4/5, AD-5 | ✅ 2026-09-01 — `static_surface_figure()`: **an as-of slider over all 53 trading days** (308 pre-built traces) plus legend toggles for MID_PRICE / TRDPRC_1 / the interpolated sheet, calls and puts. Puts open as `legendonly`. Date is a slider and the right is on the legend *because* Plotly buttons apply a fixed visibility array and cannot read another menu's state — two menus would fight; the legend is orthogonal. **[PO] chose full coverage over page weight: 2.4 MB, ~308 traces.** `curated_asof_dates()` remains the trim lever if that proves too slow. +8 tests. |
 
 ## M3 — Stretch (committed; ~Sep 03; cut before M4 slips)
 
@@ -72,7 +79,7 @@ update status in the same session as the work (lockstep rule); PO-owned tasks ar
 
 | ID | Task | Maps to | Status |
 |---|---|---|---|
-| T-19 | Finalize CI: pytest → export → Pages on push; green on clean clone | FR-9, NFR-4 | ☐ |
+| T-19 | Finalize CI: pytest → `build_preview.py` → Pages on push; green on clean clone | FR-9, NFR-4 | ◐ shipped 2026-08-31, verify once more before submission |
 | T-20 | Incognito verification of the live Pages URL (figures, toggles, numbers, sentences) | FR-9 | ☐ |
 | T-21 | README how-to-run section (alongside, never replacing, the assignment brief) + Canvas submission | FR-9 | ☐ |
 | T-22 | Final sweep: PRD §12 definition-of-done + docs-lockstep audit | all | ☐ |

@@ -357,6 +357,30 @@ def pivot_trade_settle(tidy: pd.DataFrame, mark_field: str = MARK_FIELD_DEFAULT)
     return wide
 
 
+def curated_asof_dates(wide: pd.DataFrame, n: int = 5, min_expiries: int = 3) -> list:
+    """Pick ~``n`` as-of dates to ship in the static export (AD-5 caps the bundle).
+
+    The published page carries every date it offers, so the count is a real cost. Two rules:
+    only dates with at least ``min_expiries`` distinct expiries are eligible — fewer than that
+    and the cloud is too flat to interpolate a sheet (see :func:`surface_grid`) — and the picks
+    are spread evenly across those, so the dropdown shows the panel evolving over the window
+    rather than five neighbouring days.
+    """
+    if wide is None or wide.empty or "date" not in wide.columns:
+        return []
+
+    per_date = wide.groupby(wide["date"].dt.normalize())["expiry"].nunique()
+    eligible = sorted(per_date[per_date >= min_expiries].index)
+    if not eligible:  # nothing rich enough — fall back to the busiest days available
+        eligible = sorted(wide.groupby(wide["date"].dt.normalize()).size().nlargest(n).index)
+    if len(eligible) <= n:
+        return list(eligible)
+
+    step = (len(eligible) - 1) / (n - 1) if n > 1 else 0
+    picks = [eligible[int(round(i * step))] for i in range(n)]
+    return sorted(dict.fromkeys(picks))
+
+
 def surface_grid(points: pd.DataFrame, value_col: str, n_strike: int = 40, n_dte: int = 30):
     """
     Interpolate a sparse cloud onto a regular grid for a Plotly Surface.

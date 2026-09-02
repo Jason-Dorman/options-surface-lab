@@ -14,6 +14,18 @@ from options_surface_lab.option_surface_utils import MARK_FIELD_DEFAULT, surface
 MARK_LABEL = MARK_FIELD_DEFAULT
 
 
+def _scene_axis(title: str) -> dict:
+    """Shared 3D axis styling — used by both the interactive and the static surface."""
+    return dict(
+        title=dict(text=title, font=dict(size=12, family="Inter, system-ui, sans-serif")),
+        backgroundcolor="#161b22",
+        gridcolor="#30363d",
+        showbackground=True,
+        zeroline=False,
+        tickfont=dict(size=10, family="Inter, system-ui, sans-serif"),
+    )
+
+
 DARK = dict(
     template="plotly_dark",
     paper_bgcolor="#0d1117",
@@ -233,6 +245,253 @@ def price_surface_figure(
                 yref="paper",
                 x=0.0,
                 y=1.0,
+                xanchor="left",
+                yanchor="bottom",
+                showarrow=False,
+                font=dict(size=11, color="#8b949e", family="Inter, system-ui, sans-serif"),
+            )
+        ],
+    )
+    return fig
+
+
+def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") -> go.Figure:
+    """The 3D surface with its controls baked in, for the published page (AD-5, T-15).
+
+    The deployed site is a static HTML file with no backend, so Reflex event handlers never
+    run there. Everything the page can do must live inside the figure JSON.
+
+    Two controls, deliberately on different mechanisms:
+
+    * **Date — a slider.** Every trading day in the panel gets a step. A dropdown was tried
+      first and is unusable at this length.
+    * **Calls / puts and series — the legend.** Each date contributes up to six traces
+      (mark / sheet / print, x calls / puts). Puts start as ``legendonly`` so the opening view
+      is calls, and one click adds them.
+
+    Putting the right on the legend rather than a second menu is what makes the two controls
+    compose. Plotly buttons apply a fixed visibility array and cannot read another menu's
+    state, so a second dropdown would fight the first; the legend is orthogonal by
+    construction. Known limitation: moving the slider re-applies visibility, so legend
+    choices reset on a date change.
+
+    Dates with too few expiries to triangulate simply contribute no sheet
+    (:func:`surface_grid` returns ``None``) — they still show their points rather than being
+    dropped entirely.
+    """
+    if wide is None or wide.empty:
+        return go.Figure().update_layout(
+            **DARK,
+            height=640,
+            title=dict(text="No data", font=dict(size=16, family="Inter, system-ui, sans-serif")),
+        )
+
+    # Every trading day by default — the PO's call (2026-09-01): render all the data we have
+    # and accept the load time. To trim, pass an explicit list; `curated_asof_dates(wide, n)`
+    # picks a spread of the richest days and is the intended lever if the page gets too heavy.
+    if dates is None:
+        dates = sorted(wide["date"].dt.normalize().unique())
+    if len(dates) == 0:
+        return price_surface_figure(wide, None, ticker=ticker)
+
+    STYLE = {
+        ("C", "mark"): dict(color="#00ffcc", symbol="circle", size=4),
+        ("P", "mark"): dict(color="#7ee787", symbol="circle-open", size=4),
+        ("C", "trade"): dict(color="#ff0055", symbol="diamond", size=6),
+        ("P", "trade"): dict(color="#ffa657", symbol="diamond-open", size=6),
+    }
+    fig = go.Figure()
+    per_date, spots = [], {}
+
+    for asof in dates:
+        idx = {}
+        for cp in ("C", "P"):
+            sl = _slice_wide(wide, asof, cp)
+            if sl.empty:
+                continue
+            spot = sl["spot"].dropna()
+            if len(spot):
+                spots[asof] = float(spot.median())
+            right = "calls" if cp == "C" else "puts"
+
+            mk = sl.dropna(subset=["MARK"])
+            if len(mk):
+                st = STYLE[(cp, "mark")]
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=mk["strike"],
+                        y=mk["dte"],
+                        z=mk["MARK"],
+                        mode="markers",
+                        name=f"{MARK_LABEL} · {right}",
+                        visible=False,
+                        legendgroup=f"mark-{cp}",
+                        marker=dict(
+                            size=st["size"],
+                            color=st["color"],
+                            opacity=0.85,
+                            symbol=st["symbol"],
+                            line=dict(width=0),
+                        ),
+                        hovertemplate=(
+                            f"<b>{MARK_LABEL}</b> $%{{z:.3f}}<br>K=%{{x:.2f}}"
+                            "<br>DTE=%{y}<br>%{customdata[0]}<extra></extra>"
+                        ),
+                        customdata=np.stack([mk["ric"].astype(str)], axis=1),
+                    )
+                )
+                idx[(cp, "mark")] = len(fig.data) - 1
+
+                grid = surface_grid(mk, "MARK")
+                if grid is not None:
+                    fig.add_trace(
+                        go.Surface(
+                            x=grid["x"],
+                            y=grid["y"],
+                            z=grid["z"],
+                            name=f"Interpolated sheet · {right}",
+                            visible=False,
+                            showlegend=True,
+                            legendgroup=f"sheet-{cp}",
+                            colorscale=(
+                                [[0, "#0d3d38"], [0.5, "#1a7a6e"], [1, "#00ffcc"]]
+                                if cp == "C"
+                                else [[0, "#12301c"], [0.5, "#2f6b3a"], [1, "#7ee787"]]
+                            ),
+                            opacity=0.26,
+                            showscale=False,
+                            hoverinfo="skip",
+                            contours=dict(
+                                x=dict(show=False), y=dict(show=False), z=dict(show=False)
+                            ),
+                        )
+                    )
+                    idx[(cp, "sheet")] = len(fig.data) - 1
+
+            tr = sl.dropna(subset=["TRDPRC_1"])
+            if len(tr):
+                st = STYLE[(cp, "trade")]
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=tr["strike"],
+                        y=tr["dte"],
+                        z=tr["TRDPRC_1"],
+                        mode="markers",
+                        name=f"TRDPRC_1 · {right}",
+                        visible=False,
+                        legendgroup=f"trade-{cp}",
+                        marker=dict(
+                            size=st["size"],
+                            color=st["color"],
+                            opacity=1.0,
+                            symbol=st["symbol"],
+                            line=dict(width=0.5, color="#ff6b9d"),
+                        ),
+                        hovertemplate=(
+                            "<b>TRDPRC_1</b> $%{z:.3f}<br>K=%{x:.2f}"
+                            "<br>DTE=%{y}<br>%{customdata[0]}<extra></extra>"
+                        ),
+                        customdata=np.stack([tr["ric"].astype(str)], axis=1),
+                    )
+                )
+                idx[(cp, "trade")] = len(fig.data) - 1
+        if idx:
+            per_date.append((asof, idx))
+
+    if not per_date:
+        return price_surface_figure(wide, dates[0], ticker=ticker)
+
+    def _vis_for(idx):
+        """Calls visible, puts parked on the legend so the opening view is not a mess."""
+        vis = [False] * len(fig.data)
+        for (cp, _kind), i in idx.items():
+            vis[i] = True if cp == "C" else "legendonly"
+        return vis
+
+    def _title(asof):
+        spot = spots.get(asof)
+        return f"{ticker}  ·  {pd.Timestamp(asof).date()}" + (
+            f"  ·  spot ${spot:.2f}" if spot else ""
+        )
+
+    # Open on the busiest day, matching the app and the headline numbers. Counting trace
+    # *kinds* would tie at six for most dates and silently land on the earliest one.
+    counts = wide.groupby(wide["date"].dt.normalize()).size()
+    default = max(range(len(per_date)), key=lambda i: int(counts.get(per_date[i][0], 0)))
+    for i, v in enumerate(_vis_for(per_date[default][1])):
+        if v is not False:
+            fig.data[i].visible = v
+
+    steps = [
+        dict(
+            method="update",
+            label=str(pd.Timestamp(asof).date()),
+            args=[{"visible": _vis_for(idx)}, {"title.text": _title(asof)}],
+        )
+        for asof, idx in per_date
+    ]
+
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#0d1117",
+        plot_bgcolor="#161b22",
+        font=dict(color="#e6edf3", family="Inter, system-ui, sans-serif", size=12),
+        title=dict(
+            text=_title(per_date[default][0]),
+            font=dict(size=16, color="#e6edf3", family="Inter, system-ui, sans-serif"),
+            x=0.02,
+            xanchor="left",
+            y=0.98,
+            yanchor="top",
+        ),
+        scene=dict(
+            xaxis=_scene_axis("Strike ($)"),
+            yaxis={**_scene_axis("Days to expiry"), "autorange": "reversed"},
+            zaxis=_scene_axis("Option price ($)"),
+            bgcolor="#0d1117",
+            aspectmode="manual",
+            aspectratio=dict(x=1.15, y=1.0, z=0.7),
+            camera=dict(eye=dict(x=1.55, y=-1.45, z=0.85), center=dict(x=0, y=0, z=-0.05)),
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.0,
+            x=1.0,
+            xanchor="right",
+            bgcolor="rgba(13,17,23,0.7)",
+            bordercolor="#30363d",
+            borderwidth=1,
+            font=dict(size=10),
+            itemsizing="constant",
+        ),
+        sliders=[
+            dict(
+                active=default,
+                steps=steps,
+                pad=dict(t=8, b=8),
+                x=0.02,
+                len=0.96,
+                currentvalue=dict(prefix="As-of  ", font=dict(size=13, color="#00ffcc")),
+                bgcolor="#30363d",
+                activebgcolor="#00ffcc",
+                bordercolor="#30363d",
+                font=dict(size=9, color="#8b949e"),
+                tickcolor="#30363d",
+            )
+        ],
+        height=760,
+        margin=dict(l=10, r=10, t=96, b=90),
+        annotations=[
+            dict(
+                text=(
+                    "Drag the slider to change as-of date &nbsp;·&nbsp; puts start hidden — "
+                    "click them in the legend &nbsp;·&nbsp; the sheet is interpolated, not a market"
+                ),
+                xref="paper",
+                yref="paper",
+                x=0.0,
+                y=1.045,
                 xanchor="left",
                 yanchor="bottom",
                 showarrow=False,
