@@ -164,6 +164,13 @@ interpolated sheet already does — using `THEO_VALUE` as the mark *and* drawing
 be a model on a model. `MID_PRICE` keeps the mark market-derived so the sheet stays visibly the
 assumption, which is the page's whole argument.
 
+> **OUTCOME — Class 2 checkpoint, 2026-09-01.** The instructors accepted that `SETTLE` is not
+> available at this endpoint for expired US listed equity options. It took some pushing; what
+> carried it was the control (SETTLE returning 15 of 15 rows for `CLc1` in the same session)
+> plus the 22-field list, rather than the zero-counts on their own. **What replaces it is
+> still open** — see PRD OQ-8 / BACKLOG T-42. The app runs on `MID_PRICE` in the meantime and
+> the swap is one constant.
+
 **What I need answered:**
 1. `SETTLE` isn't available for expired US equity options — was that the intended discovery,
    or is there an access path I haven't found? If it's the discovery, which mark should stand

@@ -210,7 +210,7 @@ trivially testable (NFR-2); 1.2 builds on the wide table without touching the pa
 cost is discipline — display formatting keeps trying to creep in and must be pushed back to
 the app layer.
 
-**AD-4 — Static export to GitHub Pages, with import-time baking.**
+**AD-4 — Static page on GitHub Pages, rendered at build time.** *(revised 2026-09-01)*
 *Context:* the site must render from the GitHub repo; user chose Pages over hosted Reflex;
 Pages runs no Python, so `on_mount` never fires there. *Decision:* compute default
 figures/metrics at module import from the committed pickle so `reflex export` serializes a
@@ -219,17 +219,23 @@ the published page shows real data with no backend; import gets slower (fine —
 build); base-path config becomes deployment-critical; anything only reachable through an
 event handler is invisible in production, which forces AD-5.
 
-> ⚠ **Measured 2026-08-31 — this decision's central assumption is wrong.** The first real
+> **Resolved 2026-09-01 (PO, after the checkpoint).** The published artifact is a single
+> self-contained `index.html` built by `build_preview.py` in CI: Python reads the committed
+> pickle at *build* time, renders the Plotly figures, and embeds their data as JSON. The
+> browser never reads the pickle and there is no server at run time. The Reflex app remains
+> the local development app; only the published artifact differs. Import-time baking (T-14)
+> is superseded — there is no Reflex State in production to bake into. `frontend_path` is
+> removed, since there is no Reflex export to path-correct.
+>
+> ⚠ **Why, measured 2026-08-31 — the original assumption was wrong.** The first real
 > deploy renders a *blank page*, not a populated one. A Reflex static export bakes
 > `ws://localhost:8000/_event` into the bundle; on Pages the websocket cannot connect, React
 > hydration fails, and the pre-rendered markup is unmounted. The app's text *is* in the
 > exported HTML — this is a hydration failure, not an export failure. Import-time baking
 > (T-14) would not have fixed it: baking figures as State defaults does not help when the
 > state runtime cannot start. Reflex 0.9.8's config exposes no static/no-backend mode.
-> Reflex's documented pattern is frontend-static + backend hosted separately, with `api_url`
-> (overridable as `REFLEX_API_URL` at export) pointing at it. **Blocked on the instructor:
-> DEMO-SCRIPT question 5.** Do not spend effort on T-14/T-15 for deployment reasons until
-> that is answered — they remain justified for the local app, but they do not unblock Pages.
+> Reflex's documented pattern is frontend-static + backend hosted separately — rejected here
+> because it needs a hosted Python process, which the assignment does not call for.
 
 **AD-5 — Interactivity is Plotly-native on the published site.**
 *Context:* AD-4 removes server-side event handling from production. *Decision:* series
@@ -238,6 +244,11 @@ pre-rendered trace sets, curated (~5 dates) to cap bundle size; the backend-depe
 "Reload data" button is omitted from the export. *Consequences:* one figure carries several
 variants (bigger JSON, watch the bundle); Reflex switches remain for local dev and must not
 fight the legend; the checkpoint demo can still use full server-side interactivity.
+
+> **Promoted 2026-09-01.** With AD-4 settled as a static page, this is no longer polish —
+> it is the *only* route to interactivity on the published site. FR-4/FR-5 are graded and are
+> currently unmet in production: the as-of select, the C/P select and the three switches are
+> inert there. T-15 is on the critical path.
 
 **AD-6 — One theme module owns every visual constant.**
 *Context:* the starter hardcodes the same hex values in every figure (duplicated-code

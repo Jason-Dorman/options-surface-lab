@@ -1,9 +1,18 @@
 name: Test and deploy to Pages
 
-# FR-9 / T-9. Two jobs on purpose: the tests run in a clean container with no LSEG
-# credentials and no Workspace, which is what actually proves NFR-4 — "the app, tests,
-# preview and export all work offline". If that job ever needs a secret to pass, the
-# offline guarantee has been broken and the deploy should not happen.
+# FR-9 / T-9. The published site is a SINGLE self-contained index.html, built from the
+# committed pickle at build time — Python reads option_pipeline_data.pkl here in CI, renders
+# the Plotly figures, and embeds their data as JSON in the file. The browser never touches
+# the pickle and there is no server at run time.
+#
+# Why not `reflex export`: a Reflex static export still ships a client that opens a websocket
+# to a Python backend (ws://localhost:8000/_event baked into the bundle). GitHub Pages runs
+# no Python, so hydration fails and the page renders blank. Measured 2026-08-31; see
+# ARCHITECTURE AD-4. The Reflex app remains the local dev app — only the published artifact
+# differs, which is what AD-5 already anticipated.
+#
+# Consequence: no Reflex event handlers in production, so every published interaction must be
+# Plotly-native (T-15).
 
 on:
   push:
@@ -15,15 +24,13 @@ permissions:
   pages: write
   id-token: write
 
-# Never let two deploys race. Don't cancel a run in progress — a half-finished
-# Pages deploy is worse than a queued one.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 env:
-  # Belt and braces: forces the synthetic path and makes any attempt to reach LSEG
-  # impossible, so a network call can never sneak into a build.
+  # Forces the synthetic path and makes any LSEG call impossible, so a network fetch can
+  # never sneak into a build. If the pickle is committed this changes nothing.
   OSL_OFFLINE: "1"
 
 jobs:
@@ -47,7 +54,7 @@ jobs:
         run: python -m pytest tests/ -q
 
   build:
-    name: Export static frontend
+    name: Build the static page
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -58,49 +65,40 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      # Reflex wants Node 22+. The local dev machine has 12.x, which is why
-      # `reflex export` fails to compress there — CI is deliberately newer.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Export
-        run: reflex export --frontend-only --no-zip
-
-      # rxconfig sets frontend_path="/options-surface-lab" so asset URLs resolve under
-      # the project-Pages subpath. Side effect: it also moves the app's "/" route down
-      # one level, leaving no index.html at the build root — so the site root would 404
-      # and the page would only exist at /options-surface-lab/options-surface-lab/.
-      # Lifting the page back to the root fixes it. Verified against a local simulation
-      # of the Pages layout: root serves the app and every asset returns 200.
-      - name: Lift the page to the site root
+      - name: Build index.html from the committed pickle
         run: |
           set -euo pipefail
-          root=.web/build/client
-          test -f "$root/options-surface-lab/index.html"
-          cp "$root/options-surface-lab/index.html" "$root/index.html"
-          # SPA fallback: Pages serves 404.html for unknown paths.
-          cp "$root/options-surface-lab/index.html" "$root/404.html"
-          # Pages runs Jekyll by default, which strips files and dirs beginning with "_".
-          touch "$root/.nojekyll"
+          python build_preview.py
+          mkdir -p _site
+          cp options_surface_preview.html _site/index.html
+          # Pages runs Jekyll by default and strips paths beginning with "_".
+          touch _site/.nojekyll
 
-      - name: Fail if the root page is missing or assets are not prefixed
+      # The build must fail loudly rather than publish a page built on the fallback panel.
+      # A synthetic deploy would look plausible and be wrong — it invents settles that do
+      # not exist in the real data (see checkpoint_audit.md §3).
+      - name: Refuse to publish synthetic data or an empty page
         run: |
           set -euo pipefail
-          root=.web/build/client
-          test -f "$root/index.html" || { echo "::error::no index.html at build root"; exit 1; }
-          grep -q '/options-surface-lab/assets/' "$root/index.html" \
-            || { echo "::error::assets are not prefixed with the Pages base path"; exit 1; }
-          echo "root page present and assets correctly prefixed"
+          page=_site/index.html
+          test -s "$page" || { echo "::error::index.html is empty"; exit 1; }
+          if grep -q "synthetic panel" "$page"; then
+            echo "::error::page was built from the synthetic fallback — is option_pipeline_data.pkl committed?"
+            exit 1
+          fi
+          grep -q "plotly-graph-div" "$page" || { echo "::error::no Plotly figures in the page"; exit 1; }
+          figs=$(grep -o "plotly-graph-div" "$page" | wc -l)
+          echo "published page carries $figs figures"
+          test "$figs" -ge 6 || { echo "::error::expected at least 6 figures, found $figs"; exit 1; }
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .web/build/client
+          path: _site
 
   deploy:
     name: Deploy

@@ -48,6 +48,8 @@ def main() -> Path:
     med_txt = "n/a" if med is None else f"${med:.3f}"
     rel = stats["median_rel_diff_pct"]
     rel_txt = "n/a" if rel is None else f"{rel:.1f}%"
+    sp, sp_pct = stats["median_spread"], stats["median_spread_pct"]
+    spread_txt = "n/a" if sp is None else f"${sp:.2f} ({sp_pct:.0f}%)"
 
     banner = f"""
     <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -65,10 +67,11 @@ def main() -> Path:
       </p>
       <div style="display:flex; gap:16px; flex-wrap:wrap; margin:12px 0 8px 0;">
         {_card('Series on this date', stats['n_quotes'])}
-        {_card('Settle, no print', f"{stats['n_mark_only']} ({stats['pct_mark_no_trade']:.0f}%)")}
-        {_card('Both settle &amp; print', stats['n_both'])}
-        {_card('Median |settle − trade|', med_txt)}
+        {_card('Mark, no print', f"{stats['n_mark_only']} ({stats['pct_mark_no_trade']:.0f}%)")}
+        {_card('Both mark &amp; print', stats['n_both'])}
+        {_card('Median |mark − trade|', med_txt)}
         {_card('Median relative gap', rel_txt)}
+        {_card('Median bid-ask spread', spread_txt)}
       </div>
     </div>
     """

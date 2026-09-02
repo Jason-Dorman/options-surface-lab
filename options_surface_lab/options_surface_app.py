@@ -348,6 +348,7 @@ class State(rx.State):
     n_mark_only: int = 0
     n_both: int = 0
     pct_mark_no_trade: str = "—"
+    mark_no_print: str = "—"   # FR-6(a): count AND percent
     median_gap: str = "—"
     median_spread: str = "—"
     data_note: str = ""
@@ -474,6 +475,8 @@ class State(rx.State):
         self.n_mark_only = stats["n_mark_only"]
         self.n_both = stats["n_both"]
         self.pct_mark_no_trade = f"{stats['pct_mark_no_trade']:.0f}%"
+        # FR-6(a) is explicit that the percent must be shown, not just the count.
+        self.mark_no_print = f"{stats['n_mark_only']} ({stats['pct_mark_no_trade']:.0f}%)"
         # How believable the mark is. A wide spread means the midpoint is a number nobody
         # would actually trade at — the thing that bites hardest in 1.2's simulated fills.
         if stats.get("median_spread_pct") is None:
@@ -553,7 +556,7 @@ def index() -> rx.Component:
                 _metric("Underlying", State.ticker),
                 _metric("Option series", State.option_count),
                 _metric("Quotes on as-of date", State.n_quotes),
-                _metric("Mark with no print", State.n_mark_only),
+                _metric("Mark, no print", State.mark_no_print),
                 _metric("Median |mark − trade|", State.median_gap),
                 _metric("Median bid-ask spread", State.median_spread),
                 rx.button(

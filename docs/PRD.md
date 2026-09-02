@@ -306,11 +306,14 @@ site with the rubric complete outranks it on the deadline.)
 - **OQ-4:** ~~Pages mechanism: Actions workflow vs `gh-pages` branch.~~ **Actions workflow,
   shipped 2026-08-31** (`.github/workflows/pages.yml`). Superseded by a larger question:
   **OQ-7**.
-- **OQ-7 (blocking FR-9):** A Reflex static export cannot run on Pages — the bundle needs a
-  live backend over a websocket and the page renders blank without one. Does the
-  instructor want the frontend on Pages with a backend hosted elsewhere, `reflex deploy`
-  to Reflex Cloud, or a static Plotly page? See ARCHITECTURE AD-4's 2026-08-31 note and
-  DEMO-SCRIPT question 5.
+- **OQ-7:** ~~Deployment model for a Reflex app on Pages.~~ **Closed 2026-09-01 — static
+  page.** Pages serves one self-contained `index.html` built from the committed pickle at
+  build time. See the revised AD-4. Consequence: T-15 is now on the critical path, because no
+  Reflex event handler runs in production.
+- **OQ-8 (open):** SETTLE is confirmed unavailable at the endpoint — the instructor conceded
+  this at the Class 2 checkpoint. What should stand in as the mark is still outstanding.
+  Currently `MID_PRICE`; the alternative is `THEO_VALUE`. One constant plus a re-pull either
+  way (T-42). Nothing else is blocked on it — the pipeline is field-agnostic.
 - **OQ-5:** `pivot_trade_settle` drops rows whose `spot` is NaN (pandas `pivot_table` discards
   NaN index keys), contradicting SPEC §7.2's "one row per (date, ric)". Only reachable when the
   stock frame does not cover the option dates. Recorded as an `xfail` in
