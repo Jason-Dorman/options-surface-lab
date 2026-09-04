@@ -141,6 +141,17 @@ A **10-column** grid, because 10 divides cleanly into both `6+4` (the hero row) 
 and `W_FULL`, and `test_panel_widths_tile_complete_rows` asserts they still add up: on a
 hairline grid a row that does not fill its width leaves a visible hole.
 
+**The `.osl-w{n}` classes are generated for every column, never hand-listed.** This is the
+one defect in the restyle that reached production. The hand-written stylesheet declared
+`.osl-w3/.w5/.w7/.w10` from the 7/3 era; when the split became 6/4 the tokens changed and the
+CSS did not, so `.osl-w6` and `.osl-w4` did not exist. **CSS fails open** — an undefined class
+is not an error, `grid-column` simply stays `auto` — so the surface and the underlying
+rendered *one column wide* on the deployed page while every other panel was correct. The
+Reflex app styles its panels with inline `grid-column`, so it looked perfect locally, which
+is what made it a deploy-only failure. Two tests now cover it: one that every width token has
+a base-level rule, and one that walks the built page and fails on any class it uses but never
+defines.
+
 - **Command bar** — wordmark left, instrument identity right (ticker, mark field, as-of,
   series count) in mono. One line, always the same place.
 - **Readout strip** — the FR-6 headline numbers, butted together with a 1px rule between
@@ -223,5 +234,6 @@ judgement calls; they are executable now.
 | 2026-09-02 | Adopted. First pass shipped ice-blue chrome and a single-column layout; the PO corrected both — "Bloomberg" meant the **page layout**, and the font colours needed to change. Amber type and the panel grid replaced them; puts moved off amber onto the blue-shift rule (§3). Navy ground unchanged throughout. |
 | 2026-09-02 | PO asked to pair the underlying with the price surface. Grid moved from 2 columns to 10 so the hero row could be 7/3 rather than an even split; the remaining four figures re-flowed 5+5 across two rows. |
 | 2026-09-02 | PO caught three defects by eye. Put markers were unreadable (open symbols, and hues derived as near-shades of their calls) — puts re-hued to violet/green, all markers filled (§3). The mark-vs-print scatter drew one unlabelled array-coloured trace, so the puts read as missing — split into named Calls/Puts traces with a legend. And the hero row wasted vertical space — height 760 → 600 plus `align-items:start` (§5). All three now have tests. |
+| 2026-09-02 | **Deploy-only breakage.** The published page rendered the surface and the underlying one column wide: `.osl-w6`/`.osl-w4` were never added when the split moved from 7/3 to 6/4, and an undefined CSS class fails open. Width classes are now generated from `GRID_COLUMNS`; a token-vs-stylesheet test and an orphan-class test over the built page both guard it (§5). |
 | 2026-09-02 | PO found the 3D surface overflowing into the mark-vs-print panel in the **dev app**: it was handing un-panelised figures to the terminal grid, so titles doubled with the panel headers and declared heights (640, 460) exceeded the boxes reserved for them (600, 360). App figures now panelise exactly as the builder's do; `price_surface_figure` reads `HERO_FIGURE_HEIGHT`; empty figures declare a height. Guarded by tests (§5). |
 | 2026-09-02 | PO refined the correction: the put **colours** were the problem, not the glyphs — square/cross reverted to circle/diamond, so the glyph encodes the role and hue alone separates the rights. Hero row widened from 7/3 to 6/4. |

@@ -23,8 +23,9 @@ Two of the encodings are not ours to choose — the assignment brief fixes them:
 `ACCENT` (amber) is therefore type and chrome only: headings, metric values, panel numbers,
 the as-of slider. It never encodes data. Keeping the brand colour out of the data channel is
 what lets the page's one argument — the mark is not the print — read at a glance. Puts take
-violet and a dimmer amber with open symbols, so a four-series view stays legible without
-either right stealing the other's hue.
+the hues furthest from their own call — violet for the mark, green for the print — with the
+glyph fixed by role, so a four-series view stays legible without either right stealing the
+other's hue.
 
 Everything is named for its job, not its colour (`MARK`, not `CYAN`): the point of the
 indirection is that re-toning the site is a change of values here, not a change of call
@@ -343,6 +344,17 @@ PANEL_HEADER_STYLE = dict(
     width="100%",
 )
 
+# Every width from 1..GRID_COLUMNS gets a class, generated rather than listed. Hand-listing
+# them is how the published page broke on 2026-09-02: the hero split moved from 7/3 to 6/4,
+# the tokens were updated and the stylesheet was not, so `.osl-w6` and `.osl-w4` did not
+# exist and both panels silently fell back to one column. The Reflex app styles its panels
+# inline, so it kept working — the defect only ever appeared on the deployed page.
+_WIDTH_CLASSES = "\n".join(
+    f"  .osl-w{n} {{ grid-column:span {n}; }}" for n in range(1, GRID_COLUMNS + 1)
+)
+_WIDTH_SELECTORS = ", ".join(f".osl-w{n}" for n in range(1, GRID_COLUMNS + 1))
+
+
 PAGE_CSS = f"""
   * {{ box-sizing:border-box; }}
   body {{
@@ -389,14 +401,11 @@ PAGE_CSS = f"""
        navy under a chart, which reads as a rendering fault rather than as spacing. */
     align-items:start;
   }}
-  .osl-w3 {{ grid-column:span 3; }}
-  .osl-w5 {{ grid-column:span 5; }}
-  .osl-w7 {{ grid-column:span 7; }}
-  .osl-w10 {{ grid-column:span 10; }}
+{_WIDTH_CLASSES}
   /* Below this the adjacency is not worth the squeeze — everything goes full width. */
   @media (max-width: 1100px) {{
     .osl-grid {{ grid-template-columns:minmax(0, 1fr); }}
-    .osl-w3, .osl-w5, .osl-w7, .osl-w10 {{ grid-column:span 1; }}
+    {_WIDTH_SELECTORS} {{ grid-column:span 1; }}
   }}
 
   .osl-panel {{ background:{SURFACE}; border:1px solid {BORDER}; min-width:0; }}

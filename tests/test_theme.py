@@ -188,6 +188,25 @@ def test_the_interpolated_sheet_stays_subordinate(wide, asof):
 # ------------------------------------------------------------------- the terminal grid
 
 
+def test_every_width_token_has_a_stylesheet_class():
+    """A width token with no matching CSS class silently collapses that panel to one column.
+
+    This shipped. The hero split moved from 7/3 to 6/4, the tokens were updated and the
+    hand-listed `.osl-w3/.w5/.w7/.w10` rules were not, so `.osl-w6` and `.osl-w4` did not
+    exist. An undefined class is not an error in CSS — `grid-column` just stays `auto` — so
+    the surface and the underlying rendered one column wide on the deployed page while every
+    other panel was fine. The Reflex app styles panels inline and was unaffected, which is
+    why it only ever appeared in production.
+    """
+    defined = {int(n) for n in re.findall(r"\.osl-w(\d+)\s*\{", T.PAGE_CSS)}
+    for name in ("W_HERO", "W_SIDECAR", "W_HALF", "W_FULL"):
+        width = getattr(T, name)
+        assert width in defined, f"{name}={width} has no .osl-w{width} rule in PAGE_CSS"
+    assert defined == set(range(1, T.GRID_COLUMNS + 1)), (
+        "the width classes must be generated for every column, not hand-listed"
+    )
+
+
 def test_panel_widths_tile_complete_rows():
     """A hairline grid shows every gap, so a row that does not add up is immediately ugly.
 

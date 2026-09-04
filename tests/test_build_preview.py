@@ -100,3 +100,37 @@ def test_the_real_panel_actually_carries_marks():
         "headline number at zero and the whole comparison missing"
     )
     assert stats["n_both"] > 0, "no contract-day has both a mark and a trade"
+
+
+def test_every_class_the_page_uses_is_defined_in_its_own_stylesheet():
+    """The page carries its whole stylesheet, so an orphan class is a silent layout bug.
+
+    CSS fails open: an undefined class is not an error, the element simply keeps its default.
+    That is how the deployed page shipped with the 3D surface one column wide while the local
+    Reflex app — which styles its panels inline — looked perfect. Anything the builder emits
+    must resolve against the `<style>` block travelling with it.
+    """
+    page = Path(__file__).resolve().parents[1] / "options_surface_preview.html"
+    if not page.exists():
+        pytest.skip("preview not built in this working tree")
+    html = page.read_text(encoding="utf-8", errors="ignore")
+
+    style = re.search(r"<style>(.*?)</style>", html, re.S)
+    assert style, "the page must carry its own stylesheet"
+
+    # Only base-level rules count. The responsive block re-lists every width class to
+    # collapse it on narrow screens, so counting selectors anywhere in the sheet would
+    # report a class as "defined" on the strength of its mobile override alone — which is
+    # exactly the hole that let the missing `.osl-w6` reach production.
+    css = re.sub(r"@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}", "", style.group(1), flags=re.S)
+    defined = set(re.findall(r"\.(osl-[a-z0-9-]+)", css))
+
+    used = set()
+    for attr in re.findall(r"class=[\"']([^\"']*)[\"']", html):
+        used.update(c for c in attr.split() if c.startswith("osl-"))
+
+    orphans = sorted(used - defined)
+    assert not orphans, (
+        f"these classes are used but never defined, so their styling is silently dropped: "
+        f"{orphans}"
+    )
