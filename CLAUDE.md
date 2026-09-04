@@ -209,10 +209,17 @@ never commit it, never print its contents, never copy it into anything that ship
 
 ## Working style
 
-- Small, verifiable steps; run tests after each change; commit frequently — the repo is live
-  at `Jason-Dorman/options-surface-lab` (T-8, 2026-08-31). Push auth is the WSL SSH key;
-  Git Credential Manager on this machine is broken (needs .NET 7/8, only 5.0.14 present), so
-  HTTPS pushes fail silently. Use the SSH remote.
+- **Git is the PO's, entirely. Sessions never `commit`, `push`, or create branches** — nor
+  `add`, `reset`, `revert`, `merge`, `rebase`, `stash` or `tag`. Reading is fine (`status`,
+  `diff`, `log`, `show`). Finish the work, leave it in the working tree, and report which
+  files changed; Jason takes it from there. He owns every line in the repo (PRD guardrail #6),
+  and that includes the history — nothing lands in it that he has not read. If a step
+  genuinely needs a commit to proceed (CI must see it, say), name that and stop.
+  *(Set 2026-09-04, replacing "commit frequently" — which a session had followed on T-16.)*
+- Small, verifiable steps; run tests after each change — the repo is live at
+  `Jason-Dorman/options-surface-lab` (T-8, 2026-08-31). For the PO's own pushes: auth is the
+  WSL SSH key; Git Credential Manager on this machine is broken (needs .NET 7/8, only 5.0.14
+  present), so HTTPS pushes fail silently. Use the SSH remote.
 - Route changes via ARCHITECTURE §7's table; if a change fits no row, it's an architecture
   question for the PO.
 - Prefer editing existing modules to adding new ones; the module set and their

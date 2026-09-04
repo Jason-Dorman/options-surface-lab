@@ -138,8 +138,10 @@ From repo root with `algo` active: `reflex run`. First run scaffolds `.web/` and
 the JS toolchain — allow several minutes and disk noise; subsequent runs are fast. Expect
 frontend at `http://localhost:3000` (backend on 8000). Stop with Ctrl+C.
 
-Smoke checklist: page loads · candlestick + 3D surface render · as-of/C-P selects and the
-three toggles respond · metrics populated.
+Smoke checklist: page loads · candlestick + 3D surface render · as-of / C-P / **X-axis**
+selects and the three toggles respond · metrics populated. The X-axis select (FR-10, T-16)
+swaps the surface's X between raw strike and `K / S`; everything else about the figure must
+stay put when it moves.
 
 **Surprises from the first run — read before the next one:**
 
@@ -198,17 +200,37 @@ push to main
 - **The guards matter more than they look.** A build that silently fell back to the synthetic
   panel would deploy a page that renders beautifully and invents settles that do not exist.
   The workflow fails instead. Do not weaken them to get a green run.
-- **FR-4/FR-5 are met without a backend (T-15).** The 3D figure carries an as-of **slider**
-  over all 53 trading days; the **legend** toggles MID_PRICE / TRDPRC_1 / the interpolated
-  sheet for calls and puts (puts start hidden). All of it is figure JSON, so it works on a
-  static host. The supporting charts and the headline numbers stay fixed to one representative
-  date — the page says so.
-- **The page is ~2.4 MB and carries ~308 traces.** That is deliberate: the PO chose full date
-  coverage over load time. If it ever needs slimming, pass explicit dates —
+- **FR-4/FR-5/FR-10 are met without a backend.** The 3D figure carries three controls, all
+  of them figure JSON, so they work on a static host:
+  * an as-of **slider** over all 53 trading days (T-15), which **drives the whole page** —
+    scatter, spread grid, both occupancy grids, the six readouts and the command bar's as-of
+    (T-42). The underlying candlestick is the deliberate exception: it is 12 weeks of context,
+    not an as-of cut.
+  * the **legend**, toggling MID_PRICE / TRDPRC_1 / the interpolated sheet for calls and puts
+    (puts start hidden).
+  * an **X-axis dropdown**, strike ↔ `K / S` (T-16). It composes with the slider because the
+    two write disjoint properties — the steps write `visible`, the menu writes `x`.
+- **The page is ~2.9 MB (≈1.0 MB gzipped) and carries ~308 traces.** That is deliberate: the
+  PO chose full date coverage over load time (AD-5), and FR-10's second x array per trace adds
+  ~205 KB raw / ~70 KB gzipped on top. If it ever needs slimming, pass explicit dates —
   `static_surface_figure(wide, dates=curated_asof_dates(wide, n=10))` — rather than dropping
-  figures.
+  figures or controls.
 - Acceptance is unchanged: the Pages URL renders in an **incognito** window with working
-  client-side toggles.
+  client-side controls.
+- **Checking the published page for real.** `pytest` asserts against the figure JSON; it
+  cannot click anything, and every bad defect on this project has been deploy-only. To drive
+  the built page in a browser, build a **throwaway** venv — do not install Playwright into
+  `algo`, it bumps `pyee` past `lseg-data`'s pin and breaks the LSEG import:
+
+  ```bash
+  python -m venv /c/Users/rjd61/AppData/Local/Temp/oslpw     # short path: long paths fail here
+  /c/Users/rjd61/AppData/Local/Temp/oslpw/Scripts/python -m pip install playwright
+  /c/Users/rjd61/AppData/Local/Temp/oslpw/Scripts/python -m playwright install chromium
+  ```
+
+  Load `options_surface_preview.html` over `file://`, wait for `window.Plotly`, then read
+  `gd._fullData[i].x` — **not** `gd.data[i].x`, which plotly.py may ship as base64 binary
+  (`{dtype, bdata}`) rather than a JSON array. Used on 2026-09-04 to verify FR-10 end to end.
 
 ## 6. Quick troubleshooting
 

@@ -415,22 +415,29 @@ def test_the_axis_menu_is_legible_in_both_of_its_states():
         assert ratio >= 4.5, f"the axis menu is {ratio:.2f}:1 on {name}, below WCAG AA"
 
 
-def test_the_axis_menu_clears_the_legend_and_the_caption(wide):
-    """Three things share the band above the hero; the menu is the newest and the smallest.
+def test_the_axis_menu_sits_inside_the_plot_not_in_the_crowded_band_above(wide):
+    """The band above a plot is full, and a fourth tenant overlapped the other three.
 
-    The caption is left-anchored and the legend sits a row lower, so the menu takes the right
-    of the caption's row. A menu dropped to LEGEND_Y would land on the legend's swatches —
-    the same collision the caption had before CAPTION_Y_OVER_LEGEND existed.
+    Title, caption and legend already stack there (see the caption/legend test above), and
+    Plotly's modebar floats over the top-right on top of that. FR-10's control shipped at
+    `CAPTION_Y_OVER_LEGEND` and the PO found it overlapping neighbours at real widths on
+    2026-09-04. It now lives inside the plot area, top-left: below the legend's band, and on
+    the opposite side from the modebar.
     """
     spec = T.menu()
-    assert spec["y"] >= T.CAPTION_Y_OVER_LEGEND, "the menu sits in the legend's band"
-    assert (spec["x"], spec["xanchor"]) == (1.0, "right"), "the caption owns the left of that row"
+    assert spec["yanchor"] == "top" and spec["y"] < T.LEGEND_Y, (
+        f"the menu is at y={spec['y']}, back in the band that holds title/caption/legend"
+    )
+    assert 0.0 <= spec["y"] <= 1.0, "the menu must be inside the plot area"
+    assert spec["xanchor"] == "left" and spec["x"] <= 0.25, (
+        "the menu must stay left — Plotly's modebar owns the top-right corner"
+    )
 
     fig = static_surface_figure(wide, ticker="UUUU")
     menu = fig.layout.updatemenus[0]
-    captions = [a for a in fig.layout.annotations if a.yref == "paper"]
-    assert all(a.xanchor == "left" for a in captions), "a centred caption would run into the menu"
-    assert menu.y >= fig.layout.legend.y, "the menu must sit above the legend, not on it"
+    assert menu.y < fig.layout.legend.y, "the menu is back on top of the legend"
+    for ann in [a for a in fig.layout.annotations if a.yref == "paper"]:
+        assert ann.y > menu.y, f"caption at y={ann.y} has dropped onto the menu at {menu.y}"
 
 
 @pytest.mark.parametrize("label,fg,bg", CONTRAST_PAIRS, ids=[p[0] for p in CONTRAST_PAIRS])

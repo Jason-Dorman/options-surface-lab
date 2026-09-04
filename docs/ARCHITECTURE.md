@@ -128,7 +128,12 @@ Re-exports `app` so Reflex's `app_name` convention and the assignment's `*app.py
 both hold (AD-8). Must stay ~3 lines; logic here is a smell.
 
 **`options_surface_lab/options_surface_app.py`** — application layer
-`State` (vars + event handlers), page composition, import-time baking of default figures.
+`State` (vars + event handlers), page composition, and the one-time LSEG acquisition
+(human-invoked only — RUNBOOK §3). **Local dev and the checkpoint demo only:** the published
+page is built by `build_preview.py` and runs no Reflex code, so nothing here reaches
+production. *(Was "import-time baking of default figures" — that was T-14, superseded
+2026-09-01 when the deployment model became a build-time-rendered page: there is no exported
+`State` left to bake into.)*
 *Does not belong here:* dataframe surgery (→ utils), figure construction (→ plot), literal
 colors/fonts (→ theme).
 
@@ -139,27 +144,43 @@ cache loading, (1.2+) IV inversion. Pure in/out; the only I/O is reading the pic
 display.
 
 **`options_surface_lab/option_surface_plot.py`** — presentation
-One builder per figure, `frame(s) + selection → go.Figure`. All styling via `theme.py`.
+One builder per figure, `frame(s) + selection → go.Figure`. All styling via `theme.py`. Two
+builders serve the hero: `price_surface_figure` (one date, driven by `State`) and
+`static_surface_figure` (every date, controls baked into the figure JSON for the published
+page — AD-5). Both take FR-10's `x_mode` vocabulary (`X_MODES`, `X_AXIS_TITLE`,
+`X_MODE_LABEL`); `asof_frames()` builds the per-date payload the published page's slider
+applies (T-42).
 *Does not belong here:* data reshaping beyond slicing/dropna (→ utils), Reflex components,
 hardcoded hex values.
 
 **`options_surface_lab/theme.py`** — design tokens
 Semantic palette, font stacks, layout metrics, and the shared `figure_layout()` / `title()` /
-`caption()` / `axis()` / `scene()` / `legend()` / `slider()` builders. Also carries the two
+`caption()` / `axis()` / `scene()` / `legend()` / `slider()` / `menu()` builders (`menu()` is
+FR-10's axis control, added 2026-09-04 with T-16). Also carries the two
 non-Plotly surfaces: `PANEL_STYLE` / `PANEL_HEADER_STYLE` for Reflex props and `PAGE_CSS`
 (the terminal grid) for the static page. Imports nothing
 project-local. Landed 2026-09-02 (T-13); direction in [DESIGN-BRIEF.md](DESIGN-BRIEF.md).
 The restyle happens here and only here — `tests/test_theme.py` enforces that mechanically.
 
-**`build_preview.py`** (repo root) — delivery fallback
-Assembles the same figures into one static HTML file. Kept alive as the emergency Pages
-artifact (AD-4 consequence).
+**`build_preview.py`** (repo root) — **the deliverable**
+Assembles the figures, the terminal chrome and the as-of payload into the single
+self-contained HTML file GitHub Pages serves. CI runs it on every push. *(This entry used to
+call it a "delivery fallback … emergency Pages artifact" — true until T-41 resolved the
+deployment model to a static page on 2026-09-01, after which `reflex export` left the build
+entirely. AD-4.)*
+*Does not belong here:* figure construction (→ plot), colours/fonts/measurements (→ theme).
 
-**`tests/`** — mirrors the transform core first (parsing, pivot, stats, IV round-trip);
-uses the seeded synthetic panel as its fixture (AD-7), exposed as the session-scoped
-`synthetic_payload` / `synthetic_wide` fixtures in `tests/conftest.py`. The FR-3 chain is
-covered as of 2026-08-29 (`test_ric_parsing.py`, `test_transforms.py`); the IV round-trip
-lands with FR-11.
+**`tests/`** — mirrors the transform core first, then everything a defect could reach the
+published page through. Uses the seeded synthetic panel as its fixture (AD-7), exposed as the
+session-scoped `synthetic_payload` / `synthetic_wide` fixtures in `tests/conftest.py`.
+**154 green, no xfail (2026-09-04):** `test_ric_parsing` / `test_ric_building` /
+`test_transforms` / `test_acquisition` cover the FR-3 chain and the pull; `test_app_figures`
+pins the app→plot call sites, the published hero's controls and FR-10's axis modes;
+`test_theme` makes FR-8 mechanical (no colour/font literals, WCAG AA, marker identity);
+`test_build_preview` asserts against the **built artifact** because that is the only place the
+page's wiring exists. The IV round-trip lands with FR-11.
+*Known blind spot:* nothing here can click. Browser verification of the published page is a
+manual procedure in [RUNBOOK](RUNBOOK.md) §5, not a test.
 
 **`notebooks/`** — data exploration only, numbered (`01_…`) as the semester accumulates.
 Notebooks import the package; nothing imports from notebooks, and no transform logic lives
@@ -178,8 +199,10 @@ refactor — update the docs first.
 
 1. **The payload dict** (pickle contents) — acquisition's output, everyone's input.
    Additive changes only. Schema: [SYSTEM-SPEC §5.1](SYSTEM-SPEC.md).
-2. **The wide table** — one row per (date, ric) with `TRDPRC_1`/`SETTLE` side by side; the
-   frame every figure and future 1.2 feature consumes. Schema:
+2. **The wide table** — one row per (date, ric) with `TRDPRC_1` and `MARK` side by side; the
+   frame every figure and future 1.2 feature consumes. `MARK` is the *slot*, not a field name:
+   US listed equity options have no published settlement price, so `MARK_FIELD_DEFAULT`
+   (`MID_PRICE`) fills it (T-32/T-34). *(This line said `SETTLE` until 2026-09-04.)* Schema:
    [SYSTEM-SPEC §7.2](SYSTEM-SPEC.md).
 3. **Theme tokens** — the only channel through which visual identity reaches components and
    figures. If a color bypasses it, the wall is breached (FR-8's acceptance test).
@@ -361,7 +384,8 @@ architecture change (§5, §6 first).
 | Add or modify a figure | `option_surface_plot.py` (+ page slot in app) | utils internals |
 | Add a derived column / stat / model (e.g. IV) | `option_surface_utils.py` + tests | plot, app |
 | Add a page for a new assignment | new module + `app.add_page` | existing page, utils |
-| Add a control / interaction | app (local) **and** its Plotly-native equivalent (production, AD-5) | — |
+| Add a control / interaction | app (local) **and** its Plotly-native equivalent (production, AD-5). On the published page a new control must write **disjoint properties** from the ones already there — the as-of slider owns `visible`, FR-10's axis menu owns `x` — or the two silently undo each other (T-15, T-16) | — |
+| Add an axis mode / change what an axis means | `X_MODES` + `X_AXIS_TITLE` + `X_MODE_LABEL` in `option_surface_plot.py`, then both hero builders and the app's select | `z` / `y` / trace names / marker styling — a mode is a ruler, not a transform (FR-10) |
 | Pull different/more data | acquisition function + additive payload keys | payload's existing keys (§5) |
 | Change how missing data renders | check AD-9 first | — |
 | Speed up the LSEG pull | acquisition only (banding, batching) | transforms |

@@ -162,6 +162,13 @@ LEGEND_Y = 1.0
 CAPTION_Y = 1.02
 CAPTION_Y_OVER_LEGEND = 1.12
 
+# FR-10's axis control sits *inside* the plot, top-left, rather than in the band above it.
+# Everything at or above LEGEND_Y is already spoken for (legend, caption, title) and Plotly's
+# modebar floats over the top-right, so a control placed up there collides at some widths.
+# Both values are inside the plot area by construction: y < LEGEND_Y and x near the left edge.
+MENU_X = 0.01
+MENU_Y = 0.98
+
 # Top margin has to hold title + caption + legend without them stacking into one another.
 # The slider variant also reserves the bottom for the as-of control (T-15).
 HERO_MARGIN = dict(l=10, r=10, t=104, b=12)
@@ -311,27 +318,31 @@ def menu(**overrides) -> dict:
 
     An amber chip with inverse type, the same affordance the Reflex app's Reload button uses.
     It is a dropdown rather than a button pair for two reasons: the closed control names the
-    mode currently shown (FR-10 asks for exactly that), and one chip fits the crowded band
-    above the hero where two would not.
+    mode currently shown (FR-10 asks for exactly that), and one chip fits where two would not.
+
+    **It sits INSIDE the plot area, top-left** (PO, 2026-09-04). The band above a plot is
+    already three deep — title, caption, legend — plus Plotly's own modebar hovering at the
+    top-right, and a fourth element put in there overlapped its neighbours at some widths.
+    Inside is also where it belongs by meaning: it relabels an axis of *this* scene, so it
+    reads as part of the chart rather than as page chrome. Top-**left** specifically, because
+    the modebar owns the top-right corner and the 3D cloud hangs below centre, leaving that
+    corner empty at every date in the panel.
 
     The colour scheme is forced, not chosen. A menu has ONE font colour for every state, and
     plotly.js paints the highlighted row `MENU_ACTIVE_BG` regardless of the theme — so the
     type has to be legible on that near-white *and* on our own ground. Amber type fails there
     (1.7:1); dark type on amber clears AA on both. Both pairings are pinned in
     `tests/test_theme.py`.
-
-    Sits at the right of the band above the plot — the caption is left-anchored in the same
-    band and the legend is below it at LEGEND_Y, so the three do not overlap.
     """
     spec = dict(
         type="dropdown",
         direction="down",
         showactive=True,
-        x=1.0,
-        xanchor="right",
-        y=CAPTION_Y_OVER_LEGEND,
-        yanchor="bottom",
-        pad=dict(l=6, r=6, t=2, b=2),
+        x=MENU_X,
+        xanchor="left",
+        y=MENU_Y,
+        yanchor="top",
+        pad=dict(l=4, r=4, t=4, b=4),
         bgcolor=ACCENT,
         bordercolor=BORDER,
         borderwidth=1,

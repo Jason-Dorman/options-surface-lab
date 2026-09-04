@@ -49,20 +49,21 @@ These come from the assignment brief and are product guardrails, not style prefe
 6. **AI-assisted code is my code.** I review and can explain every line; the three-sentence
    commentary (FR-7) is authored personally, not generated.
 
-## 3. Current state (as of 2026-08-29)
+## 3. Current state (as of 2026-09-04)
 
-What exists — this is instructor starter code plus a synthetic data cache:
+What exists. This began as instructor starter code plus a synthetic cache; it is now a
+package with a real committed LSEG panel, a test suite, and a live deployment.
 
 | Asset | State |
 |---|---|
-| [options_surface_app.py](../options_surface_lab/options_surface_app.py) | Reflex page + `State` + cache-first LSEG loader. In the package; imports verified. |
-| [option_surface_utils.py](../options_surface_lab/option_surface_utils.py) | `parse_option_ric`, `flatten_lseg_options`, `attach_underlying`, `pivot_trade_settle`, `summarize_sparsity`, `synthesize_demo_payload`, `surface_grid`. Solid; locked by the FR-3 transform suite (40 tests, T-4). |
-| [option_surface_plot.py](../options_surface_lab/option_surface_plot.py) | Candlestick, 3D price surface, settle-vs-trade scatter + occupancy bars, coverage + spread heatmaps, the published page's static surface. All styling via `theme.py` (FR-8 landed 2026-09-02). |
-| [theme.py](../options_surface_lab/theme.py) | Design tokens — the only file holding a colour or a font name. Direction recorded in [DESIGN-BRIEF.md](DESIGN-BRIEF.md). |
-| [build_preview.py](../build_preview.py) | Standalone static HTML preview (no Reflex). Works; useful fallback and export ingredient. |
+| [options_surface_app.py](../options_surface_lab/options_surface_app.py) | Reflex page + `State` + cache-first LSEG loader. **Local dev and the checkpoint demo only** — the published page runs no Reflex code (AD-4). |
+| [option_surface_utils.py](../options_surface_lab/option_surface_utils.py) | `parse_option_ric`, `build_option_ric`/`build_candidate_rics`, `flatten_lseg_options`, `attach_underlying`, `pivot_trade_settle`, `summarize_sparsity`, `synthesize_demo_payload`, `surface_grid`, `curated_asof_dates`. Locked by the FR-3 transform suite (T-4). |
+| [option_surface_plot.py](../options_surface_lab/option_surface_plot.py) | Candlestick, 3D price surface (`x_mode` = strike or K/S, FR-10), settle-vs-trade scatter + occupancy bars, coverage + spread heatmaps, the published page's static surface + its per-date `asof_frames()` payload. All styling via `theme.py` (FR-8 landed 2026-09-02). |
+| [theme.py](../options_surface_lab/theme.py) | Design tokens — the only file holding a colour or a font name — plus the shared figure builders (`figure_layout`, `title`, `caption`, `axis`, `scene`, `legend`, `slider`, `menu`). Direction recorded in [DESIGN-BRIEF.md](DESIGN-BRIEF.md). |
+| [build_preview.py](../build_preview.py) | **The deliverable** (AD-4/T-41): builds the single self-contained `index.html` that Pages serves. CI runs it on every push. |
 | `option_pipeline_data.synthetic.pkl` | **Orphaned** — nothing loads it, and it fails to unpickle under the installed pandas. The no-cache fallback is generated in-process by `synthesize_demo_payload()`. |
-| `option_pipeline_data.trdprc-only.pkl` | The 2026-08-30 pull: 148 series, TRDPRC_1 only, calls only, no SETTLE. Kept as evidence for [checkpoint_audit.md](checkpoint_audit.md) §3; **not** a usable cache. |
-| `option_pipeline_data.pkl` | The real committed LSEG cache (FR-2). **Does not exist yet** — blocked on T-6 and T-27. |
+| `option_pipeline_data.trdprc-only.pkl` · `.trade-only-puts.pkl` | The two superseded pulls, gitignored and kept locally as evidence for [checkpoint_audit.md](checkpoint_audit.md) §3. **Not** usable caches. |
+| `option_pipeline_data.pkl` | The real committed LSEG cache (FR-2). **Landed 2026-08-31 (T-7):** 296 series (148 calls + 148 puts) × 53 trading days, fields `TRDPRC_1, MID_PRICE, BID, ASK, OPINT_1`. Treated as a frozen artifact — never regenerated without PO approval. |
 | [docs/ENGINEERING-PRINCIPLES.md](ENGINEERING-PRINCIPLES.md) | Engineering standards this project follows. |
 
 ### Known defects / gaps (drive the requirements below)
@@ -71,13 +72,17 @@ What exists — this is instructor starter code plus a synthetic data cache:
   app import verified in the `algo` env. First full `reflex run` smoke test still pending.
 - **G-2** ✅ *Resolved 2026-08-29* — all imports are package-style and cache paths are
   anchored to `__file__` (CWD-independent).
-- **G-3** Rubric item 5a: the **percent** of settle-with-no-trade series is computed
-  (`State.pct_settle_no_trade`) but never displayed — the page shows only the raw count.
+- **G-3** ✅ *Resolved 2026-09-01 (T-11)* — the "Mark, no print" readout shows the count **and**
+  the percent, in both the Reflex app and the published page. It reads from the MARK slot, so
+  it re-computes if the mark field ever changes.
 - **G-4** Rubric "three sentences under the plot" — missing entirely.
 - **G-5** ✅ *Resolved 2026-09-02* — FR-8 landed (T-13). Deep-navy terminal identity in
   `theme.py`, direction recorded in [DESIGN-BRIEF.md](DESIGN-BRIEF.md); no colour or font
   literal survives outside that module, enforced by `tests/test_theme.py`.
-- **G-6** Not a git repository; nothing on GitHub; no deployment.
+- **G-6** ✅ *Resolved 2026-08-31 → 2026-09-03* — `Jason-Dorman/options-surface-lab` (T-8);
+  CI runs pytest in a clean no-credential container then builds and publishes the page (T-19);
+  live and PO-verified in incognito at https://jason-dorman.github.io/options-surface-lab/
+  (T-9). The app-key was confirmed absent from all history before the first push.
 - **G-7** ✅ *Resolved 2026-08-29* — pytest 9.1.1 confirmed in the `algo` env (T-3);
   `tests/test_ric_parsing.py` (6) plus `tests/test_transforms.py` (34) run green — the full
   FR-3 chain is covered, so the FR-8 restyle now has its NFR-2 gate. One `xfail` records a

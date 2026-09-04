@@ -127,9 +127,10 @@ does. This adds a second CDN to the published page alongside Plotly's; see §7.
 ├ SERIES 216 │ NO PRINT 1,601 (21%) │ BOTH 4,241 │ GAP $0.040 │ SPREAD 20% ────┤
 ├────────────────────────────────────────────┬─────────────────────────────────┤
 │ [1] PRICE SURFACE · 3D              6 cols │ [2] UUUU UNDERLYING           4 │
-│                              [Strike (K) ▾]│                                 │
-│        (hero, 3D point cloud, 600px)       │         spot context,           │
-│                                            │         600px to match          │
+│   caption · legend · modebar (the full band)│                                 │
+│  ┌────────────────────────────────────────┐ │         spot context,           │
+│  │[Strike (K) ▾]  3D point cloud, 600px │ │         600px to match          │
+│  └────────────────────────────────────────┘ │                                 │
 │  ──────────── as-of slider ────────────    │                                 │
 ├───────────────────────────┬────────────────┴─────────────────────────────────┤
 │ [3] MARK VS PRINT       5 │ [4] SPREAD · CAN YOU BELIEVE THE MARK?         5 │
@@ -186,11 +187,19 @@ defines.
   would destroy the very thing it is there to show. Everything else — the scatter, the spread
   grid, both occupancy grids, and all six readouts — follows the slider, and the command bar's
   as-of moves with it. A page that showed two dates at once was the defect this closed.
-- **The X ruler is a chip in the corner of the hero, not a fourth panel control** (FR-10,
-  T-16). Switching the axis between raw strike and `K / S` is a change of units on one axis,
-  so it belongs *on* that figure — an amber dropdown at the right of the caption's band,
-  naming the mode currently shown. It is a dropdown rather than a button pair because the
-  closed control states the mode, and because one chip fits that band where two would not.
+- **The X ruler is a chip *inside* the plot, top-left** (FR-10, T-16). Switching the axis
+  between raw strike and `K / S` is a change of units on one axis, so it belongs *on* that
+  figure, naming the mode currently shown. It is a dropdown rather than a button pair because
+  the closed control states the mode, and because one chip fits where two would not.
+  It shipped in the band *above* the plot and the PO found it overlapping its neighbours
+  (2026-09-04). That band is full: title, caption and legend already stack there, and Plotly's
+  modebar floats over the top-right on top of them — a fourth tenant was always going to
+  collide at some width. Inside is also where it belongs by meaning: it relabels an axis of
+  *this* scene, so it should read as part of the chart, not as page chrome. **Top-left**
+  specifically — the modebar owns the top-right, and the 3D cloud hangs below centre, so that
+  corner is empty on every date in the panel. `MENU_X` / `MENU_Y` are tokens, and
+  `test_the_axis_menu_sits_inside_the_plot_not_in_the_crowded_band_above` keeps it out of the
+  band it came from.
   The colour scheme is forced rather than chosen: a Plotly menu has one font colour for every
   state and plotly.js paints the highlighted row `MENU_ACTIVE_BG` with no override, so the
   type has to clear AA on that near-white *and* on our own ground. Amber type fails there
@@ -262,6 +271,7 @@ judgement calls; they are executable now.
 | 2026-09-02 | Adopted. First pass shipped ice-blue chrome and a single-column layout; the PO corrected both — "Bloomberg" meant the **page layout**, and the font colours needed to change. Amber type and the panel grid replaced them; puts moved off amber onto the blue-shift rule (§3). Navy ground unchanged throughout. |
 | 2026-09-02 | PO asked to pair the underlying with the price surface. Grid moved from 2 columns to 10 so the hero row could be 7/3 rather than an even split; the remaining four figures re-flowed 5+5 across two rows. |
 | 2026-09-02 | PO caught three defects by eye. Put markers were unreadable (open symbols, and hues derived as near-shades of their calls) — puts re-hued to violet/green, all markers filled (§3). The mark-vs-print scatter drew one unlabelled array-coloured trace, so the puts read as missing — split into named Calls/Puts traces with a legend. And the hero row wasted vertical space — height 760 → 600 plus `align-items:start` (§5). All three now have tests. |
+| 2026-09-04 | PO: the X-ruler chip overlapped its neighbours in the band above the plot. Moved **inside** the plot area, top-left, behind the `MENU_X`/`MENU_Y` tokens and a test that keeps it out of that band (§5). |
 | 2026-09-04 | FR-10's X-ruler toggle added to the hero (T-16). New chrome element: an amber dropdown chip at the right of the caption band. Its dark-on-amber scheme is forced by plotly.js's unthemeable `MENU_ACTIVE_BG` highlight, which amber type cannot clear (§3, §5). |
 | 2026-09-03 | PO asked whether the spread chart should follow the slider. It did not — nor did any supporting panel — so the page showed two as-of dates at once. Cross-filtering wired in (T-42, AD-5 amendment); readout labels lost their embedded date since the as-of now moves. |
 | 2026-09-02 | Hero caption overprinted its own legend — both sat in the band just above the plot. Caption clearance and the top margins are tokens now, and the caption was cut to the one thing the panel header does not already say. |

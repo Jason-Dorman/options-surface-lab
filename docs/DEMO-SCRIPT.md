@@ -65,6 +65,17 @@ is the selected as-of date only. Both are right. If he notices, that is a good m
 "the card is one day, I quoted the whole panel." If you would rather not manage two figures
 under pressure, say **"about four percent"** — true of both.
 
+**Optional beat, ~15 seconds — only if the room is with you** (FR-10, T-16). Drag the as-of
+slider two months, then switch the X axis to **Moneyness (K/S)**:
+
+> "Same strike, different option. UUUU went from fifteen dollars to eleven and back, so the
+> $14.50 call is out of the money in June and deep in the money in July. On a dollar axis I'd
+> be comparing two different things with the same label. Rebased to spot, one is always the
+> money, and the two dates line up."
+
+Do *not* open on this — it is a second idea and the first one is the assignment. Cut it
+without hesitation if you are behind.
+
 ### 1:30–2:15 — The honest picture
 
 Occupancy heatmaps:
