@@ -242,6 +242,9 @@ how to run locally and where the live site is.
 *Accepted when:* the Pages URL renders in a fresh incognito browser with every figure present
 and Plotly-native interactivity working (FR-4) — the as-of slider moves and the legend toggles
 series — and the Canvas submission is in.
+**◐ 2026-09-03 — incognito verified by the PO.** All six figures present; the as-of slider
+moves and now drives the whole page (T-42), the legend toggles calls/puts and each series.
+The one clause still open is the Canvas submission.
 
 > The old acceptance criterion said "assets loading under the `/<repo>/` base path". That is
 > not merely stale but **unmeetable**: the page is one self-contained file with no relatively
@@ -255,6 +258,21 @@ joined per date — `attach_underlying` already computes it), so two as-of dates
 comparable. On the static site this is another pre-rendered variant (see §5).
 *Accepted when:* switching axes preserves toggles and marker identity, and axis labeling
 makes clear which mode is shown.
+**✅ Met 2026-09-04 (T-16).** `price_surface_figure(..., x_mode=)` drives a select in the
+Reflex app; the published page gets a Plotly dropdown inside the hero figure, because no
+event handler runs there (AD-5). Both acceptance clauses are tests:
+`test_switching_the_axis_preserves_every_series_and_its_identity` compares the two modes
+trace for trace — names, types, colours, symbols, prices and DTE must all be identical — and
+`test_the_published_hero_carries_the_axis_toggle` pins the axis relabel to the mode.
+UUUU makes the case on its own: the median $14.50 strike is 0.88 in K/S on 2026-06-18 and
+1.28 on 2026-07-24, and the near-the-money band walks from $16.00–17.00 to $11.00–11.50
+(notebook 01 §6a).
+
+> **Deviation from the §5 sketch, worth a PO glance.** SYSTEM-SPEC §12 sketched the static
+> variant as a *pre-rendered trace pair*. That would have doubled ~308 traces and roughly
+> doubled a 2.4 MB page for a change of units. Shipped instead: one x array per trace per
+> mode, swapped by the button. Identical behaviour, **+205 KB raw / ~+70 KB gzipped**. The
+> requirement is unchanged; only the mechanism is, and it is now recorded in SPEC §12.
 
 **FR-11 — Crude IV surface from settles**
 Invert Black–Scholes on SETTLE (European approximation) using a constant rate; assumptions
@@ -358,8 +376,8 @@ site with the rubric complete outranks it on the deadline.)
 ## 12. Definition of done (submission checklist)
 
 - [ ] All P0 acceptance criteria met (FR-1 … FR-9)
-- [ ] All P1 acceptance criteria met (FR-10 … FR-12) — or consciously cut per §8
-- [ ] Tests green on a clean clone with no LSEG credentials
-- [ ] Pages URL renders in incognito: figures, toggles, numbers, three sentences
+- [◐] All P1 acceptance criteria met (FR-10 … FR-12) — FR-10 met *(T-16, 2026-09-04)*; FR-11/FR-12 open, cuttable per §8
+- [x] Tests green on a clean clone with no LSEG credentials *(CI, every push — NFR-4)*
+- [◐] Pages URL renders in incognito: figures, toggles, numbers ✅ *(PO-verified 2026-09-03)* — **three sentences still missing (G-4 / T-12)**
 - [ ] Canvas submission posted with the repo + site link
 - [ ] I can explain every line in the repo (guardrail #6)

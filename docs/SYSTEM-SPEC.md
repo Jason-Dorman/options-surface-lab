@@ -387,10 +387,11 @@ The exported site cannot run the sequence above past "open page". Design respons
    populated with real data before (and without) any backend. `on_mount` load becomes
    idempotent local-dev refresh.
 2. **Client-side controls.** Series visibility (SETTLE / TRDPRC_1 / sheet / spot plane) is
-   handled by Plotly **legend toggling** inside each figure. As-of date and C/P (and FR-10's
-   K vs K/S axis) are Plotly `updatemenus` dropdowns/buttons toggling pre-rendered trace
-   sets within one figure, over a **curated** date list (last ~5 sessions) to cap bundle
-   size.
+   handled by Plotly **legend toggling** inside each figure. As-of date is a **slider** over
+   every trading day (T-15; the curated date list is the trim lever, not the default) and C/P
+   rides the legend, because two visibility menus would overwrite one another. FR-10's K vs
+   K/S axis is a Plotly `updatemenus` **dropdown** and composes with both: it writes only
+   `x` and the scene's X title, where the slider writes only `visible` (T-16).
 3. **Omissions.** The "Reload data" button is not rendered in the exported page (dead
    without a backend).
 4. The Reflex `State` switches remain for local dev and the checkpoint demo; they and the
@@ -412,7 +413,7 @@ as-of/cp selection, and return `go.Figure`. All colors/fonts/layout come from `t
 | Figure | Builder | Encodes | Static interactivity |
 |---|---|---|---|
 | Underlying candlestick | `candlestick_figure` | OHLC context; caption noting close = `TRDPRC_1`, not a settle | Plotly zoom/pan |
-| 3D price surface (FR-4) | `price_surface_figure` | X strike (or K/S, FR-10), Y DTE (reversed — near-dated toward viewer), Z price; SETTLE markers, TRDPRC_1 diamonds, translucent interpolated sheet, spot plane (FR-12) | Legend toggles per trace; updatemenus for date/cp/axis |
+| 3D price surface (FR-4) | `price_surface_figure` (dev) / `static_surface_figure` (published) | X strike or K/S per `x_mode` (FR-10), Y DTE (reversed — near-dated toward viewer), Z price; mark markers, TRDPRC_1 diamonds, translucent interpolated sheet, spot plane (FR-12) | Legend toggles per trace and per right; as-of slider; `updatemenus` dropdown for the X ruler |
 | Settle vs trade (FR-5) | `settle_vs_trade_figure` | Scatter vs `y = x` (off-diagonal = mark ≠ print), colored by C/P; bars of settle-only / both / print-only counts | Hover, legend |
 | Occupancy heatmaps ×2 | `coverage_heatmap` | (expiry × strike) grid, lit = a number exists that day; one per field, chronologically ordered expiries | Hover |
 | IV surface (FR-11) | *new* `iv_surface_figure` | Black–Scholes IV inverted from SETTLE; assumptions captioned on-figure | Legend, hover |
@@ -478,9 +479,20 @@ assertions on hand-built panels. See PRD OQ-6.
 
 ## 12. Stretch-feature designs (P1)
 
-- **FR-10 moneyness axis:** the wide table already carries `moneyness`; the surface builder
-  takes `x_mode ∈ {strike, moneyness}` and re-labels the X axis. Static site: an
-  `updatemenus` axis toggle (pre-rendered trace pair).
+- **FR-10 moneyness axis — landed 2026-09-04 (T-16).** The wide table already carries
+  `moneyness`, so the surface builder takes `x_mode ∈ {strike, moneyness}` and re-labels the
+  X axis. Static site: an `updatemenus` axis toggle, as sketched — but carrying **one x array
+  per trace per mode**, not the pre-rendered *trace pair* this line originally specified.
+  Doubling ~308 traces would have roughly doubled a 2.4 MB page to change the units on one
+  axis; swapping the x arrays costs +205 KB raw (~+70 KB gzipped) for the same behaviour.
+  Two invariants make it safe to call a change of ruler rather than a change of data:
+  * The mode never touches `z`, `y`, a trace name, a colour or a symbol — FR-10's acceptance
+    criterion, asserted trace-for-trace.
+  * The **interpolated sheet is rescaled, not re-interpolated**. Within one as-of date the
+    spot is a single number, so K/S is an exact affine map of K; re-running `surface_grid` in
+    K/S space would re-triangulate the cloud and could return a subtly different surface for
+    what has to be one object. A date with no underlying close yields no K/S ruler at all
+    rather than raw strikes plotted against a ratio axis (AD-9).
 - **FR-11 IV inversion (in `utils`, pure):** European Black–Scholes, price = SETTLE, `S` =
   as-of spot, `T = dte/365`, constant `r` (value: PRD OQ-2, printed on the page), no
   dividends. Solve for σ by Brent/bisection on [1e-4, 5]. **Skip (NaN) rather than solve**

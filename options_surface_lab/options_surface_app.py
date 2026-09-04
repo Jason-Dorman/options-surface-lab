@@ -37,6 +37,8 @@ from options_surface_lab.option_surface_utils import (
 )
 from options_surface_lab import theme as T
 from options_surface_lab.option_surface_plot import (
+    X_MODE_LABEL,
+    X_MODES,
     as_panel_figure,
     candlestick_figure,
     coverage_heatmap,
@@ -44,6 +46,11 @@ from options_surface_lab.option_surface_plot import (
     settle_vs_trade_figure,
     spread_heatmap,
 )
+
+# FR-10's control, as a select: the label a reader picks, mapped back to the mode the figure
+# builder takes. Labels come from the plot module so the dev app and the published page's
+# button pair cannot end up calling the same thing two different names.
+X_MODE_BY_LABEL = {X_MODE_LABEL[mode]: mode for mode in X_MODES}
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="lseg.data")
 
@@ -359,6 +366,8 @@ class State(rx.State):
     asof: str = ""
     asof_options: list[str] = []
     cp: str = "C"
+    x_mode: str = "strike"      # FR-10: raw strike or K / S
+    x_mode_label: str = X_MODE_LABEL["strike"]
     show_trade: bool = True
     show_mark: bool = True
     show_sheet: bool = True
@@ -451,6 +460,12 @@ class State(rx.State):
         self.asof = value
         self._rebuild_option_figs()
 
+    def set_x_mode(self, value: str):
+        """FR-10: switch the surface's X between raw strike and moneyness."""
+        self.x_mode_label = value
+        self.x_mode = X_MODE_BY_LABEL.get(value, "strike")
+        self._rebuild_option_figs()
+
     def toggle_trade(self, value: bool):
         self.show_trade = value
         self._rebuild_option_figs()
@@ -513,6 +528,7 @@ class State(rx.State):
             show_mark=self.show_mark,
             show_interpolated=self.show_sheet,
             ticker=self.ticker,
+            x_mode=self.x_mode,
         )
         self.fig_compare = as_panel_figure(
             settle_vs_trade_figure(wide, asof, ticker=self.ticker)
@@ -675,6 +691,15 @@ def index() -> rx.Component:
             rx.select(State.asof_options, value=State.asof, on_change=State.set_asof, size="1"),
             rx.text("Right", color=T.TEXT_MUTED, size="1", font_family=T.FONT_MONO),
             rx.select(["C", "P"], value=State.cp, on_change=State.set_cp, size="1"),
+            # FR-10. Rebasing the strike axis to spot is what makes two as-of dates
+            # comparable; the published page does the same job with a Plotly button pair.
+            rx.text("X axis", color=T.TEXT_MUTED, size="1", font_family=T.FONT_MONO),
+            rx.select(
+                list(X_MODE_BY_LABEL),
+                value=State.x_mode_label,
+                on_change=State.set_x_mode,
+                size="1",
+            ),
             rx.switch(checked=State.show_mark, on_change=State.toggle_mark),
             rx.text(f"MARK ({MARK_FIELD_DEFAULT})", color=T.MARK, size="1"),
             rx.switch(checked=State.show_trade, on_change=State.toggle_trade),

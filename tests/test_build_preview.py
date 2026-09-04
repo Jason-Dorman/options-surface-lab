@@ -192,3 +192,25 @@ def test_the_page_still_works_if_the_listener_never_runs():
     assert "if (!node" in script, "must tolerate a missing payload"
     assert "if (!hero" in script, "must tolerate a missing hero div"
     assert script.count("catch (e)") >= 3, "each panel must update inside its own try/catch"
+
+
+def test_the_published_page_offers_the_moneyness_axis():
+    """FR-10 on the deliverable. The control is Plotly-native, so it ships inside the JSON.
+
+    Checked on the built artifact for the reason the width classes are: the Reflex app and
+    the published page are two renderings of the same design, and only one of them is graded.
+    """
+    page = Path(__file__).resolve().parents[1] / "options_surface_preview.html"
+    if not page.exists():
+        pytest.skip("preview not built in this working tree")
+    # Plotly writes the forward slash of "K / S" into the figure JSON as a unicode
+    # escape, so the label is not searchable literally. Undo that before matching,
+    # rather than asserting on the escape sequence itself.
+    html = page.read_text(encoding="utf-8", errors="ignore").replace(r"\u002f", "/")
+
+    assert "updatemenus" in html, "the hero shipped without its axis toggle"
+    assert "Moneyness (K/S)" in html, "the toggle must name the mode it switches to"
+    assert "Moneyness  K / S" in html, "the scene axis must be relabelled with the mode"
+    # the toggle is a small chip in the corner of the plot; the panel note is what says
+    # what a 1.00 on that axis means
+    assert "1.00 = at the money" in html, "nothing on the page anchors the K/S scale"

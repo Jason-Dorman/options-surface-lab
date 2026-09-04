@@ -34,6 +34,49 @@ SERIES_STYLE = {
 SHEET_SCALE = {"C": T.SHEET_SCALE, "P": T.SHEET_SCALE_PUT}
 STYLED_RIGHTS = frozenset(SHEET_SCALE)
 
+# FR-10: the strike axis can be read in dollars or rebased to spot. Two dates of a moving
+# underlying are not comparable in K — the same $12.50 strike is 10% out of the money one
+# week and at the money the next — but they line up in K / S, where 1.00 is always the money.
+#
+# The mode changes the *ruler*, never the data: the same points and the same interpolated
+# sheet, re-measured. `moneyness` is already on the wide table (`attach_underlying`), so a
+# switch reads a different column rather than recomputing anything.
+X_MODES = ("strike", "moneyness")
+X_AXIS_TITLE = {"strike": "Strike ($)", "moneyness": "Moneyness  K / S"}
+X_MODE_LABEL = {"strike": "Strike (K)", "moneyness": "Moneyness (K/S)"}
+
+
+def _x_values(frame: pd.DataFrame, x_mode: str):
+    """The X coordinate of a point cloud under FR-10's axis mode.
+
+    A row whose date has no underlying close has no moneyness, so it plots as a hole in K/S
+    mode. That is the correct outcome: drawing its raw strike against a K/S axis would put a
+    number on the page that means something other than what the axis says (AD-9).
+    """
+    if x_mode != "moneyness":
+        return frame["strike"]
+    if "moneyness" in frame.columns:
+        return frame["moneyness"]
+    if "spot" in frame.columns:
+        return frame["strike"] / frame["spot"]
+    return pd.Series(np.nan, index=frame.index)
+
+
+def _sheet_x(grid: dict, x_mode: str, spot: float | None):
+    """The interpolated sheet's X, in the chosen ruler.
+
+    Within one as-of date the spot is a single number, so moneyness is an exact affine
+    rescale of the strike axis and the sheet can simply be re-measured. Re-running
+    :func:`surface_grid` in K/S space would re-triangulate the cloud and could hand back a
+    subtly different surface for what has to be one object — the toggle must move the ruler,
+    not the data. No spot that day means no K/S sheet, rather than a wrong one.
+    """
+    if x_mode != "moneyness":
+        return grid["x"]
+    if not spot:
+        return np.full(len(grid["x"]), np.nan)
+    return grid["x"] / spot
+
 
 def _empty_figure(message: str, height: int | None = None) -> go.Figure:
     """A themed 'nothing to draw' panel. Never raise at a hole (AD-9, SYSTEM-SPEC §11).
@@ -108,10 +151,12 @@ def _slice_wide(wide: pd.DataFrame, asof, cp: str) -> pd.DataFrame:
     return sl
 
 
-def _mark_trace(frame: pd.DataFrame, cp: str, name: str, **overrides) -> go.Scatter3d:
+def _mark_trace(
+    frame: pd.DataFrame, cp: str, name: str, x_mode: str = "strike", **overrides
+) -> go.Scatter3d:
     st = SERIES_STYLE[(cp, "mark")]
     return go.Scatter3d(
-        x=frame["strike"],
+        x=_x_values(frame, x_mode),
         y=frame["dte"],
         z=frame["MARK"],
         mode="markers",
@@ -129,10 +174,12 @@ def _mark_trace(frame: pd.DataFrame, cp: str, name: str, **overrides) -> go.Scat
     )
 
 
-def _trade_trace(frame: pd.DataFrame, cp: str, name: str, **overrides) -> go.Scatter3d:
+def _trade_trace(
+    frame: pd.DataFrame, cp: str, name: str, x_mode: str = "strike", **overrides
+) -> go.Scatter3d:
     st = SERIES_STYLE[(cp, "trade")]
     return go.Scatter3d(
-        x=frame["strike"],
+        x=_x_values(frame, x_mode),
         y=frame["dte"],
         z=frame["TRDPRC_1"],
         mode="markers",
@@ -150,10 +197,13 @@ def _trade_trace(frame: pd.DataFrame, cp: str, name: str, **overrides) -> go.Sca
     )
 
 
-def _sheet_trace(grid: dict, cp: str, name: str, **overrides) -> go.Surface:
+def _sheet_trace(
+    grid: dict, cp: str, name: str, x_mode: str = "strike", spot: float | None = None,
+    **overrides,
+) -> go.Surface:
     """The interpolated sheet — translucent and label-led, because it is not a market."""
     return go.Surface(
-        x=grid["x"],
+        x=_sheet_x(grid, x_mode, spot),
         y=grid["y"],
         z=grid["z"],
         name=name,
@@ -166,10 +216,10 @@ def _sheet_trace(grid: dict, cp: str, name: str, **overrides) -> go.Surface:
     )
 
 
-def _surface_scene() -> dict:
+def _surface_scene(x_mode: str = "strike") -> dict:
     # near-dated in front: reverse DTE so 0 sits toward the viewer
     return T.scene(
-        xaxis=T.scene_axis("Strike ($)"),
+        xaxis=T.scene_axis(X_AXIS_TITLE[x_mode]),
         yaxis=T.scene_axis("Days to expiry", autorange="reversed"),
         zaxis=T.scene_axis("Option price ($)"),
     )
@@ -183,7 +233,9 @@ def price_surface_figure(
     show_mark: bool = True,
     show_interpolated: bool = True,
     ticker: str = "UUUU",
+    x_mode: str = "strike",
 ) -> go.Figure:
+    """The hero surface for local dev. ``x_mode`` picks FR-10's ruler (``X_MODES``)."""
     sl = _slice_wide(wide, asof, cp)
     if sl.empty:
         return _empty_figure("No quotes on this date / filter", height=T.HERO_FIGURE_HEIGHT)
@@ -199,20 +251,24 @@ def price_surface_figure(
 
     if show_mark and sl["MARK"].notna().any():
         s = sl.dropna(subset=["MARK"])
-        fig.add_trace(_mark_trace(s, style_cp, "MARK"))
+        fig.add_trace(_mark_trace(s, style_cp, "MARK", x_mode=x_mode))
         if show_interpolated:
             grid = surface_grid(s, "MARK")
             if grid is not None:
-                fig.add_trace(_sheet_trace(grid, style_cp, "Interpolated sheet"))
+                fig.add_trace(
+                    _sheet_trace(
+                        grid, style_cp, "Interpolated sheet", x_mode=x_mode, spot=spot_val
+                    )
+                )
 
     if show_trade and sl["TRDPRC_1"].notna().any():
         t = sl.dropna(subset=["TRDPRC_1"])
-        fig.add_trace(_trade_trace(t, style_cp, "TRDPRC_1"))
+        fig.add_trace(_trade_trace(t, style_cp, "TRDPRC_1", x_mode=x_mode))
 
     fig.update_layout(
         **T.figure_layout(
             title=T.title(f"{ticker}  {cp_label}  ·  {asof_txt}{spot_txt}"),
-            scene=_surface_scene(),
+            scene=_surface_scene(x_mode),
             legend=T.legend(),
             # Same height as the published page's hero, because it sits in the same
             # panel slot. A figure taller than its panel overflows into the row below.
@@ -244,11 +300,22 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
       (mark / sheet / print, x calls / puts). Puts start as ``legendonly`` so the opening view
       is calls, and one click adds them.
 
-    Putting the right on the legend rather than a second menu is what makes the two controls
-    compose. Plotly buttons apply a fixed visibility array and cannot read another menu's
-    state, so a second dropdown would fight the first; the legend is orthogonal by
-    construction. Known limitation: moving the slider re-applies visibility, so legend
-    choices reset on a date change.
+    * **Strike or moneyness — a button pair** (FR-10 / T-16). The axis toggle *is* a second
+      menu, and it composes with the slider for a reason the date/right pair could not: the
+      two mutate disjoint properties. Slider steps write only ``visible``; the axis buttons
+      write only ``x`` and the scene's X title. Neither can undo the other, so a reader can
+      rebase to K/S and then walk the whole window in moneyness.
+
+    Putting the right on the legend rather than a second menu is what makes the first two
+    controls compose. Plotly buttons apply a fixed visibility array and cannot read another
+    menu's state, so a second *visibility* dropdown would fight the first; the legend is
+    orthogonal by construction. Known limitation: moving the slider re-applies visibility, so
+    legend choices reset on a date change.
+
+    The axis toggle carries one x array per trace per mode rather than a second set of
+    pre-rendered traces (which is what SYSTEM-SPEC §12 originally sketched). Same behaviour,
+    a fraction of the weight: duplicating 300-odd traces would roughly double a 2.4 MB page,
+    while duplicating one of each trace's three coordinate arrays costs a fraction of that.
 
     Dates with too few expiries to triangulate simply contribute no sheet
     (:func:`surface_grid` returns ``None``) — they still show their points rather than being
@@ -267,6 +334,16 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
 
     fig = go.Figure()
     per_date, spots = [], {}
+    # One x array per trace per mode, in trace order — the axis buttons' payload (FR-10).
+    xs = {mode: [] for mode in X_MODES}
+
+    def _record_x(source, spot=None):
+        """Remember this trace's x under both rulers. Called once per `add_trace`, in order."""
+        for mode in X_MODES:
+            xs[mode].append(
+                _arr(_sheet_x(source, mode, spot) if isinstance(source, dict)
+                     else _x_values(source, mode))
+            )
 
     for asof in dates:
         idx = {}
@@ -287,6 +364,7 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
                         visible=False, legendgroup=f"mark-{cp}",
                     )
                 )
+                _record_x(mk)
                 idx[(cp, "mark")] = len(fig.data) - 1
 
                 grid = surface_grid(mk, "MARK")
@@ -297,6 +375,7 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
                             visible=False, showlegend=True, legendgroup=f"sheet-{cp}",
                         )
                     )
+                    _record_x(grid, spots.get(asof))
                     idx[(cp, "sheet")] = len(fig.data) - 1
 
             tr = sl.dropna(subset=["TRDPRC_1"])
@@ -307,6 +386,7 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
                         visible=False, legendgroup=f"trade-{cp}",
                     )
                 )
+                _record_x(tr)
                 idx[(cp, "trade")] = len(fig.data) - 1
         if idx:
             per_date.append((asof, idx))
@@ -344,12 +424,24 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
         for asof, idx in per_date
     ]
 
+    # Disjoint from the slider by construction: these write `x` and the scene's X title,
+    # the steps above write `visible`. That is what lets the two controls be used together.
+    axis_buttons = [
+        dict(
+            method="update",
+            label=X_MODE_LABEL[mode],
+            args=[{"x": xs[mode]}, {"scene.xaxis.title.text": X_AXIS_TITLE[mode]}],
+        )
+        for mode in X_MODES
+    ]
+
     fig.update_layout(
         **T.figure_layout(
             title=T.title(_title(per_date[default][0])),
             scene=_surface_scene(),
             legend=T.legend(font=dict(size=T.SIZE_TICK, color=T.TEXT, family=T.FONT_BODY)),
             sliders=[T.slider(active=default, steps=steps)],
+            updatemenus=[T.menu(buttons=axis_buttons, active=0)],
             height=T.HERO_FIGURE_HEIGHT,
             margin=T.HERO_MARGIN_WITH_SLIDER,
             annotations=[

@@ -33,9 +33,10 @@ So `MARK` stays cyan and `TRADE` stays magenta. `tests/test_theme.py` asserts th
 family**, not by exact hex — the brief says "cyan", not a value, so re-toning within the hue
 is free and moving out of it needs the PO.
 
-**Amber is type, never data.** `ACCENT` paints headings, metric values, panel numbers and the
-as-of slider, and nothing else. `test_the_chrome_colour_is_never_a_data_colour` enforces the
-separation — it exists because the first pass had a put series and the accent on the same
+**Amber is type, never data.** `ACCENT` paints headings, metric values, panel numbers, the
+as-of slider and the axis-toggle chip (§5), and nothing else. The chip is the one place amber
+is a *fill* rather than type, and it carries `TEXT_INVERSE` for exactly that reason.
+`test_the_chrome_colour_is_never_a_data_colour` enforces the separation — it exists because the first pass had a put series and the accent on the same
 hue, a collision that only became visible once amber became the heading colour.
 
 ## 3. Palette
@@ -50,9 +51,10 @@ hue, a collision that only became visible once amber became the heading colour.
 | **Type** | | |
 | `TEXT` | `#E8E3D9` | body copy — warm off-white against the cool ground |
 | `TEXT_MUTED` | `#94897A` | captions, axis ticks, panel labels |
-| `ACCENT` | `#FFB000` | **amber:** headings, metric values, panel numbers, slider |
+| `ACCENT` | `#FFB000` | **amber:** headings, metric values, panel numbers, slider, axis-toggle chip |
 | `ACCENT_DIM` | `#8A6A1E` | amber at rest: slider track, button |
-| `TEXT_INVERSE` | `#060B16` | text on an accent or data fill (bar labels) |
+| `TEXT_INVERSE` | `#060B16` | text on an accent or data fill (bar labels, the axis chip) |
+| `MENU_ACTIVE_BG` | `#F4FAFF` | **not ours** — plotly.js paints an `updatemenu`'s highlighted row this and exposes no override. Recorded so the contrast test can measure a ground we really do render type against; it is what rules amber type out of that control. |
 | **Data** | | |
 | `MARK` | `#22E3D0` | **the mark (MID_PRICE), calls** — circle *(README-locked)* |
 | `MARK_PUT` | `#A78BFA` | the mark, puts — filled circle |
@@ -125,7 +127,7 @@ does. This adds a second CDN to the published page alongside Plotly's; see §7.
 ├ SERIES 216 │ NO PRINT 1,601 (21%) │ BOTH 4,241 │ GAP $0.040 │ SPREAD 20% ────┤
 ├────────────────────────────────────────────┬─────────────────────────────────┤
 │ [1] PRICE SURFACE · 3D              6 cols │ [2] UUUU UNDERLYING           4 │
-│                                            │                                 │
+│                              [Strike (K) ▾]│                                 │
 │        (hero, 3D point cloud, 600px)       │         spot context,           │
 │                                            │         600px to match          │
 │  ──────────── as-of slider ────────────    │                                 │
@@ -184,6 +186,16 @@ defines.
   would destroy the very thing it is there to show. Everything else — the scatter, the spread
   grid, both occupancy grids, and all six readouts — follows the slider, and the command bar's
   as-of moves with it. A page that showed two dates at once was the defect this closed.
+- **The X ruler is a chip in the corner of the hero, not a fourth panel control** (FR-10,
+  T-16). Switching the axis between raw strike and `K / S` is a change of units on one axis,
+  so it belongs *on* that figure — an amber dropdown at the right of the caption's band,
+  naming the mode currently shown. It is a dropdown rather than a button pair because the
+  closed control states the mode, and because one chip fits that band where two would not.
+  The colour scheme is forced rather than chosen: a Plotly menu has one font colour for every
+  state and plotly.js paints the highlighted row `MENU_ACTIVE_BG` with no override, so the
+  type has to clear AA on that near-white *and* on our own ground. Amber type fails there
+  (1.7:1); dark type on an amber chip clears both, and `test_the_axis_menu_is_legible_in_both_of_its_states`
+  measures it off `theme.menu()` itself.
 - **The next step in the same direction** is FR-12's spot plane at `K = S`, which puts spot
   *inside* the surface rather than beside it. The two compose: adjacency first, plane second.
 - **The band above a plot stacks: legend, then caption, then title.** A horizontal legend
@@ -250,6 +262,7 @@ judgement calls; they are executable now.
 | 2026-09-02 | Adopted. First pass shipped ice-blue chrome and a single-column layout; the PO corrected both — "Bloomberg" meant the **page layout**, and the font colours needed to change. Amber type and the panel grid replaced them; puts moved off amber onto the blue-shift rule (§3). Navy ground unchanged throughout. |
 | 2026-09-02 | PO asked to pair the underlying with the price surface. Grid moved from 2 columns to 10 so the hero row could be 7/3 rather than an even split; the remaining four figures re-flowed 5+5 across two rows. |
 | 2026-09-02 | PO caught three defects by eye. Put markers were unreadable (open symbols, and hues derived as near-shades of their calls) — puts re-hued to violet/green, all markers filled (§3). The mark-vs-print scatter drew one unlabelled array-coloured trace, so the puts read as missing — split into named Calls/Puts traces with a legend. And the hero row wasted vertical space — height 760 → 600 plus `align-items:start` (§5). All three now have tests. |
+| 2026-09-04 | FR-10's X-ruler toggle added to the hero (T-16). New chrome element: an amber dropdown chip at the right of the caption band. Its dark-on-amber scheme is forced by plotly.js's unthemeable `MENU_ACTIVE_BG` highlight, which amber type cannot clear (§3, §5). |
 | 2026-09-03 | PO asked whether the spread chart should follow the slider. It did not — nor did any supporting panel — so the page showed two as-of dates at once. Cross-filtering wired in (T-42, AD-5 amendment); readout labels lost their embedded date since the as-of now moves. |
 | 2026-09-02 | Hero caption overprinted its own legend — both sat in the band just above the plot. Caption clearance and the top margins are tokens now, and the caption was cut to the one thing the panel header does not already say. |
 | 2026-09-02 | **Deploy-only breakage.** The published page rendered the surface and the underlying one column wide: `.osl-w6`/`.osl-w4` were never added when the split moved from 7/3 to 6/4, and an undefined CSS class fails open. Width classes are now generated from `GRID_COLUMNS`; a token-vs-stylesheet test and an orphan-class test over the built page both guard it (§5). |

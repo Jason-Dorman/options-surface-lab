@@ -145,7 +145,24 @@ can look perfect under `reflex run` and be broken on Pages. CSS fails open, so a
 is silent. The width classes are generated from `GRID_COLUMNS` and two tests guard it, but
 **check the built `options_surface_preview.html`, not just the dev app, before pushing.**
 
-**Next up:** **T-12** (the three PO-authored sentences, FR-7) — the last P0 gap. **144 tests
+**FR-9 is met bar the Canvas post:** the PO verified the deployed page in a fresh incognito
+window on 2026-09-03 — six figures, slider driving the whole page, legend toggling series.
+
+T-16 landed 2026-09-04 (FR-10, the first P1 stretch). The hero's X axis switches between raw
+strike and **moneyness `K / S`** — a select in the Reflex app, a Plotly **dropdown** inside the
+figure on the published page. It composes with the as-of slider where the date/right pair
+could not: the buttons write only `x` and the scene's X title, the steps write only `visible`.
+The toggle is a change of **ruler, never of data** — same traces, same colours, same symbols,
+same prices, and the interpolated sheet is *rescaled* rather than re-interpolated (one date
+has one spot, so K/S is an exact affine map). A date with no underlying close gets no K/S
+ruler at all rather than strikes mislabelled as ratios. Deviates from SPEC §12's "pre-rendered
+trace pair" sketch — one x array per trace per mode instead, +205 KB raw / ~+70 KB gz rather
+than doubling a 2.4 MB page; SPEC §12 records the change. `theme.MENU_ACTIVE_BG` is a new kind
+of token: a colour plotly.js hardcodes and we cannot override, recorded so the contrast test
+can measure a ground we really do render type against.
+
+**Next up:** **T-12** (the three PO-authored sentences, FR-7) — the last P0 gap, and the only
+rubric item with nothing on the page at all. **154 tests
 green, no xfail** (the "90" this paragraph carried was stale — `tests/test_build_preview.py`
 was never counted into it). Update this paragraph as things land (lockstep rule).
 

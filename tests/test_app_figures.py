@@ -267,3 +267,135 @@ def test_frame_readouts_match_the_figures_for_that_date(wide):
         assert f["cmp"]["bars"] == [int(v) for v in bars.y]
         # "Both mark & print" is the middle bar and the third readout
         assert f["readouts"][2] == str(int(bars.y[1]))
+
+
+# ------------------------------------- FR-10: the axis is a ruler, and a ruler is not data
+
+
+def test_the_moneyness_axis_plots_strike_over_spot(wide, asof):
+    """K / S is the whole feature: the same $12.50 strike is a different option each week."""
+    from options_surface_lab.option_surface_plot import price_surface_figure
+
+    fig = price_surface_figure(wide, asof, cp="C", x_mode="moneyness")
+    assert "K / S" in fig.layout.scene.xaxis.title.text, "the axis must name its own ruler"
+
+    sl = wide[(wide["date"] == pd.Timestamp(asof)) & (wide["cp"] == "C")]
+    sl = sl.dropna(subset=["MARK"])
+    mark = next(t for t in fig.data if t.name == "MARK")
+    assert list(mark.x) == pytest.approx(list(sl["strike"] / sl["spot"]))
+
+
+def test_switching_the_axis_preserves_every_series_and_its_identity(wide, asof):
+    """FR-10 acceptance, literally: "switching axes preserves toggles and marker identity".
+
+    A mode that dropped a trace, reordered the legend or re-coloured a marker would make the
+    two views two different figures — and FR-5's mark-vs-print encoding is exactly what the
+    reader is meant to carry across the switch.
+    """
+    from options_surface_lab.option_surface_plot import price_surface_figure
+
+    k = price_surface_figure(wide, asof, cp="C")
+    ks = price_surface_figure(wide, asof, cp="C", x_mode="moneyness")
+
+    assert [t.name for t in k.data] == [t.name for t in ks.data]
+    assert [t.type for t in k.data] == [t.type for t in ks.data]
+    for a, b in zip(k.data, ks.data):
+        if a.type == "surface":
+            continue  # the sheet has its own test below
+        assert (a.marker.color, a.marker.symbol) == (b.marker.color, b.marker.symbol), a.name
+        assert list(a.z) == list(b.z), f"{a.name}: the prices moved with the axis"
+        assert list(a.y) == list(b.y), f"{a.name}: the DTE axis moved with the X axis"
+
+
+def test_the_sheet_is_the_same_sheet_under_both_rulers(wide, asof):
+    """Re-interpolating in K/S space would hand back a subtly different surface.
+
+    Within one as-of date the spot is a single number, so the toggle rescales the sheet's X
+    rather than re-triangulating the cloud — the interpolated assumption a reader is looking
+    at must not change because they changed the units on the axis (AD-9).
+    """
+    import numpy as np
+
+    from options_surface_lab.option_surface_plot import price_surface_figure
+
+    k = price_surface_figure(wide, asof, cp="C")
+    ks = price_surface_figure(wide, asof, cp="C", x_mode="moneyness")
+    sheets = [(a, b) for a, b in zip(k.data, ks.data) if a.type == "surface"]
+    if not sheets:
+        pytest.skip("this date is too thin to triangulate a sheet")
+
+    spot = float(wide[wide["date"] == pd.Timestamp(asof)]["spot"].dropna().median())
+    for a, b in sheets:
+        assert np.array_equal(np.asarray(a.z), np.asarray(b.z), equal_nan=True)
+        assert np.asarray(b.x) == pytest.approx(np.asarray(a.x) / spot)
+
+
+def test_no_spot_means_no_moneyness_rather_than_a_strike_on_a_k_over_s_axis(wide, asof):
+    """AD-9: a hole is honest, a number that does not mean what the axis says is not."""
+    from options_surface_lab.option_surface_plot import price_surface_figure
+
+    sl = wide[wide["date"] == pd.Timestamp(asof)].copy()
+    sl["spot"] = float("nan")
+    sl["moneyness"] = float("nan")
+    fig = price_surface_figure(sl, asof, cp="C", x_mode="moneyness")
+    for trace in fig.data:
+        if trace.type != "scatter3d":
+            continue
+        assert all(x != x for x in trace.x), f"{trace.name} drew strikes on a K/S axis"
+
+
+def test_the_published_hero_carries_the_axis_toggle(wide):
+    """AD-5: no backend, so FR-10's control has to live inside the figure JSON too."""
+    from options_surface_lab.option_surface_plot import static_surface_figure
+
+    fig = static_surface_figure(wide, ticker="UUUU")
+    menus = fig.layout.updatemenus
+    assert menus, "the published hero has no axis toggle"
+
+    buttons = menus[0].buttons
+    assert len(buttons) == 2
+    assert any("K/S" in b.label for b in buttons), f"{[b.label for b in buttons]}"
+    for b in buttons:
+        assert len(b.args[0]["x"]) == len(fig.data), "one x array per trace, in trace order"
+        assert "scene.xaxis.title.text" in b.args[1], "the axis label must follow the mode"
+
+
+def test_the_axis_toggle_and_the_as_of_slider_cannot_fight(wide):
+    """The two controls compose only because they write disjoint properties.
+
+    Date and right could not — two visibility menus overwrite one another, which is why the
+    right lives on the legend instead (T-15). Give a slider step an `x`, or a button a
+    `visible`, and the page silently starts losing one control to the other on every use.
+    """
+    from options_surface_lab.option_surface_plot import static_surface_figure
+
+    fig = static_surface_figure(wide, ticker="UUUU")
+    for step in fig.layout.sliders[0].steps:
+        assert set(step.args[0]) == {"visible"}, f"step {step.label} restyles more than visibility"
+    for b in fig.layout.updatemenus[0].buttons:
+        assert set(b.args[0]) == {"x"}, f"button {b.label} restyles more than the X axis"
+
+
+def test_the_toggle_rebases_each_trace_to_its_own_date_s_spot(wide):
+    """Every trace belongs to one date, and one date has one spot — so the map is affine.
+
+    Checked per trace rather than globally: the spot moves across the window, so a single
+    ratio for the whole figure would be wrong, and a trace whose points were rebased against
+    *another* date's spot would sit in the wrong place with nothing to show for it.
+    """
+    from options_surface_lab.option_surface_plot import static_surface_figure
+
+    fig = static_surface_figure(wide, ticker="UUUU")
+    in_k, in_ks = (b.args[0]["x"] for b in fig.layout.updatemenus[0].buttons)
+    assert len(in_k) == len(in_ks) == len(fig.data)
+
+    checked = 0
+    for xk, xks in zip(in_k, in_ks):
+        implied = [a / b for a, b in zip(xk, xks) if a and b]
+        if not implied:
+            continue  # a date with no underlying close carries no K/S ruler, by design
+        assert max(implied) - min(implied) <= 0.01 * max(implied), (
+            "one trace was rebased against more than one spot"
+        )
+        checked += 1
+    assert checked, "no trace carried a usable pair of rulers"

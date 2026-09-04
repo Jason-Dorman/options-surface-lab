@@ -125,7 +125,12 @@ def main() -> Path:
     #   row 3  where the data simply is not there — the two occupancy grids, paired so they
     #          can be compared directly, which is the whole point of showing both
     panels = [
-        _panel(1, "Price surface · 3D", "drag the slider — the whole page follows",
+        # The note is where the hero's two native controls are advertised — the axis toggle
+        # is a small button pair in the corner of the plot and nothing else says what the
+        # 1.00 on a K/S axis means (FR-10).
+        _panel(1, "Price surface · 3D",
+               "drag the slider — the whole page follows &nbsp;·&nbsp; "
+               "K / S rebases to spot, 1.00 = at the money",
                fig_surface, width=T.W_HERO),
         _panel(2, f"{ticker} underlying", "spot context · 12 weeks · close = TRDPRC_1",
                fig_cs, width=T.W_SIDECAR),

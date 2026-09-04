@@ -400,6 +400,39 @@ CONTRAST_PAIRS = [
 ]
 
 
+def test_the_axis_menu_is_legible_in_both_of_its_states():
+    """FR-10's control renders against a ground we do not own (AD-6's awkward edge).
+
+    A Plotly menu has ONE font colour for every button, and plotly.js paints the highlighted
+    row `MENU_ACTIVE_BG` with no property to override it. So the type has to clear AA on our
+    ground *and* on that near-white — which is what rules out the amber type used everywhere
+    else in the chrome (1.7:1) and forces dark type on an amber chip. Read off `menu()`
+    itself, so re-toning the control cannot quietly drop below the floor.
+    """
+    spec = T.menu()
+    for ground, name in ((spec["bgcolor"], "its own chip"), (T.MENU_ACTIVE_BG, "plotly's highlight")):
+        ratio = _contrast(spec["font"]["color"], ground)
+        assert ratio >= 4.5, f"the axis menu is {ratio:.2f}:1 on {name}, below WCAG AA"
+
+
+def test_the_axis_menu_clears_the_legend_and_the_caption(wide):
+    """Three things share the band above the hero; the menu is the newest and the smallest.
+
+    The caption is left-anchored and the legend sits a row lower, so the menu takes the right
+    of the caption's row. A menu dropped to LEGEND_Y would land on the legend's swatches —
+    the same collision the caption had before CAPTION_Y_OVER_LEGEND existed.
+    """
+    spec = T.menu()
+    assert spec["y"] >= T.CAPTION_Y_OVER_LEGEND, "the menu sits in the legend's band"
+    assert (spec["x"], spec["xanchor"]) == (1.0, "right"), "the caption owns the left of that row"
+
+    fig = static_surface_figure(wide, ticker="UUUU")
+    menu = fig.layout.updatemenus[0]
+    captions = [a for a in fig.layout.annotations if a.yref == "paper"]
+    assert all(a.xanchor == "left" for a in captions), "a centred caption would run into the menu"
+    assert menu.y >= fig.layout.legend.y, "the menu must sit above the legend, not on it"
+
+
 @pytest.mark.parametrize("label,fg,bg", CONTRAST_PAIRS, ids=[p[0] for p in CONTRAST_PAIRS])
 def test_every_foreground_clears_wcag_aa(label, fg, bg):
     """FR-8: "text meets reasonable contrast on the chosen background" — measured, not eyeballed.

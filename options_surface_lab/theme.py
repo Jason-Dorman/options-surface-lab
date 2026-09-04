@@ -52,6 +52,11 @@ TEXT_INVERSE = "#060B16"  # for text sitting on an accent fill (bar labels)
 
 ACCENT = "#FFB000"       # amber: headings, metric values, panel numbers, slider
 ACCENT_DIM = "#8A6A1E"   # accent at rest: slider track, button, inactive chrome
+# NOT ours to choose: plotly.js paints the highlighted row of an `updatemenu` this colour
+# and exposes no property for it (`bgcolor` covers only the resting state). It is recorded
+# here because it is a ground we really do render type against, so the contrast test can
+# measure it like any other pairing — that is what forced the menu's dark-on-amber scheme.
+MENU_ACTIVE_BG = "#F4FAFF"
 
 # --------------------------------------------------------------------------- data encodings
 #
@@ -296,6 +301,41 @@ def slider(**overrides) -> dict:
         bordercolor=BORDER,
         font=dict(size=9, color=TEXT_MUTED, family=FONT_MONO),
         tickcolor=BORDER,
+    )
+    spec.update(overrides)
+    return spec
+
+
+def menu(**overrides) -> dict:
+    """A Plotly dropdown — the published page's second native control (FR-10, T-16).
+
+    An amber chip with inverse type, the same affordance the Reflex app's Reload button uses.
+    It is a dropdown rather than a button pair for two reasons: the closed control names the
+    mode currently shown (FR-10 asks for exactly that), and one chip fits the crowded band
+    above the hero where two would not.
+
+    The colour scheme is forced, not chosen. A menu has ONE font colour for every state, and
+    plotly.js paints the highlighted row `MENU_ACTIVE_BG` regardless of the theme — so the
+    type has to be legible on that near-white *and* on our own ground. Amber type fails there
+    (1.7:1); dark type on amber clears AA on both. Both pairings are pinned in
+    `tests/test_theme.py`.
+
+    Sits at the right of the band above the plot — the caption is left-anchored in the same
+    band and the legend is below it at LEGEND_Y, so the three do not overlap.
+    """
+    spec = dict(
+        type="dropdown",
+        direction="down",
+        showactive=True,
+        x=1.0,
+        xanchor="right",
+        y=CAPTION_Y_OVER_LEGEND,
+        yanchor="bottom",
+        pad=dict(l=6, r=6, t=2, b=2),
+        bgcolor=ACCENT,
+        bordercolor=BORDER,
+        borderwidth=1,
+        font=dict(size=SIZE_LEGEND, color=TEXT_INVERSE, family=FONT_MONO),
     )
     spec.update(overrides)
     return spec
