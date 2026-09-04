@@ -396,6 +396,12 @@ The exported site cannot run the sequence above past "open page". Design respons
 4. The Reflex `State` switches remain for local dev and the checkpoint demo; they and the
    legend must not fight (switches control trace inclusion at build; legend controls
    visibility client-side).
+5. **The slider drives the whole page** (T-42). `asof_frames()` embeds per-date arrays and one
+   inline listener applies them to the scatter, the spread grid, both occupancy grids and the
+   readout strip on `plotly_sliderchange`. The underlying candlestick is the deliberate
+   exception — it is 12 weeks of context, not an as-of cut. The listener addresses panels by
+   the stable ids `osl-fig-1..6` and restyles `settle_vs_trade_figure` **by trace index**, so
+   that figure emits `[Calls, Puts, y = x, bars]` on every date, empty traces included.
 
 ## 9. Figure inventory
 

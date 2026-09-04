@@ -7,6 +7,7 @@ unrelated copy edit — that nearly happened when the prose block carrying the m
 removed. These tests pin the contract between the builder and the workflow.
 """
 
+import json
 import re
 from pathlib import Path
 
@@ -134,3 +135,60 @@ def test_every_class_the_page_uses_is_defined_in_its_own_stylesheet():
         f"these classes are used but never defined, so their styling is silently dropped: "
         f"{orphans}"
     )
+
+
+def test_the_published_page_wires_the_slider_to_every_panel():
+    """The whole page must follow the as-of slider, not just the hero (AD-5).
+
+    Without this the page shows two as-of dates at once: the hero on the slider's date and
+    every supporting panel on its build-time date. Checked on the built artifact because the
+    wiring only exists there — ids, payload and listener are emitted, not importable.
+    """
+    page = Path(__file__).resolve().parents[1] / "options_surface_preview.html"
+    if not page.exists():
+        pytest.skip("preview not built in this working tree")
+    html = page.read_text(encoding="utf-8", errors="ignore")
+
+    ids = set(re.findall(r'id="(osl-fig-\d)"', html))
+    assert {"osl-fig-1", "osl-fig-3", "osl-fig-4", "osl-fig-5", "osl-fig-6"} <= ids, (
+        f"stable panel ids are missing, so the listener cannot address them: {sorted(ids)}"
+    )
+    assert 'id="osl-asof"' in html, "the command bar's as-of must be addressable"
+    assert len(re.findall(r'data-osl-readout="\d"', html)) == 6, "six readout cells"
+    assert "plotly_sliderchange" in html, "nothing listens to the slider"
+
+    payload = re.search(
+        r'<script id="osl-frames" type="application/json">(.*?)</script>', html, re.S
+    )
+    assert payload, "the per-date frames are not embedded"
+    frames = json.loads(payload.group(1))
+
+    # every id the listener reaches for must exist on the page
+    listener = html[html.index("plotly_sliderchange") - 3000 : ]
+    for fig_id in set(re.findall(r"osl-fig-\d", listener)):
+        assert f'id="{fig_id}"' in html, f"listener targets {fig_id}, which the page lacks"
+
+    # every slider step must have somewhere to go
+    steps = set(re.findall(r'"label":"(\d{4}-\d{2}-\d{2})"', html))
+    assert steps, "the as-of slider has no steps"
+    missing = sorted(steps - set(frames))
+    assert not missing, f"slider steps with no frame: {missing[:5]}"
+
+
+def test_the_page_still_works_if_the_listener_never_runs():
+    """The wiring must fail safe: no payload, no Plotly, no hero — no error, just no sync.
+
+    A page that throws on load is worse than one whose panels are pinned, so every entry
+    point returns early rather than assuming.
+    """
+    page = Path(__file__).resolve().parents[1] / "options_surface_preview.html"
+    if not page.exists():
+        pytest.skip("preview not built in this working tree")
+    html = page.read_text(encoding="utf-8", errors="ignore")
+    assert "plotly_sliderchange" in html, "the as-of listener is missing entirely"
+    script = html[html.index("plotly_sliderchange") - 3000 :]
+
+    assert 'typeof Plotly === "undefined"' in script, "must tolerate Plotly failing to load"
+    assert "if (!node" in script, "must tolerate a missing payload"
+    assert "if (!hero" in script, "must tolerate a missing hero div"
+    assert script.count("catch (e)") >= 3, "each panel must update inside its own try/catch"

@@ -101,6 +101,16 @@ T-15 landed 2026-09-01: the published page's 3D figure carries an as-of **slider
 53 trading days plus **legend** toggles for calls/puts and each series (`static_surface_figure`),
 so FR-4/FR-5 are met without a backend.
 
+T-42 landed 2026-09-03: that slider now drives the **whole page**. A Plotly slider can only
+mutate its own figure, so the supporting panels used to stay on their build-time date and the
+page showed two as-of dates at once. `asof_frames()` embeds per-date arrays (+34 KB gzipped)
+and one inline listener restyles the scatter, the spread and both occupancy grids and rewrites
+the readout strip on `plotly_sliderchange`. This is the page's **only custom JavaScript**; it
+fails safe to the old behaviour if anything is missing. The payload is built by running the
+real figure builders per date, so it cannot drift — and `settle_vs_trade_figure`'s trace order
+(`Calls, Puts, y = x, bars`, empty traces included) is now a **contract** the listener depends
+on. See AD-5's amendment.
+
 T-13 landed 2026-09-02 (FR-8, closing G-5). The PO's direction: a **deep-navy terminal** —
 **amber type** (`ACCENT` = `#FFB000`, headings/metric values/panel numbers/slider), warm
 off-white body, Space Grotesk / Inter / JetBrains Mono, and a **numbered-panel grid layout** on 10
@@ -135,7 +145,7 @@ can look perfect under `reflex run` and be broken on Pages. CSS fails open, so a
 is silent. The width classes are generated from `GRID_COLUMNS` and two tests guard it, but
 **check the built `options_surface_preview.html`, not just the dev app, before pushing.**
 
-**Next up:** **T-12** (the three PO-authored sentences, FR-7) — the last P0 gap. **138 tests
+**Next up:** **T-12** (the three PO-authored sentences, FR-7) — the last P0 gap. **144 tests
 green, no xfail** (the "90" this paragraph carried was stale — `tests/test_build_preview.py`
 was never counted into it). Update this paragraph as things land (lockstep rule).
 

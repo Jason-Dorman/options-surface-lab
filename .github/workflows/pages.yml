@@ -95,6 +95,12 @@ jobs:
           figs=$(grep -o "plotly-graph-div" "$page" | wc -l)
           echo "published page carries $figs figures"
           test "$figs" -ge 6 || { echo "::error::expected at least 6 figures, found $figs"; exit 1; }
+          # The as-of slider drives the whole page (AD-5). Without the frames payload and its
+          # listener the hero moves and every other panel stays on its build-time date, which
+          # renders perfectly and shows two different as-of dates at once — invisible to the
+          # figure count above, so it gets its own check.
+          grep -q 'id="osl-frames"' "$page" || { echo "::error::per-date frames missing — the slider would move the hero only"; exit 1; }
+          grep -q "plotly_sliderchange" "$page" || { echo "::error::nothing listens to the as-of slider"; exit 1; }
 
       - uses: actions/upload-pages-artifact@v3
         with:

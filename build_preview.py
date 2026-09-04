@@ -10,6 +10,7 @@ underlying beside it at 3, then the remaining figures 5+5 beneath. All chrome co
 (FR-8 / AD-6).
 """
 
+import json
 from pathlib import Path
 
 # Grepped for by the CI publish guard — see .github/workflows/pages.yml.
@@ -20,6 +21,7 @@ import pandas as pd
 from options_surface_lab import theme as T
 from options_surface_lab.option_surface_plot import (
     as_panel_figure,
+    asof_frames,
     candlestick_figure,
     coverage_heatmap,
     spread_heatmap,
@@ -95,20 +97,25 @@ def main() -> Path:
       <div class="osl-wordmark">Options Surface Lab</div>
       <div class="osl-ident">
         <b>{ticker}</b> listed options &nbsp;·&nbsp; mark = <b>{mark_label}</b>
-        &nbsp;·&nbsp; as-of <b>{asof_txt}</b> &nbsp;·&nbsp; {n_series} series in panel
+        &nbsp;·&nbsp; as-of <b id="osl-asof">{asof_txt}</b>
+        &nbsp;·&nbsp; {n_series} series in panel
       </div>
     </div>
     """
 
+    # Labels carry no date any more — the as-of lives in the command bar and moves with the
+    # slider, so a label reading "Series on 2026-07-10" would go stale the moment it moved.
     readouts = "".join(
-        _readout(label, value)
-        for label, value in (
-            (f"Series on {asof_txt}", stats["n_quotes"]),
-            ("Mark, no print", f"{stats['n_mark_only']} ({stats['pct_mark_no_trade']:.0f}%)"),
-            ("Both mark &amp; print", stats["n_both"]),
-            ("Median |mark − trade|", med_txt),
-            ("Median relative gap", rel_txt),
-            ("Median bid-ask spread", spread_txt),
+        _readout(i, label, value)
+        for i, (label, value) in enumerate(
+            (
+                ("Series listed", stats["n_quotes"]),
+                ("Mark, no print", f"{stats['n_mark_only']} ({stats['pct_mark_no_trade']:.0f}%)"),
+                ("Both mark &amp; print", stats["n_both"]),
+                ("Median |mark − trade|", med_txt),
+                ("Median relative gap", rel_txt),
+                ("Median bid-ask spread", spread_txt),
+            )
         )
     )
 
@@ -118,9 +125,9 @@ def main() -> Path:
     #   row 3  where the data simply is not there — the two occupancy grids, paired so they
     #          can be compared directly, which is the whole point of showing both
     panels = [
-        _panel(1, "Price surface · 3D", "drag the slider · legend toggles puts",
+        _panel(1, "Price surface · 3D", "drag the slider — the whole page follows",
                fig_surface, width=T.W_HERO),
-        _panel(2, f"{ticker} underlying", "spot context · close = TRDPRC_1",
+        _panel(2, f"{ticker} underlying", "spot context · 12 weeks · close = TRDPRC_1",
                fig_cs, width=T.W_SIDECAR),
         _panel(3, "Mark vs print", f"{mark_label} against TRDPRC_1", fig_cmp),
         _panel(4, "Spread · can you believe the mark?", "bid-ask as % of the mark", fig_spread),
@@ -140,6 +147,7 @@ def main() -> Path:
         '<div class="osl-grid">',
         *panels,
         "</div>",
+        _asof_script(asof_frames(wide, cp="C")),
         "</body></html>",
     ]
     out.write_text("\n".join(parts), encoding="utf-8")
@@ -147,12 +155,16 @@ def main() -> Path:
     return out
 
 
-def _readout(label: str, value) -> str:
-    """One cell of the readout strip under the command bar. Styling is in theme.PAGE_CSS."""
+def _readout(index: int, label: str, value) -> str:
+    """One cell of the readout strip. Styling is in theme.PAGE_CSS.
+
+    `data-osl-readout` is the slider's handle on the value: the listener looks the cells up by
+    index and writes the figures for the selected date into them.
+    """
     return (
         '<div class="osl-readout">'
         f'<div class="osl-readout-label">{label}</div>'
-        f'<div class="osl-readout-value">{value}</div>'
+        f'<div class="osl-readout-value" data-osl-readout="{index}">{value}</div>'
         "</div>"
     )
 
@@ -162,13 +174,19 @@ def _panel(n: int, name: str, note: str, fig, width: int = None) -> str:
 
     `width` is in grid columns out of `theme.GRID_COLUMNS` (default: half the row).
 
+    The plot div takes a stable id (`osl-fig-{n}`) rather than Plotly's random uuid, because
+    the as-of listener addresses the panels by id — a uuid regenerated on every build would
+    make the wiring unreproducible.
+
     Plotly.js is requested from the CDN by the first panel only. Asking six times emitted the
     same `<script src>` six times — harmless in a browser, but it made the page's single
     external dependency six times harder to see when auditing it against NFR-4.
     """
     global _plotly_included
     body = fig.to_html(
-        full_html=False, include_plotlyjs=("cdn" if not _plotly_included else False)
+        full_html=False,
+        include_plotlyjs=("cdn" if not _plotly_included else False),
+        div_id=f"{FIG_ID_PREFIX}{n}",
     )
     _plotly_included = True
     return (
@@ -181,6 +199,86 @@ def _panel(n: int, name: str, note: str, fig, width: int = None) -> str:
         f'<div class="osl-panel-body">{body}</div>'
         "</div>"
     )
+
+
+FIG_ID_PREFIX = "osl-fig-"
+
+# Which panel each frame key updates. Kept beside the script that reads it so a renamed key
+# and a stale selector cannot drift apart.
+_GRID_PANELS = (("spread", 4), ("mark", 5), ("trade", 6))
+
+
+def _asof_script(frames: dict) -> str:
+    """Embed the per-date frames and the listener that applies them (AD-5).
+
+    A Plotly slider can only mutate the figure it lives in, so without this the hero moved and
+    the rest of the page stayed on its build-time date — one page showing two as-of dates.
+    This is the published page's only custom JavaScript.
+
+    It fails safe by construction: every branch returns early if the payload, Plotly, or the
+    hero div is missing, and each panel updates inside its own try/catch. If any of that
+    breaks, the page keeps exactly the behaviour it had before — panels pinned to the default
+    date — rather than erroring.
+    """
+    if not frames:
+        return ""
+    # `</script>` inside a JSON string would close the tag early; escaping `<` removes the
+    # whole class of problem and stays valid JSON.
+    payload = json.dumps(frames, separators=(",", ":")).replace("<", "\\u003c")
+    grids = ", ".join(f'["{key}", "{FIG_ID_PREFIX}{n}"]' for key, n in _GRID_PANELS)
+    return f"""
+<script id="osl-frames" type="application/json">{payload}</script>
+<script>
+(function () {{
+  var node = document.getElementById("osl-frames");
+  if (!node || typeof Plotly === "undefined") return;
+  var frames;
+  try {{ frames = JSON.parse(node.textContent); }} catch (e) {{ return; }}
+  var hero = document.getElementById("{FIG_ID_PREFIX}1");
+  if (!hero || typeof hero.on !== "function") return;
+
+  var GRIDS = [{grids}];
+  var CMP = "{FIG_ID_PREFIX}3";
+
+  function apply(label) {{
+    var f = frames[label];
+    if (!f) return;
+
+    for (var i = 0; i < GRIDS.length; i++) {{
+      var g = f[GRIDS[i][0]];
+      if (!g) continue;                       // a date with nothing to draw keeps its panel
+      try {{
+        Plotly.restyle(GRIDS[i][1], {{x: [g.x], y: [g.y], z: [g.z]}}, [0]);
+      }} catch (e) {{}}
+    }}
+
+    try {{
+      // trace order is fixed at [Calls, Puts, y = x, bars] for every date
+      Plotly.restyle(CMP, {{x: f.cmp.x, y: f.cmp.y}}, [0, 1, 2]);
+      Plotly.restyle(CMP, {{y: [f.cmp.bars], text: [f.cmp.bars]}}, [3]);
+      Plotly.relayout(CMP, {{
+        "xaxis.range": f.cmp.range,
+        "yaxis.range": f.cmp.range,
+        "yaxis2.range": [0, f.cmp.barmax]
+      }});
+    }} catch (e) {{}}
+
+    try {{
+      var cells = document.querySelectorAll("[data-osl-readout]");
+      for (var j = 0; j < cells.length; j++) {{
+        var k = parseInt(cells[j].getAttribute("data-osl-readout"), 10);
+        if (f.readouts[k] !== undefined) cells[j].textContent = f.readouts[k];
+      }}
+      var asof = document.getElementById("osl-asof");
+      if (asof) asof.textContent = label;
+    }} catch (e) {{}}
+  }}
+
+  hero.on("plotly_sliderchange", function (e) {{
+    if (e && e.step && e.step.label) apply(e.step.label);
+  }});
+}})();
+</script>"""
 
 
 # Module-level so the library is emitted exactly once per page. Kept beside its only writer.

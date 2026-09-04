@@ -179,6 +179,11 @@ defines.
   context, then the evidence that mark ≠ print and whether the mark is believable at all,
   then where the data simply is not there. The two occupancy grids stay paired on the last
   row because comparing them *is* the reason both are shown.
+- **The as-of slider drives every panel**, not just the hero (T-42/AD-5). Panel [2] is the
+  deliberate exception: the underlying is 12 weeks of context, and re-cutting it per date
+  would destroy the very thing it is there to show. Everything else — the scatter, the spread
+  grid, both occupancy grids, and all six readouts — follows the slider, and the command bar's
+  as-of moves with it. A page that showed two dates at once was the defect this closed.
 - **The next step in the same direction** is FR-12's spot plane at `K = S`, which puts spot
   *inside* the surface rather than beside it. The two compose: adjacency first, plane second.
 - **The band above a plot stacks: legend, then caption, then title.** A horizontal legend
@@ -245,6 +250,7 @@ judgement calls; they are executable now.
 | 2026-09-02 | Adopted. First pass shipped ice-blue chrome and a single-column layout; the PO corrected both — "Bloomberg" meant the **page layout**, and the font colours needed to change. Amber type and the panel grid replaced them; puts moved off amber onto the blue-shift rule (§3). Navy ground unchanged throughout. |
 | 2026-09-02 | PO asked to pair the underlying with the price surface. Grid moved from 2 columns to 10 so the hero row could be 7/3 rather than an even split; the remaining four figures re-flowed 5+5 across two rows. |
 | 2026-09-02 | PO caught three defects by eye. Put markers were unreadable (open symbols, and hues derived as near-shades of their calls) — puts re-hued to violet/green, all markers filled (§3). The mark-vs-print scatter drew one unlabelled array-coloured trace, so the puts read as missing — split into named Calls/Puts traces with a legend. And the hero row wasted vertical space — height 760 → 600 plus `align-items:start` (§5). All three now have tests. |
+| 2026-09-03 | PO asked whether the spread chart should follow the slider. It did not — nor did any supporting panel — so the page showed two as-of dates at once. Cross-filtering wired in (T-42, AD-5 amendment); readout labels lost their embedded date since the as-of now moves. |
 | 2026-09-02 | Hero caption overprinted its own legend — both sat in the band just above the plot. Caption clearance and the top margins are tokens now, and the caption was cut to the one thing the panel header does not already say. |
 | 2026-09-02 | **Deploy-only breakage.** The published page rendered the surface and the underlying one column wide: `.osl-w6`/`.osl-w4` were never added when the split moved from 7/3 to 6/4, and an undefined CSS class fails open. Width classes are now generated from `GRID_COLUMNS`; a token-vs-stylesheet test and an orphan-class test over the built page both guard it (§5). |
 | 2026-09-02 | PO found the 3D surface overflowing into the mark-vs-print panel in the **dev app**: it was handing un-panelised figures to the terminal grid, so titles doubled with the panel headers and declared heights (640, 460) exceeded the boxes reserved for them (600, 360). App figures now panelise exactly as the builder's do; `price_surface_figure` reads `HERO_FIGURE_HEIGHT`; empty figures declare a height. Guarded by tests (§5). |

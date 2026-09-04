@@ -271,6 +271,24 @@ fight the legend; the checkpoint demo can still use full server-side interactivi
 > the documented trim lever if that ever needs revisiting. The Reflex switches remain for
 > local dev and are untouched.
 
+**AD-5 amendment — the slider drives the whole page (2026-09-03, T-42).**
+*Context:* a Plotly slider can only mutate the figure it lives in, so T-15 put the as-of
+control inside the hero and left the five supporting panels rendered for one build-time date.
+The result was a page showing **two as-of dates at once** — drag to 2026-07-07 and the command
+bar, the headline numbers and the spread/occupancy grids still read 2026-07-10. *Decision:*
+embed a per-date payload (`asof_frames()`) and one small inline listener that restyles the
+other panels and rewrites the readout strip on `plotly_sliderchange`. *Consequences:* the
+published page gains its **first custom JavaScript** — previously it was figures and CSS only.
+It is ~35 lines, it is the only script we author, and it **fails safe**: every entry point
+returns early if the payload, Plotly or the hero div is missing, and each panel updates in its
+own `try`/`catch`, so a failure degrades to exactly the previous behaviour rather than
+erroring. Cost measured: +158 KB raw / +34 KB gzipped on a 2.4 MB page, and ~32 s of build
+time. The payload is produced by **running the real figure builders per date and lifting their
+arrays**, not by re-deriving the pivots, so it cannot drift from the figures it updates.
+Trace order in `settle_vs_trade_figure` became a contract (it now emits empty traces rather
+than skipping) because the listener restyles by index. CI greps the page for both the payload
+and the listener.
+
 **AD-6 — One theme module owns every visual constant.**
 *Context:* the starter hardcodes the same hex values in every figure (duplicated-code
 smell); FR-8 demands a full restyle; the site will gain pages all semester. *Decision:*

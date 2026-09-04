@@ -13,7 +13,11 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from options_surface_lab import theme as T
-from options_surface_lab.option_surface_utils import MARK_FIELD_DEFAULT, surface_grid
+from options_surface_lab.option_surface_utils import (
+    MARK_FIELD_DEFAULT,
+    summarize_sparsity,
+    surface_grid,
+)
 
 # Labels name the field the mark actually comes from. There is no SETTLE for US
 # listed equity options (checkpoint_audit.md §3) — saying so on the axis is the point.
@@ -362,6 +366,20 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
     return fig
 
 
+def diagonal_range(both: pd.DataFrame) -> tuple[float, float]:
+    """Padded [lo, hi] covering both series, for the y = x line and the square axes.
+
+    Shared with the as-of update payload so the line and the axis range a slider step
+    installs are computed the same way the figure computed them.
+    """
+    if not len(both):
+        return 0.0, 1.0
+    lo = float(min(both["TRDPRC_1"].min(), both["MARK"].min()))
+    hi = float(max(both["TRDPRC_1"].max(), both["MARK"].max()))
+    pad = (hi - lo) * 0.06 if hi > lo else 0.05
+    return lo - pad, hi + pad
+
+
 def settle_vs_trade_figure(wide: pd.DataFrame, asof=None, ticker: str = "UUUU") -> go.Figure:
     sl = wide.copy()
     if asof is not None and len(sl):
@@ -375,65 +393,68 @@ def settle_vs_trade_figure(wide: pd.DataFrame, asof=None, ticker: str = "UUUU") 
         vertical_spacing=0.08,
     )
 
-    if len(both):
-        # One trace per right, not one trace coloured by a mapped array. The array version
-        # produced a single unlabelled legend entry, so a reader had no way to confirm the
-        # puts were there at all — and with the old put hue sitting next to the call hue,
-        # the honest first read was "the puts are missing". Two named traces make the split
-        # explicit, and the legend doubles as a filter.
-        #
-        # Both rights draw the mark, so both are circles; hue alone separates them, which is
-        # why the two hues are 83 degrees apart rather than neighbouring shades.
-        for cp, label, colour, symbol in (
-            ("C", "Calls", T.MARK, T.SYMBOL_MARK),
-            ("P", "Puts", T.MARK_PUT, T.SYMBOL_MARK_PUT),
-        ):
-            side = both[both["cp"] == cp]
-            if not len(side):
-                continue
-            fig.add_trace(
-                go.Scatter(
-                    x=side["TRDPRC_1"],
-                    y=side["MARK"],
-                    mode="markers",
-                    name=label,
-                    marker=dict(
-                        size=7,
-                        color=colour,
-                        opacity=0.85,
-                        symbol=symbol,
-                        line=dict(width=0.5, color=T.SURFACE_ALT),
-                    ),
-                    customdata=np.stack(
-                        [side["ric"].astype(str), side["strike"], side["dte"]], axis=1
-                    ),
-                    hovertemplate=(
-                        f"<b>{label[:-1]}</b>  trade $%{{x:.3f}}  mark $%{{y:.3f}}"
-                        "<br>K=%{customdata[1]} DTE=%{customdata[2]}"
-                        "<br>%{customdata[0]}<extra></extra>"
-                    ),
-                    showlegend=True,
-                ),
-                row=1,
-                col=1,
-            )
-        lo = float(min(both["TRDPRC_1"].min(), both["MARK"].min()))
-        hi = float(max(both["TRDPRC_1"].max(), both["MARK"].max()))
-        pad = (hi - lo) * 0.06 if hi > lo else 0.05
+    # One trace per right, not one trace coloured by a mapped array. The array version
+    # produced a single unlabelled legend entry, so a reader had no way to confirm the puts
+    # were there at all — and with the old put hue sitting next to the call hue, the honest
+    # first read was "the puts are missing". Two named traces make the split explicit, and
+    # the legend doubles as a filter.
+    #
+    # Both rights draw the mark, so both are circles; hue alone separates them, which is why
+    # the two hues are 83 degrees apart rather than neighbouring shades.
+    #
+    # All four traces are ALWAYS added, empty ones included, so the trace order is
+    # [Calls, Puts, y = x, bars] on every date. The published page restyles this figure by
+    # trace index when the as-of slider moves (AD-5); an index that shifts because a date
+    # happened to have no puts would put put data into the calls trace.
+    for cp, label, colour, symbol in (
+        ("C", "Calls", T.MARK, T.SYMBOL_MARK),
+        ("P", "Puts", T.MARK_PUT, T.SYMBOL_MARK_PUT),
+    ):
+        side = both[both["cp"] == cp]
         fig.add_trace(
             go.Scatter(
-                x=[lo - pad, hi + pad],
-                y=[lo - pad, hi + pad],
-                mode="lines",
-                line=dict(color=T.TEXT_MUTED, dash="dash", width=1),
-                name="y = x",
+                x=side["TRDPRC_1"],
+                y=side["MARK"],
+                mode="markers",
+                name=label,
+                marker=dict(
+                    size=7,
+                    color=colour,
+                    opacity=0.85,
+                    symbol=symbol,
+                    line=dict(width=0.5, color=T.SURFACE_ALT),
+                ),
+                customdata=(
+                    np.stack([side["ric"].astype(str), side["strike"], side["dte"]], axis=1)
+                    if len(side)
+                    else None
+                ),
+                hovertemplate=(
+                    f"<b>{label[:-1]}</b>  trade $%{{x:.3f}}  mark $%{{y:.3f}}"
+                    "<br>K=%{customdata[1]} DTE=%{customdata[2]}"
+                    "<br>%{customdata[0]}<extra></extra>"
+                ),
                 showlegend=True,
             ),
             row=1,
             col=1,
         )
-        fig.update_xaxes(range=[lo - pad, hi + pad], row=1, col=1)
-        fig.update_yaxes(range=[lo - pad, hi + pad], row=1, col=1)
+
+    lo, hi = diagonal_range(both)
+    fig.add_trace(
+        go.Scatter(
+            x=[lo, hi],
+            y=[lo, hi],
+            mode="lines",
+            line=dict(color=T.TEXT_MUTED, dash="dash", width=1),
+            name="y = x",
+            showlegend=True,
+        ),
+        row=1,
+        col=1,
+    )
+    fig.update_xaxes(range=[lo, hi], row=1, col=1)
+    fig.update_yaxes(range=[lo, hi], row=1, col=1)
 
     n_settle_only = int((sl["has_mark"] & ~sl["has_trade"]).sum())
     n_both = int((sl["has_mark"] & sl["has_trade"]).sum())
@@ -592,3 +613,98 @@ def coverage_heatmap(wide: pd.DataFrame, asof, cp: str = "C", field: str = "TRDP
         )
     )
     return fig
+
+
+# --------------------------------------------------------------- as-of frames (AD-5, T-42)
+
+
+def _arr(values):
+    """A Plotly array as plain JSON: numpy out, NaN -> null (JSON has no NaN)."""
+    if values is None:
+        return []
+    out = []
+    for v in list(values):
+        if isinstance(v, str):
+            out.append(v)
+        elif v is None or v != v:  # NaN
+            out.append(None)
+        else:
+            out.append(round(float(v), 4))
+    return out
+
+
+def _grid(fig):
+    """The (x, y, z) of a heatmap figure, or None when the date had nothing to draw."""
+    if not fig.data or fig.data[0].type != "heatmap":
+        return None
+    hm = fig.data[0]
+    return {
+        "x": [str(v) for v in hm.x],
+        "y": [str(v) for v in hm.y],
+        "z": [_arr(row) for row in hm.z],
+    }
+
+
+def asof_frames(wide: pd.DataFrame, cp: str = "C", dates=None) -> dict:
+    """Per-date arrays for every supporting panel the as-of slider drives.
+
+    The published page has no backend, so a Plotly slider can only mutate the figure it lives
+    in — that is why T-15 put the as-of control inside the hero and left the other panels
+    pinned to one representative date. The result was a page showing two as-of dates at once.
+    This payload closes that: the builder embeds it, and a small listener restyles the other
+    panels when the slider moves (AD-5).
+
+    Built by **running the real figure builders** for each date and lifting their arrays,
+    rather than re-deriving the pivots here. Re-deriving would be faster and would drift the
+    first time a builder changed its aggregation; this cannot, by construction.
+
+    Trace indices are part of the contract: `settle_vs_trade_figure` always emits
+    [Calls, Puts, y = x, bars], which is why it adds empty traces rather than skipping.
+    """
+    if wide is None or wide.empty:
+        return {}
+    if dates is None:
+        dates = sorted(wide["date"].dt.normalize().unique())
+
+    frames = {}
+    for asof in dates:
+        sl = wide[wide["date"] == pd.Timestamp(asof).normalize()]
+        cmp_fig = settle_vs_trade_figure(wide, asof)
+        calls, puts, line, bars = cmp_fig.data
+        both = sl.dropna(subset=["TRDPRC_1", "MARK"])
+        lo, hi = diagonal_range(both)
+        bar_y = [int(v) for v in bars.y]
+
+        frames[str(pd.Timestamp(asof).date())] = {
+            "cmp": {
+                "x": [_arr(calls.x), _arr(puts.x), [lo, hi]],
+                "y": [_arr(calls.y), _arr(puts.y), [lo, hi]],
+                "bars": bar_y,
+                "range": [lo, hi],
+                "barmax": max(bar_y + [1]) * 1.18,
+            },
+            "spread": _grid(spread_heatmap(wide, asof, cp=cp)),
+            "mark": _grid(coverage_heatmap(wide, asof, cp=cp, field="MARK")),
+            "trade": _grid(coverage_heatmap(wide, asof, cp=cp, field="TRDPRC_1")),
+            "readouts": asof_readouts(sl),
+        }
+    return frames
+
+
+def asof_readouts(sl: pd.DataFrame) -> list[str]:
+    """The readout strip's six values for one date, formatted exactly as the builder does.
+
+    Formatted here rather than in the browser so the slider can never produce a number that
+    is rounded differently from the one the page was built with.
+    """
+    stats = summarize_sparsity(sl)
+    med, rel = stats["median_abs_diff"], stats["median_rel_diff_pct"]
+    sp, sp_pct = stats["median_spread"], stats["median_spread_pct"]
+    return [
+        f"{stats['n_quotes']}",
+        f"{stats['n_mark_only']} ({stats['pct_mark_no_trade']:.0f}%)",
+        f"{stats['n_both']}",
+        "n/a" if med is None else f"${med:.3f}",
+        "n/a" if rel is None else f"{rel:.1f}%",
+        "n/a" if sp is None else f"${sp:.2f} ({sp_pct:.0f}%)",
+    ]

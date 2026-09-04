@@ -199,3 +199,71 @@ def test_the_app_and_the_published_page_reserve_the_same_heights():
 
     assert app.HERO_H == f"{T.HERO_FIGURE_HEIGHT}px"
     assert app.TILE_H == f"{T.PANEL_FIGURE_HEIGHT}px"
+
+
+# --------------------------------------------- the as-of frames the slider applies (AD-5)
+
+
+def test_the_scatter_trace_order_is_the_same_on_every_date(wide):
+    """The published page restyles this figure by trace index, so the order is a contract.
+
+    Empty traces are added rather than skipped precisely for this: a date with no puts used
+    to shift `y = x` down an index, and a restyle would then write put data into the line.
+    """
+    from options_surface_lab.option_surface_plot import settle_vs_trade_figure
+
+    dates = sorted(wide["date"].dt.normalize().unique())
+    orders = {tuple(t.name for t in settle_vs_trade_figure(wide, d).data) for d in dates}
+    assert len(orders) == 1, f"trace order varies by date: {orders}"
+    assert list(orders)[0][:3] == ("Calls", "Puts", "y = x")
+
+
+def test_every_slider_step_has_a_frame(wide):
+    """A step with no frame moves the hero and silently leaves the rest of the page behind.
+
+    This is the failure the whole feature exists to prevent, so it is checked directly rather
+    than trusted: the two must be generated from the same set of dates.
+    """
+    from options_surface_lab.option_surface_plot import asof_frames, static_surface_figure
+
+    frames = asof_frames(wide)
+    labels = {s.label for s in static_surface_figure(wide).layout.sliders[0].steps}
+    missing = sorted(labels - set(frames))
+    assert not missing, f"slider steps with no frame to apply: {missing[:5]}"
+
+
+def test_frames_are_json_safe_and_shaped_for_the_listener(wide):
+    """JSON has no NaN, and the listener indexes fixed keys — both are easy to break."""
+    import json
+
+    from options_surface_lab.option_surface_plot import asof_frames
+
+    frames = asof_frames(wide)
+    text = json.dumps(frames)  # raises on NaN only with allow_nan=False, so check explicitly
+    assert "NaN" not in text and "Infinity" not in text, "JSON.parse would reject this"
+
+    for label, f in frames.items():
+        assert set(f) >= {"cmp", "spread", "mark", "trade", "readouts"}, label
+        assert len(f["readouts"]) == 6, f"{label}: the readout strip has six cells"
+        # the scatter payload restyles traces 0..2, so it carries exactly three arrays
+        assert len(f["cmp"]["x"]) == 3 and len(f["cmp"]["y"]) == 3, label
+        assert len(f["cmp"]["bars"]) == 3, label
+        for key in ("spread", "mark", "trade"):
+            grid = f[key]
+            if grid is None:
+                continue  # a date with nothing to draw keeps its panel, by design
+            assert len(grid["z"]) == len(grid["y"]), f"{label}/{key}: z rows vs y labels"
+
+
+def test_frame_readouts_match_the_figures_for_that_date(wide):
+    """The strip and the panels must describe the same day, or the fix reintroduces the bug."""
+    from options_surface_lab.option_surface_plot import asof_frames, settle_vs_trade_figure
+
+    dates = sorted(wide["date"].dt.normalize().unique())[:3]
+    frames = asof_frames(wide, dates=dates)
+    for d in dates:
+        f = frames[str(pd.Timestamp(d).date())]
+        bars = settle_vs_trade_figure(wide, d).data[3]
+        assert f["cmp"]["bars"] == [int(v) for v in bars.y]
+        # "Both mark & print" is the middle bar and the third readout
+        assert f["readouts"][2] == str(int(bars.y[1]))
