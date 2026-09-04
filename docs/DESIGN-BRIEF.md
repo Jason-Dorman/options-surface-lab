@@ -133,9 +133,12 @@ does. This adds a second CDN to the published page alongside Plotly's; see §7.
 │  └────────────────────────────────────────┘ │                                 │
 │  ──────────── as-of slider ────────────    │                                 │
 ├───────────────────────────┬────────────────┴─────────────────────────────────┤
-│ [3] MARK VS PRINT       5 │ [4] SPREAD · CAN YOU BELIEVE THE MARK?         5 │
-├───────────────────────────┼──────────────────────────────────────────────────┤
-│ [5] MARK OCCUPANCY      5 │ [6] PRINT OCCUPANCY                            5 │
+│ [3] IMPLIED VOL · DERIVED 5 │ [4] MARK VS PRINT                            5 │
+│   smile, one curve/expiry   │                                                │
+├───────────────────────────┴──────────────────────────────────────────────────┤
+│ [5] SPREAD · CAN YOU BELIEVE THE MARK?                               10 cols │
+├───────────────────────────┬──────────────────────────────────────────────────┤
+│ [6] MARK OCCUPANCY      5 │ [7] PRINT OCCUPANCY                            5 │
 └───────────────────────────┴──────────────────────────────────────────────────┘
 ```
 
@@ -180,8 +183,57 @@ defines.
   and nothing is squeezed.
 - **Panel order is the argument**, not the figure inventory: the surface with its spot
   context, then the evidence that mark ≠ print and whether the mark is believable at all,
-  then where the data simply is not there. The two occupancy grids stay paired on the last
-  row because comparing them *is* the reason both are shown.
+  then where the data simply is not there, and finally what you get if you push that mark
+  through a model anyway. The two occupancy grids stay paired because comparing them *is* the
+  reason both are shown, and the IV surface comes **last** because it only means anything
+  once panels [3]–[6] have established what its input is worth.
+- **The IV panel is a 2D smile in row 2, directly under the surface it comes from**
+  (FR-11; PO, 2026-09-04). It shipped first as a full-width 3D scatter at the foot of the
+  page and the PO's verdict was that it read as "a bunch of scattered points" with no
+  discernible message — which was fair: a 3D point cloud with no sheet and no connecting
+  structure gives the eye nothing to follow. The same numbers in two dimensions have a shape
+  you can name. Implied vol against `K / S`, one curve per expiry, and the *near-dated curves
+  are visibly steeper than the far-dated ones* — on the busiest date the 7-day expiry spans
+  63–130% while the 42-day expiry spans 76–85%. That flattening is the term structure of the
+  smile, and it was invisible in 3D.
+- **Position is the argument, again.** The smile sits beside [4] mark-vs-print rather than at
+  the foot, because it is the *same cloud read through a model* and belongs next to the price
+  it was derived from, not three panels away. The cost, accepted knowingly: the model now
+  comes *before* the evidence that its input is soft ([5] spread, [6]/[7] occupancy), where
+  the original order built that case first. The two surfaces reading as a pair is worth more.
+- **Spread went full width to keep the occupancy grids paired.** With the smile taking half
+  of row 2, the three remaining panels cannot tile two rows evenly; something had to go wide.
+  Spread is a strike × expiry grid that only gains from the room, and moving it protects the
+  [6]/[7] adjacency that comparing them depends on.
+- **Colour: expiry takes a sequential ramp, not a categorical palette.** Expiry is *ordered*,
+  so the ladder runs `MARK` → `MARK_PUT` (`EXPIRY_RAMP`) and the reader can tell near from far
+  without reading the legend. It introduces no new hue: both endpoints are existing mark
+  colours, and every point on this panel is mark-derived, so there is no print series beside
+  it for cyan to be mistaken for. The ladder is fixed **panel-wide**, so one expiry keeps one
+  colour on every as-of date and the eye can follow a curve across the window.
+- **A break in a line is a hole, and that had to be built deliberately.** A line chart is the
+  one form that can *invent* data a scatter cannot: joining two inverted strikes across a
+  refused one draws a vol that does not exist. The curves are therefore built over the strikes
+  *listed* that day with `None` at each refusal and `connectgaps` off, so the gap renders as a
+  visible break (AD-9).
+- **`SMILE_MARGIN` puts the legend below the plot.** Nine expiries in a horizontal legend are
+  far too wide to share the top band with a caption on a 5-column tile — they overprinted on
+  the first build. Bottom is free, and it is the arrangement `settle_vs_trade_figure` already
+  uses. `as_panel_figure` takes a `margin` for exactly this reason: the 30px tile default is
+  right for a tile and wrong for a figure still carrying captions, and an annotation pushed
+  above the paper does not error, it just stops drawing — which is how FR-11's assumptions
+  vanished from the deliverable while every test stayed green (T-17).
+  `test_every_caption_fits_inside_the_margin_reserved_for_it` now does that arithmetic for
+  every panelised figure. It is the one figure on the page that is a *model output* rather than a
+  measurement, so it says so twice: the panel note carries the model and the rate, and the
+  figure's own caption carries every assumption plus "not a tradable price". That caption
+  lives inside the figure because that is the only part which survives onto the static page,
+  and CI greps the built HTML for it.
+- **The X ruler drives both 3D/2D panels, not just the hero** (T-43). The surface and the
+  smile derived from it must never be read on different axes, so the hero's chip switches
+  both and they open on the same one. Dollars at load: panels [2], [5], [6] and [7] all carry
+  dollar strike axes and are not affected by the chip, so opening in K keeps the whole page in
+  one unit, and one click rebases the two that can be rebased.
 - **The as-of slider drives every panel**, not just the hero (T-42/AD-5). Panel [2] is the
   deliberate exception: the underlying is 12 weeks of context, and re-cutting it per date
   would destroy the very thing it is there to show. Everything else — the scatter, the spread
@@ -272,6 +324,8 @@ judgement calls; they are executable now.
 | 2026-09-02 | PO asked to pair the underlying with the price surface. Grid moved from 2 columns to 10 so the hero row could be 7/3 rather than an even split; the remaining four figures re-flowed 5+5 across two rows. |
 | 2026-09-02 | PO caught three defects by eye. Put markers were unreadable (open symbols, and hues derived as near-shades of their calls) — puts re-hued to violet/green, all markers filled (§3). The mark-vs-print scatter drew one unlabelled array-coloured trace, so the puts read as missing — split into named Calls/Puts traces with a legend. And the hero row wasted vertical space — height 760 → 600 plus `align-items:start` (§5). All three now have tests. |
 | 2026-09-04 | PO: the X-ruler chip overlapped its neighbours in the band above the plot. Moved **inside** the plot area, top-left, behind the `MENU_X`/`MENU_Y` tokens and a test that keeps it out of that band (§5). |
+| 2026-09-04 | **PO reversed the IV panel's form and position (T-45).** The 3D scatter "just looks like a bunch of scattered points — I can't tell what it's trying to tell me", and the panel was too far from the surface it derives from. It is now a **2D smile** (IV vs `K / S`, one curve per expiry, sequential `EXPIRY_RAMP`) sitting at **[3]**, directly under the hero and beside mark-vs-print; spread moved to full width so the occupancy pair survives. Retired `SCENE_ASPECT_WIDE`, `SCENE_CAMERA_WIDE` and `WIDE_FIGURE_MARGIN` — the three tokens the 3D form had needed — and added `EXPIRY_RAMP`, `SMILE_MARGIN`, `SMILE_LEGEND_Y`, `SMILE_LINE_WIDTH`, `SMILE_MARKER_SIZE`. Three things were again visible only in the render: the legend overprinted the caption, the assumptions line ran off a 5-column tile, and the panel header wrapped and left the row 17px ragged. |
+| 2026-09-04 | FR-11's IV surface added as panel **[7]**, full width at hero height, closing the page (T-17) — **superseded the same day by the row above**. Colour was free (it reused the mark hues and the circle glyph) but the geometry was not: a 2.6:1 panel needed three new measurements. Both of its defects were caught by looking at the built page rather than by a test — the tile margin clipped the assumptions caption off the canvas, and the hero's near-cubic scene left the cloud adrift in empty navy. |
 | 2026-09-04 | FR-10's X-ruler toggle added to the hero (T-16). New chrome element: an amber dropdown chip at the right of the caption band. Its dark-on-amber scheme is forced by plotly.js's unthemeable `MENU_ACTIVE_BG` highlight, which amber type cannot clear (§3, §5). |
 | 2026-09-03 | PO asked whether the spread chart should follow the slider. It did not — nor did any supporting panel — so the page showed two as-of dates at once. Cross-filtering wired in (T-42, AD-5 amendment); readout labels lost their embedded date since the as-of now moves. |
 | 2026-09-02 | Hero caption overprinted its own legend — both sat in the band just above the plot. Caption clearance and the top margins are tokens now, and the caption was cut to the one thing the panel header does not already say. |

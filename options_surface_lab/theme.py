@@ -174,6 +174,50 @@ MENU_Y = 0.98
 HERO_MARGIN = dict(l=10, r=10, t=104, b=12)
 HERO_MARGIN_WITH_SLIDER = dict(l=8, r=8, t=116, b=84)
 
+# FR-11's smile colours by expiry, and expiry is an ORDERED variable — near-dated through
+# far-dated — so it takes a sequential ramp rather than a categorical palette: the reader can
+# tell which end of the ladder a curve sits on without consulting the legend.
+#
+# The ramp runs between the two MARK hues. Every point on that panel is inverted from the
+# mark and there is no print series beside it for cyan to be mistaken for, so this introduces
+# no new hue and leaves the README-locked cyan-mark / magenta-print encoding untouched (§3).
+EXPIRY_RAMP = (MARK, MARK_PUT)
+
+# The smile puts its legend BELOW the plot and keeps two caption lines above it. A horizontal
+# legend of nine expiries is far too wide to share the top band with a caption on a 5-column
+# tile — they overprinted on the first build — and there is no room to stack a third row up
+# there. Bottom is free, and it is the same arrangement `settle_vs_trade_figure` already uses.
+# The top figure is sized by `test_every_caption_fits_inside_the_margin_reserved_for_it`.
+SMILE_MARGIN = dict(l=56, r=18, t=58, b=88)
+SMILE_LEGEND_Y = -0.30
+
+SMILE_LINE_WIDTH = 1.6
+SMILE_MARKER_SIZE = 5
+
+
+def _hex_to_rgb(value: str) -> tuple:
+    value = value.lstrip("#")
+    return tuple(int(value[i : i + 2], 16) for i in (0, 2, 4))
+
+
+def expiry_colors(n: int) -> list:
+    """``n`` colours stepping across :data:`EXPIRY_RAMP`, near-dated first.
+
+    Sampled rather than listed so the ladder restyles with the ramp and cannot fall out of
+    step with the number of expiries in the panel (AD-6).
+    """
+    if n <= 0:
+        return []
+    lo, hi = (_hex_to_rgb(c) for c in EXPIRY_RAMP)
+    if n == 1:
+        return [EXPIRY_RAMP[0]]
+    out = []
+    for i in range(n):
+        t = i / (n - 1)
+        out.append("#%02X%02X%02X" % tuple(round(a + (b - a) * t) for a, b in zip(lo, hi)))
+    return out
+
+
 TEMPLATE = "plotly_dark"  # base only — every colour below is overridden explicitly
 
 

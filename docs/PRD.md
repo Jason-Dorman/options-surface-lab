@@ -57,8 +57,8 @@ package with a real committed LSEG panel, a test suite, and a live deployment.
 | Asset | State |
 |---|---|
 | [options_surface_app.py](../options_surface_lab/options_surface_app.py) | Reflex page + `State` + cache-first LSEG loader. **Local dev and the checkpoint demo only** — the published page runs no Reflex code (AD-4). |
-| [option_surface_utils.py](../options_surface_lab/option_surface_utils.py) | `parse_option_ric`, `build_option_ric`/`build_candidate_rics`, `flatten_lseg_options`, `attach_underlying`, `pivot_trade_settle`, `summarize_sparsity`, `synthesize_demo_payload`, `surface_grid`, `curated_asof_dates`. Locked by the FR-3 transform suite (T-4). |
-| [option_surface_plot.py](../options_surface_lab/option_surface_plot.py) | Candlestick, 3D price surface (`x_mode` = strike or K/S, FR-10), settle-vs-trade scatter + occupancy bars, coverage + spread heatmaps, the published page's static surface + its per-date `asof_frames()` payload. All styling via `theme.py` (FR-8 landed 2026-09-02). |
+| [option_surface_utils.py](../options_surface_lab/option_surface_utils.py) | `parse_option_ric`, `build_option_ric`/`build_candidate_rics`, `flatten_lseg_options`, `attach_underlying`, `pivot_trade_settle`, `summarize_sparsity`, `synthesize_demo_payload`, `surface_grid`, `curated_asof_dates`, and FR-11's inversion — `bs_price`, `iv_refusal`, `implied_vol`, `attach_implied_vol` (T-17). Locked by the FR-3 transform suite (T-4) and `tests/test_iv.py`. |
+| [option_surface_plot.py](../options_surface_lab/option_surface_plot.py) | Candlestick, 3D price surface (`x_mode` = strike or K/S, FR-10), settle-vs-trade scatter + occupancy bars, coverage + spread heatmaps, the derived IV smile (`iv_smile_figure`, FR-11), the published page's static surface + its per-date `asof_frames()` payload. All styling via `theme.py` (FR-8 landed 2026-09-02). |
 | [theme.py](../options_surface_lab/theme.py) | Design tokens — the only file holding a colour or a font name — plus the shared figure builders (`figure_layout`, `title`, `caption`, `axis`, `scene`, `legend`, `slider`, `menu`). Direction recorded in [DESIGN-BRIEF.md](DESIGN-BRIEF.md). |
 | [build_preview.py](../build_preview.py) | **The deliverable** (AD-4/T-41): builds the single self-contained `index.html` that Pages serves. CI runs it on every push. |
 | `option_pipeline_data.synthetic.pkl` | **Orphaned** — nothing loads it, and it fails to unpickle under the installed pandas. The no-cache fallback is generated in-process by `synthesize_demo_payload()`. |
@@ -295,15 +295,35 @@ legend state untouched; dragging the as-of slider *while in K/S* moves the whole
 moneyness; switching back to strike keeps the slider where it is. Zero page errors, zero
 console errors.
 
-**FR-11 — Crude IV surface from settles**
-Invert Black–Scholes on SETTLE (European approximation) using a constant rate; assumptions
-(rate value, no dividends, act/365, European exercise) written on the page next to the
-figure. Rendered as its own figure/tab, visually labeled as derived — with the explicit
+**FR-11 — Crude IV surface from the mark** — ✅ **met 2026-09-04 (T-17)**
+Invert Black–Scholes on the `MARK` slot (European approximation) using a constant rate;
+assumptions (rate value, no dividends, act/365, European exercise) written on the page next to
+the figure. Rendered as its own figure, visually labeled as derived — with the explicit
 caption that this IV is still not a tradable price. Solver must fail gracefully (skip, don't
-crash) on sub-intrinsic or near-zero settles.
+crash) on sub-intrinsic or near-zero marks.
 *Accepted when:* IV figure renders from the real cache; assumptions are printed; degenerate
 inputs produce gaps rather than errors or absurd IVs; unit test covers round-tripping a
 known BS price back to its vol.
+
+*Acceptance record (2026-09-04):* panel **[3]**, half width in row 2 directly under the price
+surface, on both the Reflex app and the published page — a **2D smile** of implied vol against
+`K / S`, one curve per expiry. (It shipped first as a full-width 3D scatter at the foot of the
+page; the PO reversed both the form and the position the same day — T-45 — because the cloud
+was unreadable and sat too far from the surface it derives from.) `RISK_FREE_RATE`
+= **4.00%** (OQ-2, PO). The figure's own caption carries every assumption — "DERIVED ·
+European Black-Scholes on MID_PRICE · r = 4.00% · no dividends · act/365 · American exercise
+ignored" — plus "Not a tradable price" and a count of how many **strikes** carry a vol for the
+selected date, counted in strikes rather than contract-days so the number matches the dots a
+reader can count; CI greps the built page for it. That count moves with the as-of slider along
+with the curves and the legend: it shipped frozen
+on the build date and was caught by T-44's adversarial review, not by the suite and not by the
+session's own browser check, which had verified only that the geometry moved. **6,275 of 7,458 contract-days
+invert (84.1%)** and the 1,183 that do not are absent from the figure rather than filled in
+(586 no mark, 296 expiry day, 293 sub-intrinsic, 8 bracket misses) — `iv_refusal` names each
+reason and `tests/test_iv.py` asserts every path returns NaN rather than raising or pinning to
+the bracket. The round trip (BS-price a known σ, invert, recover it) is parametrised over
+eight ITM/ATM/OTM × call/put cases. The panel follows the as-of slider like every other one
+(AD-5/T-42). Co-built with `notebooks/02_iv_surface.ipynb` (T-25).
 
 **FR-12 — Spot plane overlay**
 In the 3D figure, a translucent vertical plane at `K = S` (as-of date's underlying close),
@@ -363,8 +383,17 @@ site with the rubric complete outranks it on the deadline.)
 ## 11. Open questions
 
 - **OQ-1:** Exact Class 2 date (checkpoint) — pins M1.
-- **OQ-2:** Constant rate for FR-11 (pick something defensible, e.g. a current short T-bill
-  yield, and write it down — the writing-down matters more than the number).
+- **OQ-2:** ~~Constant rate for FR-11.~~ **Closed 2026-09-04 — `r = 4.00%`**, cited as a
+  short T-bill yield, `RISK_FREE_RATE` in `option_surface_utils.py` and printed on the
+  figure. The PRD's framing — "the writing-down matters more than the number" — was then
+  *measured* rather than assumed (notebook 02 §5): 0% → 4% moves the median inverted vol by
+  1.28 vol points on a ~86% panel, but the 95th percentile by 5.69 and the worst row by
+  24.96 — measured over the 6,229 contract-days invertible at both rates. (State the row
+  set: the first version of this entry quoted tail figures computed over a different
+  subset, which is how a defensible number becomes an indefensible sentence.)
+  The tail is deep-ITM contracts, where the discounted strike moves the intrinsic floor while
+  vega is nearly zero. So the number is cheap for most rows and emphatically not free for
+  some — which is the argument for printing it, not a reason to treat it as arbitrary.
 - **OQ-3:** ~~Confirm UUUU has no split in the 12-week window (blocks FR-2 commit).~~
   **Closed 2026-08-31 — no split.** Evidence in BACKLOG T-6: price continuity (max
   overnight move +10.2%), an unbroken $0.50 strike grid across all expiries, and option
@@ -397,7 +426,7 @@ site with the rubric complete outranks it on the deadline.)
 ## 12. Definition of done (submission checklist)
 
 - [ ] All P0 acceptance criteria met (FR-1 … FR-9)
-- [◐] All P1 acceptance criteria met (FR-10 … FR-12) — FR-10 met *(T-16, 2026-09-04)*; FR-11/FR-12 open, cuttable per §8
+- [◐] All P1 acceptance criteria met (FR-10 … FR-12) — FR-10 met *(T-16, 2026-09-04)*, FR-11 met *(T-17, 2026-09-04)*; FR-12 open, cuttable per §8
 - [x] Tests green on a clean clone with no LSEG credentials *(CI, every push — NFR-4)*
 - [◐] Pages URL renders in incognito: figures, toggles, numbers ✅ *(PO-verified 2026-09-03)* — **three sentences still missing (G-4 / T-12)**
 - [ ] Canvas submission posted with the repo + site link

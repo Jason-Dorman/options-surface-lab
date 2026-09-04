@@ -173,16 +173,17 @@ entirely. AD-4.)*
 **`tests/`** — mirrors the transform core first, then everything a defect could reach the
 published page through. Uses the seeded synthetic panel as its fixture (AD-7), exposed as the
 session-scoped `synthetic_payload` / `synthetic_wide` fixtures in `tests/conftest.py`.
-**154 green, no xfail (2026-09-04):** `test_ric_parsing` / `test_ric_building` /
-`test_transforms` / `test_acquisition` cover the FR-3 chain and the pull; `test_app_figures`
-pins the app→plot call sites, the published hero's controls and FR-10's axis modes;
-`test_theme` makes FR-8 mechanical (no colour/font literals, WCAG AA, marker identity);
-`test_build_preview` asserts against the **built artifact** because that is the only place the
-page's wiring exists. The IV round-trip lands with FR-11.
+**202 green, no xfail (2026-09-04):** `test_ric_parsing` / `test_ric_building` /
+`test_transforms` / `test_acquisition` cover the FR-3 chain and the pull; `test_iv` covers
+FR-11 — the Black-Scholes round trip and, at equal weight, every path on which the inversion
+must refuse; `test_app_figures` pins the app→plot call sites, the published hero's controls,
+FR-10's axis modes and the IV panel's trace-order contract; `test_theme` makes FR-8 mechanical
+(no colour/font literals, WCAG AA, marker identity); `test_build_preview` asserts against the
+**built artifact** because that is the only place the page's wiring exists.
 *Known blind spot:* nothing here can click. Browser verification of the published page is a
 manual procedure in [RUNBOOK](RUNBOOK.md) §5, not a test.
 
-**`notebooks/`** — data exploration only, numbered (`01_…`) as the semester accumulates.
+**`notebooks/`** — data exploration only, numbered (`01_…`, `02_…`) as the semester accumulates.
 Notebooks import the package; nothing imports from notebooks, and no transform logic lives
 in them — anything worth keeping graduates into `option_surface_utils.py` with a test
 (AD-3 discipline). **Co-build policy:** every data/model capability (transforms, models,
@@ -384,7 +385,7 @@ architecture change (§5, §6 first).
 | Add or modify a figure | `option_surface_plot.py` (+ page slot in app) | utils internals |
 | Add a derived column / stat / model (e.g. IV) | `option_surface_utils.py` + tests | plot, app |
 | Add a page for a new assignment | new module + `app.add_page` | existing page, utils |
-| Add a control / interaction | app (local) **and** its Plotly-native equivalent (production, AD-5). On the published page a new control must write **disjoint properties** from the ones already there — the as-of slider owns `visible`, FR-10's axis menu owns `x` — or the two silently undo each other (T-15, T-16) | — |
+| Add a control / interaction | app (local) **and** its Plotly-native equivalent (production, AD-5). Two Plotly controls acting on the **same figure** must write **disjoint properties** — on the hero the as-of slider owns `visible` and FR-10's axis menu owns `x` — or they silently undo each other (T-15, T-16). A control reaching a **different** panel goes through the one inline listener, and there the rule is inverted: the listener must be the **sole writer** of any property it touches, holding whatever state the controls select between. That is how the slider and the axis menu both drive the smile's `x` without fighting (T-43) — the payload carries a complete variant per `(date, mode)` pair | a second writer of a property the listener owns |
 | Add an axis mode / change what an axis means | `X_MODES` + `X_AXIS_TITLE` + `X_MODE_LABEL` in `option_surface_plot.py`, then both hero builders and the app's select | `z` / `y` / trace names / marker styling — a mode is a ruler, not a transform (FR-10) |
 | Pull different/more data | acquisition function + additive payload keys | payload's existing keys (§5) |
 | Change how missing data renders | check AD-9 first | — |

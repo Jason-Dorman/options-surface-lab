@@ -169,10 +169,65 @@ position. Zero page/console errors. That check is a throwaway venv, not part of 
 of token: a colour plotly.js hardcodes and we cannot override, recorded so the contrast test
 can measure a ground we really do render type against.
 
+T-17 + T-25 landed 2026-09-04 (FR-11, the second P1 stretch). Black-Scholes inverted on the
+mark, as **panel [7]** — a full-width 3D cloud of implied vol over (strike or K/S, DTE) —
+plus `notebooks/02_iv_surface.ipynb`. The PO closed **OQ-2 at `r = 4.00%`** and chose the
+scatter form. Three things worth carrying forward:
+
+- **The refusals are the feature, not the residue.** `iv_refusal` names why a row cannot be
+  inverted and `implied_vol` returns NaN for all of them, so 6,275 of 7,458 contract-days
+  invert (84.1%) and the other 1,183 are *absent* from the figure rather than filled in —
+  586 no mark, 296 expiry day, 293 sub-intrinsic, 8 bracket misses. A vol pinned to the
+  bracket would have been the easy defect here (AD-9).
+- **The rate is not as free as the PRD assumed.** OQ-2's framing was "the writing-down
+  matters more than the number"; measured over the 6,229 contract-days invertible at both
+  rates, 0% → 4% moves the median vol by 1.28 points on a ~86% panel but the 95th percentile
+  by 5.69 and the worst row by 24.96 — deep ITM, where the discounted strike moves the
+  intrinsic floor while vega is ~0. Always quote the row set with the number: the first
+  landing mixed figures from two different subsets across the docs and the code comment.
+  Notebook 02 §5.
+- **FR-11's figure is a 2D smile at panel [3], not a 3D cloud at [7]** (PO, 2026-09-04,
+  T-45). The 3D scatter was unreadable — "a bunch of scattered points" — and the 2D form
+  makes the term structure obvious: each expiry's smile span collapses 81.8 → 13.4 vol points
+  from the 7-day to the 42-day expiry. Layout is now 6+4 / 5+5 / 10 / 5+5, with spread full
+  width so the occupancy grids stay paired. Three rules the smile added: the expiry trace
+  ladder is fixed **panel-wide** (a per-date ladder breaks restyle-by-index *and* re-colours
+  curves), a refused strike is `None` with `connectgaps=False` (a line is the one chart that
+  can bridge a hole and invent a vol), and the caption counts **strikes** so its number
+  matches the dots on screen.
+- **On the published page, a control reaching another panel goes through the listener — and
+  the listener must be that property's SOLE writer** (T-43). The hero's K/S chip now drives
+  the smile too. T-16's "two controls must write disjoint properties" is about controls acting
+  on one figure *directly*; here neither does, so both can write the smile's `x` provided the
+  listener holds the `(date, mode)` pair and the payload carries a variant per pair. Both
+  panels open on Strike (K), matching the hero's menu, so the page loads in one unit.
+- **A grep-based CI guard is orphaned by a copy edit.** Shortening that caption left the
+  publish guard looking for "DERIVED, NOT OBSERVED" — it would have failed the deploy. The
+  guard's phrases are now pinned to the page by a test, and none may contain "/" or "·":
+  Plotly's JSON encoder ships a slash as `/` (the same escape that bit FR-10's "K / S"),
+  so a guard spanning one silently never matches what it guards.
+- **A browser check that only looks at geometry is not a browser check.** T-44's adversarial
+  review found two more defects in the shipped page *after* this session had driven it in
+  Chromium and passed 17 assertions: the IV caption still counted the build date's inversions
+  on all 52 other slider steps (including the one date where the panel is empty, where it
+  described a figure showing nothing), and `customdata` was never restyled, so every hover
+  named a build-date contract. Both are T-42's defect class living in the parts of a figure
+  that are not its `x/y/z` — **when a panel follows the slider, audit every channel that
+  states something about the date: geometry, hover identity, and any annotation carrying a
+  number.** It also found `spread_heatmap`'s caption clipped in the shipped page and the new
+  caption-fit test certifying it (it modelled the anchor but not the text box).
+- **Two defects were visible only in the built page, again.** `as_panel_figure` replaced the
+  figure's margin with the 30px tile default and silently clipped FR-11's assumptions caption
+  off the canvas — an annotation above the paper does not error, it just stops drawing — and
+  the hero's near-cubic scene left the cloud adrift in a 2.6:1 box. Both fixed
+  (`WIDE_FIGURE_MARGIN`, `SCENE_ASPECT_WIDE`, `SCENE_CAMERA_WIDE`), and the caption one now
+  has a test that does the arithmetic for **every** panelised figure. Driven in a real
+  Chromium: panel [7] follows the as-of slider, keeps its `[Calls, Puts]` trace identity, and
+  spans all ten columns. Zero page/console errors.
+
 **Next up:** **T-12** (the three PO-authored sentences, FR-7) — the last P0 gap, and the only
-rubric item with nothing on the page at all. **154 tests
-green, no xfail** (the "90" this paragraph carried was stale — `tests/test_build_preview.py`
-was never counted into it). Update this paragraph as things land (lockstep rule).
+rubric item with nothing on the page at all. Then T-18 (FR-12) if M4 allows. **202 tests
+green, no xfail.** Update this paragraph as things land (lockstep rule).
 
 **Secrets:** `lseg-data.config.json` (repo root) holds the LSEG app-key. It is gitignored —
 never commit it, never print its contents, never copy it into anything that ships.

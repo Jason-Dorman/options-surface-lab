@@ -78,7 +78,8 @@ options_surface_lab/                  # repo root = Reflex project root
 │   ├── test_transforms.py
 │   └── test_iv.py                    # FR-11
 ├── notebooks/
-│   └── 01_data_exploration.ipynb     # exploration — consumes the package, never a dependency
+│   ├── 01_data_exploration.ipynb     # exploration — consumes the package, never a dependency
+│   └── 02_iv_surface.ipynb           # FR-11: where the inversion degenerates, rate sensitivity
 └── .github/workflows/deploy.yml      # pytest → export → Pages
 ```
 
@@ -92,7 +93,7 @@ Notes:
   app's `CACHE_FILE` and `load_payload()`.
 - *Status 2026-09-02:* layout landed (G-1/G-2/G-8 resolved); `theme.py` landed with FR-8
   (T-13). `tests/` carries parsing, transform, RIC-building, acquisition, figure, preview and
-  theme suites. Not yet created: `test_iv.py` (FR-11). The Pages workflow lives at
+  theme suites, plus `test_iv.py` (FR-11's round trip and its refusals). The Pages workflow lives at
   `.github/workflows/pages.yml`, not `deploy.yml`.
 
 ## 4. Component architecture
@@ -278,20 +279,28 @@ One row per **(date, ric)**; the interface consumed by every figure and by 1.2.
 |---|---|
 | `date, ric, root, cp, expiry, strike, dte, spot, moneyness` | Carried from tidy |
 | `TRDPRC_1` | Last trade that day (NaN = no print). `CLOSE`, if ever present, is folded in here |
-| `SETTLE` | Exchange mark (NaN = not listed / no settle) |
-| `has_trade`, `has_settle` | Non-null flags |
-| `abs_diff` | `abs(SETTLE − TRDPRC_1)` |
-| `rel_diff` | `abs_diff / SETTLE`, NaN when settle is 0 |
+| `MARK` | The mark **slot**, filled by `MARK_FIELD_DEFAULT` = `MID_PRICE` (T-32). There is no exchange settle for these contracts — §10b / checkpoint_audit §3 |
+| `BID`, `ASK` | The two sides, when quoted (one-sided days keep the side they have) |
+| `has_trade`, `has_mark` | Non-null flags |
+| `abs_diff` | `abs(MARK − TRDPRC_1)` |
+| `rel_diff` | `abs_diff / MARK`, NaN when the mark is 0 |
+| `spread`, `spread_pct` | `ASK − BID` and the same as a percent of the mark (T-39) — whether the mark is believable, not merely present |
 
 Duplicate observations collapse via `aggfunc="last"`.
 
+**`iv` is not part of this frame.** `attach_implied_vol` (FR-11) returns a *copy* carrying an
+extra `iv` column rather than widening `pivot_trade_settle`: the inversion depends on an
+assumed rate, and a modelled column has no business arriving unannounced in the interface
+that FR-3, FR-6 and 1.2 all consume. Callers that want vols ask for them.
+
 ### 7.3 Sparsity statistics (`summarize_sparsity`) — FR-6 source of truth
 
-Over a slice (normally one as-of date): `n_quotes` (rows), `n_settle_only`
-(`has_settle & ~has_trade`), `n_trade_only`, `n_both`,
-`pct_settle_no_trade = 100 · mean(settle_only)`, `median_abs_diff` and
-`median_rel_diff_pct` over rows with both (None when the set is empty), `n_dates`,
-`n_series`. Empty input returns zeros/None — never raises.
+Over a slice (normally one as-of date): `n_quotes` (rows), `n_mark_only`
+(`has_mark & ~has_trade`), `n_trade_only`, `n_both`,
+`pct_mark_no_trade = 100 · mean(mark_only)`, `median_abs_diff` and
+`median_rel_diff_pct` over rows with both (None when the set is empty), `median_spread`,
+`median_spread_pct`, `pct_spread_over_half` (T-39), `n_dates`, `n_series`. Empty input
+returns zeros/None — never raises.
 
 ### 7.4 Interpolated sheet (`surface_grid`)
 
@@ -416,7 +425,7 @@ as-of/cp selection, and return `go.Figure`. All colors/fonts/layout come from `t
 | 3D price surface (FR-4) | `price_surface_figure` (dev) / `static_surface_figure` (published) | X strike or K/S per `x_mode` (FR-10), Y DTE (reversed — near-dated toward viewer), Z price; mark markers, TRDPRC_1 diamonds, translucent interpolated sheet, spot plane (FR-12) | Legend toggles per trace and per right; as-of slider; `updatemenus` dropdown for the X ruler |
 | Settle vs trade (FR-5) | `settle_vs_trade_figure` | Scatter vs `y = x` (off-diagonal = mark ≠ print), colored by C/P; bars of settle-only / both / print-only counts | Hover, legend |
 | Occupancy heatmaps ×2 | `coverage_heatmap` | (expiry × strike) grid, lit = a number exists that day; one per field, chronologically ordered expiries | Hover |
-| IV surface (FR-11) | *new* `iv_surface_figure` | Black–Scholes IV inverted from SETTLE; assumptions captioned on-figure | Legend, hover |
+| IV smile (FR-11) | `iv_smile_figure` | 2D smile of Black–Scholes IV inverted from the `MARK` slot — X strike or K/S per `x_mode`, Y implied vol %, one line+marker trace per expiry from `panel_expiries` on a sequential ramp; both rights collapse to their median at each strike; a refused strike is `None` with `connectgaps=False`, so a hole is a visible break; assumptions captioned on-figure | Legend (per expiry), hover; follows the as-of slider on the published page |
 
 Marker-identity invariant (FR-5): the mark and TRDPRC_1 differ in **both** color and symbol
 in every theme — circle = mark, diamond = print, for both rights — and the sheet stays
@@ -488,6 +497,15 @@ assertions on hand-built panels. See PRD OQ-6.
   doubled a 2.4 MB page to change the units on one axis; swapping the x arrays costs +205 KB
   raw (~+70 KB gzipped) for the same behaviour. The page is still backend-free, so the
   control is still Plotly-native (AD-5).
+  **The smile follows the same menu (T-43).** Panel [3] has no control of its own; it learns
+  the ruler from the hero's `plotly_buttonclicked` and re-reads the current date under it.
+  That makes the smile's `x` the one property on the page written by two controls — the slider
+  picks the date, the menu picks the ruler — which is safe only because neither writes it
+  directly: both feed the single inline listener, which owns the `(date, mode)` pair. The
+  listener is seeded with the build date, because a null there sends the first toggle to
+  whichever date is first in the payload. Default ruler is `X_MODES[0]` (strike) on *both*
+  panels, so the page opens in one unit (PO, 2026-09-04).
+
   Two invariants make it safe to call a change of ruler rather than a change of data:
   * The mode never touches `z`, `y`, a trace name, a colour or a symbol — FR-10's acceptance
     criterion, asserted trace-for-trace.
@@ -502,13 +520,67 @@ assertions on hand-built panels. See PRD OQ-6.
   and every legend state untouched; the as-of slider still moves the whole page while in K/S
   and rebases against the newly selected date's spot; switching back leaves the slider where
   it is. No page or console errors.
-- **FR-11 IV inversion (in `utils`, pure):** European Black–Scholes, price = SETTLE, `S` =
-  as-of spot, `T = dte/365`, constant `r` (value: PRD OQ-2, printed on the page), no
-  dividends. Solve for σ by Brent/bisection on [1e-4, 5]. **Skip (NaN) rather than solve**
-  when `dte = 0`, SETTLE ≤ intrinsic + ε, or the solver fails to bracket — degenerate
-  inputs must produce gaps, not crashes or absurd vols. Caveat rendered with the figure:
-  American-exercise and dividend effects ignored; this IV is not a tradable price.
-  Test: BS-price a known (σ, K, T), invert, recover σ within tolerance.
+- **FR-11 IV inversion — landed 2026-09-04 (T-17).** Pure functions in `utils`: `bs_price`
+  (European Black–Scholes, no dividends, act/365), `iv_refusal`, `implied_vol` (Brent on
+  `IV_BOUNDS` = [1e-4, 5.0]) and `attach_implied_vol`, which adds an `iv` column to a *copy*
+  of the wide table (§7.2). Price = the `MARK` slot, `S` = as-of spot, `T = dte/365`,
+  `r = RISK_FREE_RATE` = **4.00%** (PRD OQ-2, PO 2026-09-04), printed on the figure.
+
+  Inverting the mark rather than the print is deliberate: the print grid is a liquidity map,
+  so a vol surface built on it would measure who traded, not what volatility was.
+
+  **Refusal is a first-class outcome, and it is named.** `iv_refusal` returns the reason a row
+  cannot be inverted — expiry day (`T = 0`), no spot, no mark, price at or below the
+  discounted intrinsic floor, price above the no-arbitrage cap — and `None` when it can.
+  `implied_vol` returns NaN for all of those plus a bracket miss, so a degenerate input is a
+  gap in the surface rather than a crash or a 500% vol pinned to the bracket (AD-9). Measured
+  on the committed panel: **6,275 of 7,458 contract-days invert (84.1%)**; the refusals are
+  586 with no mark (7.9%), 296 on expiry day (4.0%), 293 sub-intrinsic (3.9%) and 8 bracket
+  misses (0.1%). The sub-intrinsic rows are deep-ITM contracts — American early exercise puts
+  a floor under them that a European model does not carry.
+
+  **The rate is cheap in the middle and not in the tail.** Moving `r` from 0% to 4% shifts the
+  median inverted vol by 1.28 vol points on a panel whose median vol is ~86%, but the 95th
+  percentile by 5.69 and the worst row by 24.96 — over the 6,229 contract-days invertible
+  at both rates, which is the row set every one of these figures is quoted over. Deep ITM,
+  where the discounted strike moves
+  the intrinsic floor while vega is nearly zero. Notebook 02 §5 carries the distribution;
+  `tests/test_iv.py` pins the shape.
+
+  Per-date payload: `iv` is keyed **by ruler** — `{strike: {...}, moneyness: {...}}` — and
+  each holds a complete `_smile` variant: `x`, `y`, **`show`** (per-trace `showlegend`, so the
+  legend stops advertising expiries that are not alive that day) and **`note`** (annotation
+  `IV_COUNT_ANNOTATION` = 1, which counts that date's inverted strikes). Keyed by ruler rather
+  than sharing `y`/`show` across modes because a date with no underlying close has no K/S
+  ruler at all, so in that mode the curves, the legend *and* the count are legitimately empty
+  while the strike ruler still lays out its axis (T-43, FR-10, AD-9). Everything the panel
+  asserts about a date travels with the date. The first version carried geometry only, so on
+  the published page the caption stayed on the build date while the curves moved — the T-42
+  defect surviving in the non-geometric half of a figure (T-44). Annotation 0 holds the
+  date-independent assumptions and is never rewritten.
+
+  Figure: `iv_smile_figure` — **a 2D smile, not a 3D cloud and not an interpolated sheet**
+  (PO, 2026-09-04; the 3D form was unreadable — T-45). Implied vol against the FR-10 ruler,
+  one line+marker trace per expiry. Three properties carry the weight:
+
+  * **The trace ladder is `panel_expiries(wide)` — panel-wide and fixed**, not per date. The
+    published page restyles by trace index, so a ladder that grew or shrank with the date
+    would put one expiry's curve into another's slot; fixing it also means an expiry keeps one
+    colour across every step, which is what lets the eye follow a curve through the window.
+    Empty traces are emitted rather than skipped, exactly as `settle_vs_trade_figure` does.
+  * **Holes break the line.** A curve drawn only over the strikes that inverted would bridge a
+    refused strike with a straight segment — a line chart's one way to invent data a scatter
+    cannot. Curves are built over the strikes *listed* that day, `None` at each refusal,
+    `connectgaps=False` (AD-9).
+  * **Both rights collapse to their median at each strike.** Parity says a call and a put at
+    one strike should agree; where they do not, that is a property of the input (American
+    exercise, a stale midpoint) and belongs to panel [4]'s argument, not to a second tangle of
+    lines here. The caption therefore counts **strikes**, not contract-days, so its number
+    matches the dots a reader can actually count.
+
+  Tests: BS-price a known (σ, K, T), invert, recover σ; the pricer against Hull's published
+  worked example; put-call parity on the forward direction; every refusal path individually;
+  and that the plotted point count equals the number of strikes that inverted.
 - **FR-12 spot plane (in `plot`):** constant-x `go.Surface` at `x = spot(asof)` spanning the
   slice's DTE and price ranges, low opacity, its own legend entry so it toggles like the
   sheet.

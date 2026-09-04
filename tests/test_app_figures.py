@@ -399,3 +399,340 @@ def test_the_toggle_rebases_each_trace_to_its_own_date_s_spot(wide):
         )
         checked += 1
     assert checked, "no trace carried a usable pair of rulers"
+
+
+# -------------------------------------------------------- the derived IV smile (FR-11, T-17)
+
+
+def test_the_iv_smile_builds_and_fills_its_panel(wide, asof):
+    from options_surface_lab import theme as T
+    from options_surface_lab.option_surface_plot import (
+        as_panel_figure,
+        iv_smile_figure,
+        panel_expiries,
+    )
+
+    fig = iv_smile_figure(wide, asof, ticker="UUUU")
+    assert fig.layout.height == T.PANEL_FIGURE_HEIGHT, "a 2D smile is a tile, not a hero"
+    panelised = as_panel_figure(fig, margin=T.SMILE_MARGIN)
+    assert panelised.layout.height == T.PANEL_FIGURE_HEIGHT
+    assert len(fig.data) == len(panel_expiries(wide))
+    assert any(any(v is not None for v in t.y) for t in fig.data), "no curve was drawn"
+
+
+def test_the_smile_ladder_is_the_same_on_every_date(wide):
+    """One trace per panel-wide expiry, always, in chronological order.
+
+    The published page restyles this figure by trace index when the slider moves, so a ladder
+    that grew or shrank with the date would put one expiry's curve into another's slot — the
+    same contract `settle_vs_trade_figure` lives under. Fixing it panel-wide also means an
+    expiry keeps its colour across every step, which is what lets the eye follow one curve
+    through the window.
+    """
+    from options_surface_lab.option_surface_plot import iv_smile_figure, panel_expiries
+
+    dates = sorted(wide["date"].dt.normalize().unique())
+    ladders = {tuple(t.name for t in iv_smile_figure(wide, d).data) for d in dates}
+    assert len(ladders) == 1, f"the expiry ladder varies by date: {len(ladders)} variants"
+    expected = tuple(pd.Timestamp(e).strftime("%b %d") for e in panel_expiries(wide))
+    assert list(ladders)[0] == expected
+
+    colours = {
+        tuple(t.line.color for t in iv_smile_figure(wide, d).data) for d in dates[:6]
+    }
+    assert len(colours) == 1, "an expiry must keep its colour on every as-of date"
+
+
+def test_the_iv_figure_prints_every_assumption_fr_11_requires(wide, asof):
+    """FR-11 is accepted only when the assumptions are written next to the figure. They ride
+    inside it because that is the only place that survives onto the static page."""
+    from options_surface_lab.option_surface_plot import iv_smile_figure
+    from options_surface_lab.option_surface_utils import MARK_FIELD_DEFAULT, RISK_FREE_RATE
+
+    text = " ".join(a.text for a in iv_smile_figure(wide, asof).layout.annotations).lower()
+    for needed in (
+        "european",                      # exercise style
+        "american exercise ignored",     # ...and that we know it is an approximation
+        f"r = {RISK_FREE_RATE:.2%}",     # the rate, PRD OQ-2
+        "no dividends",
+        "act/365",
+        MARK_FIELD_DEFAULT.lower(),      # what was inverted
+        "not a tradable price",          # the caveat FR-11 names explicitly
+        "derived",                       # ...and that none of it was observed
+    ):
+        assert needed in text, f"the IV figure never says {needed!r}"
+
+
+def test_a_refused_strike_breaks_the_line_instead_of_being_bridged(wide, asof):
+    """AD-9 on a line chart, which is the one thing a line can get wrong that a scatter cannot.
+
+    A smile drawn only over the strikes that inverted would join its neighbours with a
+    straight segment across the gap — drawing a vol for a strike where the solver refused.
+    The curve is therefore built over the strikes *listed* that day, with `None` at every
+    refusal and `connectgaps` off, so a hole renders as a visible break.
+    """
+    from options_surface_lab.option_surface_plot import iv_smile_figure
+    from options_surface_lab.option_surface_utils import attach_implied_vol
+
+    fig = iv_smile_figure(wide, asof)
+    for trace in fig.data:
+        assert trace.connectgaps is False, "a gap must never be bridged"
+        assert len(trace.x) == len(trace.y), "x and y must stay aligned across holes"
+
+    sl = attach_implied_vol(wide[wide["date"] == pd.Timestamp(asof)])
+    # every plotted point is a strike that actually inverted, and every listed strike appears
+    drawn = sum(1 for t in fig.data for v in t.y if v is not None)
+    listed = sum(len(t.x) for t in fig.data)
+    solved_strikes = sl.dropna(subset=["iv"]).groupby(["expiry", "strike"]).ngroups
+    all_strikes = sl.groupby(["expiry", "strike"]).ngroups
+    assert drawn == solved_strikes, "plotted points must be exactly the strikes that inverted"
+    assert listed == all_strikes, "the x axis must span every listed strike, holes included"
+    assert drawn < listed, "this panel always refuses some strikes — they must show as breaks"
+
+
+def test_the_smile_axis_follows_the_same_ruler_as_the_hero(wide, asof):
+    """FR-10 composes with FR-11 **in the Reflex app**: both read one `x_mode`.
+
+    Scoped to the dev app deliberately — see BACKLOG T-43 for the published page's gap.
+    """
+    from options_surface_lab.option_surface_plot import X_AXIS_TITLE, iv_smile_figure
+
+    for mode in ("strike", "moneyness"):
+        fig = iv_smile_figure(wide, asof, x_mode=mode)
+        assert fig.layout.xaxis.title.text == X_AXIS_TITLE[mode]
+
+    strike = iv_smile_figure(wide, asof, x_mode="strike")
+    money = iv_smile_figure(wide, asof, x_mode="moneyness")
+    for a, b in zip(strike.data, money.data):
+        assert list(a.y) == list(b.y), "the ruler may not change the vols themselves"
+        assert a.name == b.name and a.line.color == b.line.color
+    # and K/S really is K over S, not a relabelled strike axis
+    spot = wide[wide["date"] == pd.Timestamp(asof)]["spot"].median()
+    for a, b in zip(strike.data, money.data):
+        for k, m in zip(a.x, b.x):
+            assert m == pytest.approx(k / spot, abs=1e-3)
+
+
+def test_the_iv_figure_degrades_instead_of_raising(wide):
+    """A date with no quotes is a themed empty panel, never an exception (AD-9)."""
+    from options_surface_lab import theme as T
+    from options_surface_lab.option_surface_plot import iv_smile_figure
+
+    fig = iv_smile_figure(wide, pd.Timestamp("1999-01-04"))
+    assert fig.layout.height == T.PANEL_FIGURE_HEIGHT
+    # the ladder is panel-wide, so the traces exist but draw nothing
+    assert all(not any(v is not None for v in t.y) for t in fig.data)
+    assert all(t.showlegend is False for t in fig.data), "no legend for curves that are absent"
+
+    empty = iv_smile_figure(wide.iloc[0:0], None)
+    assert empty.layout.height == T.PANEL_FIGURE_HEIGHT and not empty.data
+
+
+def test_no_spot_means_no_smile_rather_than_strikes_on_a_k_over_s_axis(wide, asof):
+    """The FR-10 rule, on this panel: a date with no underlying close gets no K/S ruler at
+    all, rather than raw strikes plotted against an axis labelled as a ratio (AD-9)."""
+    from options_surface_lab.option_surface_plot import iv_smile_figure
+
+    blind = wide.copy()
+    blind["spot"] = float("nan")
+    fig = iv_smile_figure(blind, asof, x_mode="moneyness")
+    assert all(len(t.x) == 0 for t in fig.data), "K/S was plotted with no spot to rebase on"
+    # ...while the strike ruler still works on the same frame
+    assert any(len(t.x) for t in iv_smile_figure(blind, asof, x_mode="strike").data)
+
+
+def test_every_caption_fits_inside_the_margin_reserved_for_it(wide, asof):
+    """An annotation pushed above the paper does not warn — it simply stops drawing.
+
+    Found on the built page (T-17): the IV figure's assumptions line sat at y = 1.12 while
+    `as_panel_figure` had replaced its margin with the 30px tile default, so FR-11's rate,
+    day-count and exercise style silently vanished from the deliverable while every test
+    stayed green. The arithmetic is small enough to just do: an annotation at `y` needs
+    `(y - 1) x plot-area height` of top margin above the plot — **plus the height of the text
+    itself**, because `theme.caption` anchors at the bottom of its box, so the glyphs hang
+    *above* the y it names.
+
+    The first version of this test omitted that line-height term and duly passed
+    `spread_heatmap`, whose caption was clipped in the shipped page by exactly the mechanism
+    the test was written to catch (adversarial review, 2026-09-04). A guard that models the
+    anchor but not the box is worse than none: it certifies the defect.
+    """
+    from options_surface_lab import theme as T
+    from options_surface_lab.option_surface_plot import (
+        as_panel_figure,
+        coverage_heatmap,
+        iv_smile_figure,
+        settle_vs_trade_figure,
+        spread_heatmap,
+    )
+
+    panelised = [
+        ("compare", as_panel_figure(settle_vs_trade_figure(wide, asof))),
+        ("spread", as_panel_figure(spread_heatmap(wide, asof, cp="C"))),
+        ("mark occupancy", as_panel_figure(coverage_heatmap(wide, asof, cp="C", field="MARK"))),
+        ("print occupancy", as_panel_figure(coverage_heatmap(wide, asof, cp="C", field="TRDPRC_1"))),
+        ("iv smile", as_panel_figure(iv_smile_figure(wide, asof), margin=T.SMILE_MARGIN)),
+        ("hero", app.price_surface_figure(wide, asof, cp="C")),
+    ]
+    for name, fig in panelised:
+        above = [a for a in fig.layout.annotations if (a.y or 0) > 1.0 and a.yref == "paper"]
+        if not above:
+            continue
+        plot_area = fig.layout.height - fig.layout.margin.t - fig.layout.margin.b
+        # yanchor="bottom" (theme.caption): the text box sits above its anchor, so reserve a
+        # line for it. 1.4x the font size is a normal line box and errs toward safety.
+        line = T.SIZE_CAPTION * 1.4
+        needed = max(a.y - 1.0 for a in above) * plot_area + line
+        assert fig.layout.margin.t >= needed, (
+            f"{name}: caption at y={max(a.y for a in above)} needs {needed:.0f}px of top "
+            f"margin ({needed - line:.0f} for the offset + {line:.0f} for the text) but only "
+            f"{fig.layout.margin.t}px is reserved — it will be clipped"
+        )
+
+
+def test_everything_the_iv_panel_says_about_a_date_travels_with_the_slider(wide):
+    """The whole panel follows the as-of slider — curves, legend and caption.
+
+    Adversarial review (2026-09-04) found this shipped broken in the panel's 3D form: the
+    frames payload carried only geometry, so the caption went on asserting the build date's
+    "170 of 216 listed contract-days inverted" over every other date — including the one date
+    where the panel is legitimately empty, where it described a figure showing nothing.
+
+    That is the T-42 defect (a panel left on its build-time data) reappearing in the parts of
+    a figure that are not its geometry. So the assertion is deliberately not "the curves
+    changed": it is that every per-date channel is present and self-consistent on every step.
+    """
+    from options_surface_lab.option_surface_plot import (
+        IV_COUNT_ANNOTATION,
+        asof_frames,
+        iv_smile_figure,
+        panel_expiries,
+        static_surface_figure,
+    )
+
+    from options_surface_lab.option_surface_plot import X_MODES
+
+    frames = asof_frames(wide)
+    labels = sorted({s.label for s in static_surface_figure(wide).layout.sliders[0].steps})
+    n_traces = len(panel_expiries(wide))
+    notes = set()
+    for label in labels:
+        by_mode = frames[label]["iv"]
+        assert set(by_mode) == set(X_MODES), (
+            f"{label}: the smile payload must carry every ruler — the hero's axis menu and "
+            "the as-of slider both write its x, so the listener needs any (date, mode) pair"
+        )
+        sm = by_mode[X_MODES[0]]
+        assert sm is not None, f"{label}: no IV frame at all"
+        assert sm["note"], f"{label}: no caption text, so the panel would keep a stale one"
+        notes.add(sm["note"])
+        assert len(sm["x"]) == len(sm["y"]) == len(sm["show"]) == n_traces, (
+            f"{label}: the expiry ladder changed length, so a restyle by index would "
+            "put one expiry's curve into another's slot"
+        )
+        for i in range(n_traces):
+            assert len(sm["x"][i]) == len(sm["y"][i])
+            # a curve advertised in the legend must actually have points, and vice versa
+            drawn = any(v is not None for v in sm["y"][i])
+            assert sm["show"][i] == drawn, (
+                f"{label} trace {i}: legend says {sm['show'][i]} but drawn={drawn}"
+            )
+        plotted = sum(1 for i in range(n_traces) for v in sm["y"][i] if v is not None)
+        assert plotted or not any(sm["show"]), "an empty date must advertise nothing"
+        # the caption has to count the dots the reader can actually see, in the same unit
+        listed = sum(len(sm["x"][i]) for i in range(n_traces))
+        assert f"{plotted} of {listed} listed strikes" in sm["note"], (
+            f"{label}: caption says {sm['note'][:90]!r} but {plotted} of {listed} are plotted"
+        )
+
+    assert len(notes) > 1, "one caption for every date means it is not per-date at all"
+    ann = iv_smile_figure(wide, labels[0]).layout.annotations
+    assert "listed strikes" in ann[IV_COUNT_ANNOTATION].text
+    assert "listed strikes" not in ann[0].text, (
+        "annotation 0 carries the assumptions and must stay date-independent — the listener "
+        "rewrites annotation IV_COUNT_ANNOTATION by index and would blow the rate away"
+    )
+
+
+def test_the_smile_opens_on_the_same_ruler_the_hero_opens_on(wide):
+    """The two panels are driven by one control, so they must agree before it is touched.
+
+    They did not: the hero's menu opens at `active=0` (strike) while the smile defaulted to
+    moneyness, so the published page showed two rulers side by side at load — invisible until
+    T-43 wired the dropdown through and made the mismatch the first thing you see.
+    """
+    from options_surface_lab.option_surface_plot import (
+        X_AXIS_TITLE,
+        X_MODES,
+        iv_smile_figure,
+        static_surface_figure,
+    )
+
+    hero = static_surface_figure(wide)
+    active = hero.layout.updatemenus[0].active or 0
+    hero_mode = X_MODES[active]
+    assert iv_smile_figure(wide, wide["date"].max()).layout.xaxis.title.text == (
+        X_AXIS_TITLE[hero_mode]
+    ), "the smile's default ruler must match the hero menu's active button"
+
+
+def test_the_axis_menu_and_the_slider_can_both_drive_the_smile(wide):
+    """T-43. FR-10's disjoint-properties rule applied to a panel with no menu of its own.
+
+    On the hero, the slider writes `visible` and the menu writes `x`, so the two never
+    collide. The smile has no menu, so BOTH controls reach it through one listener that owns
+    its `x` — which only works if the payload can produce every (date, mode) pair. This pins
+    that: each mode is a complete, self-consistent smile for that date, and switching the
+    ruler changes the x values without touching a single vol.
+    """
+    from options_surface_lab.option_surface_plot import X_MODES, asof_frames
+
+    frames = asof_frames(wide)
+    label = sorted(frames)[len(frames) // 2]
+    by_mode = frames[label]["iv"]
+    k, m = by_mode["strike"], by_mode["moneyness"]
+
+    assert [len(a) for a in k["y"]] == [len(a) for a in m["y"]], "the ladder must match"
+    for i in range(len(k["y"])):
+        assert k["y"][i] == m["y"][i], "a ruler may not change the vols"
+        assert k["show"][i] == m["show"][i], "a ruler may not change which curves are live"
+        for kx, mx in zip(k["x"][i], m["x"][i]):
+            assert kx != mx or kx == 0, "the x values must actually be rebased"
+            assert mx < kx, "moneyness is K/S on a >$1 underlying, so it must be smaller"
+    assert X_MODES == ("strike", "moneyness"), "the listener's default is X_MODES[0]"
+
+
+def test_a_date_with_no_spot_loses_the_whole_smile_not_just_its_ruler(wide):
+    """The IV panel depends on spot twice over, and the second dependency is easy to miss.
+
+    On the hero, spot is only a *ruler*: the prices are plotted with or without it, and a
+    missing close costs you the K/S axis alone. Here spot is an input to the **model** — no
+    underlying close means `iv_refusal` refuses every row — so the panel is empty under
+    *both* rulers. A test written on the hero's intuition (strike still draws, K/S does not)
+    asserts something false; this is what actually holds, and it is worth pinning because the
+    strike ruler keeps its axis and its listed strikes, so the panel looks populated until you
+    notice there are no points on it (AD-9).
+    """
+    from options_surface_lab.option_surface_plot import asof_frames, iv_smile_figure
+
+    blind = wide.copy()
+    blind["spot"] = float("nan")
+    asof = blind["date"].max()
+    label = str(pd.Timestamp(asof).date())
+    by_mode = asof_frames(blind, dates=[asof])[label]["iv"]
+
+    for mode in ("strike", "moneyness"):
+        sm = by_mode[mode]
+        assert not any(v is not None for row in sm["y"] for v in row), (
+            f"{mode}: a vol was inverted with no spot to invert against"
+        )
+        assert not any(sm["show"]), f"{mode}: the legend advertises curves that are not there"
+        assert " 0 of " in sm["note"], f"{mode}: the caption must own up to drawing nothing"
+
+    # the strike ruler still lays out its axis over the listed strikes — the panel is empty,
+    # not absent, which is the AD-9 distinction
+    assert any(len(row) for row in by_mode["strike"]["x"])
+    assert all(len(row) == 0 for row in by_mode["moneyness"]["x"]), (
+        "K/S has no ruler at all without a spot to rebase on (FR-10)"
+    )
+    assert not iv_smile_figure(blind, asof).layout.annotations[0].text.startswith("0")

@@ -15,6 +15,8 @@ from plotly.subplots import make_subplots
 from options_surface_lab import theme as T
 from options_surface_lab.option_surface_utils import (
     MARK_FIELD_DEFAULT,
+    RISK_FREE_RATE,
+    attach_implied_vol,
     summarize_sparsity,
     surface_grid,
 )
@@ -124,7 +126,9 @@ def candlestick_figure(df_stock: pd.DataFrame, ticker: str) -> go.Figure:
     return fig
 
 
-def as_panel_figure(fig: go.Figure, height: int | None = None) -> go.Figure:
+def as_panel_figure(
+    fig: go.Figure, height: int | None = None, margin: dict | None = None
+) -> go.Figure:
     """Strip a figure's own title and tighten it for a tiled panel (DESIGN-BRIEF §5).
 
     In the terminal layout each panel carries a header rule with its number and name, so a
@@ -133,10 +137,15 @@ def as_panel_figure(fig: go.Figure, height: int | None = None) -> go.Figure:
 
     Not applied to the hero surface: its title tracks the as-of slider, so it has to live
     inside the figure JSON where the slider can rewrite it (AD-5).
+
+    ``margin`` overrides the tile default for panels that are not tiles. The tile margin
+    reserves 30px above the plot, which is enough for a figure whose whole top band is now
+    empty and nowhere near enough for one still carrying a legend and two caption lines —
+    and an annotation pushed off the paper does not warn, it just stops drawing.
     """
     return fig.update_layout(
         title_text=None,
-        margin=T.PANEL_FIGURE_MARGIN,
+        margin=margin or T.PANEL_FIGURE_MARGIN,
         height=height or T.PANEL_FIGURE_HEIGHT,
     )
 
@@ -645,10 +654,14 @@ def spread_heatmap(wide: pd.DataFrame, asof, cp: str = "C") -> go.Figure:
             height=380,
             margin=dict(l=70, r=20, t=54, b=70),
             annotations=[
+                # Default caption band, not 1.10. The raised position cleared this figure's
+                # own title, but every call site panelises it — and `as_panel_figure` drops
+                # the title and cuts the top margin to the tile default, which put the
+                # caption above the paper where it rendered as a row of sheared glyph tops.
+                # Shipped that way; found by adversarial review 2026-09-04.
                 T.caption(
                     "Green = tight, tradeable · Red = the midpoint is a guess between "
                     "two far-apart quotes",
-                    y=1.10,
                     x=0.02,
                 )
             ],
@@ -709,6 +722,173 @@ def coverage_heatmap(wide: pd.DataFrame, asof, cp: str = "C", field: str = "TRDP
     return fig
 
 
+def panel_expiries(wide: pd.DataFrame) -> list:
+    """Every expiry in the panel, chronological — the smile's trace ladder.
+
+    Fixed panel-wide rather than per date, for two reasons that both matter. The published
+    page restyles this figure by trace index when the as-of slider moves, so a trace list that
+    grew or shrank with the date would put one expiry's curve into another's slot (the
+    contract `settle_vs_trade_figure` and the IV cloud already live under). And a fixed ladder
+    means an expiry keeps the same colour on every step, so the eye can follow one curve
+    across the whole window instead of re-reading the legend at each date.
+    """
+    if wide is None or wide.empty or "expiry" not in wide.columns:
+        return []
+    return sorted(pd.to_datetime(pd.Series(wide["expiry"].unique())).dt.normalize().unique())
+
+
+def _smile_points(frame: pd.DataFrame, x_mode: str, spot: float | None):
+    """One expiry's curve: x, and IV% with a hole at every strike that refused.
+
+    Built over the strikes **listed** that day, not over the strikes that inverted, so a
+    refused strike becomes a `None` in the middle of the line. With `connectgaps=False` that
+    draws as a break — the gap is visible *as* a gap rather than being bridged by a segment
+    the data does not support (AD-9). Bridging holes is the one thing a line chart does that
+    a scatter cannot, so it has to be switched off deliberately.
+
+    Both rights collapse to their median at each strike. Put-call parity says they should
+    agree; where they do not, the disagreement is a property of the input (American exercise,
+    a stale midpoint), not of the smile, and it belongs in panel [4]'s argument rather than as
+    a second tangle of lines here.
+    """
+    if frame.empty:
+        return [], []
+    per_strike = frame.groupby("strike")["iv"].median().sort_index()
+    strikes = per_strike.index.to_numpy(float)
+    if x_mode == "moneyness":
+        if not spot:
+            return [], []          # no spot that day means no K/S ruler at all (FR-10, AD-9)
+        xs = strikes / spot
+    else:
+        xs = strikes
+    ys = [None if v != v else round(float(v) * 100.0, 3) for v in per_strike.to_numpy(float)]
+    return [round(float(x), 4) for x in xs], ys
+
+
+def iv_smile_figure(
+    wide: pd.DataFrame,
+    asof,
+    ticker: str = "UUUU",
+    x_mode: str = X_MODES[0],
+    rate: float = RISK_FREE_RATE,
+    height: int | None = None,
+) -> go.Figure:
+    """FR-11: the implied-vol smile — one curve per expiry, holes and all.
+
+    Replaced a 3D scatter of the same numbers on 2026-09-04 (PO): over a 2.6:1 panel the cloud
+    read as scattered points with no discernible message. In two dimensions the same data has
+    a shape you can name — vol rises into the wings, and the near-dated curves are far steeper
+    than the far-dated ones. On the committed panel's busiest date the 7-day expiry spans
+    63-130% while the 42-day expiry spans 76-83%: that flattening *is* the term structure of
+    the smile, and it was invisible in 3D.
+
+    What the figure is still careful to say it is not:
+
+    * Not observed. Every point is a model output three assumptions deep — European exercise
+      on American contracts, no dividends, and a mark that is itself a derived midpoint
+      (there is no settlement price for these contracts, checkpoint_audit §3).
+    * Not tradable. Panel [4] is the companion that says how far apart the two sides of the
+      market were when this "price" was struck.
+
+    Trace order and count are a contract: one trace per expiry in :func:`panel_expiries`,
+    always, empty ones included, because the published page restyles by index (AD-5, T-42).
+
+    ``x_mode`` defaults to ``X_MODES[0]`` rather than to moneyness — which is the more natural
+    ruler for a smile — so that it matches the ruler the hero's axis menu opens on
+    (``updatemenus`` ``active=0``). The two panels are driven by one control on the published
+    page (T-43) and must therefore agree at load; every other axis on the page is in dollar
+    strikes at that point, so opening in dollars keeps the whole page in one unit (PO,
+    2026-09-04).
+    """
+    height = height or T.PANEL_FIGURE_HEIGHT
+    expiries = panel_expiries(wide)
+    if not expiries:
+        return _empty_figure("No quotes", height=height)
+
+    sl = _slice_wide(wide, asof, cp="B")
+    if "iv" not in sl.columns and not sl.empty:
+        sl = attach_implied_vol(sl, rate=rate)
+
+    spot = sl["spot"].dropna() if not sl.empty else pd.Series(dtype=float)
+    spot_val = float(spot.median()) if len(spot) else None
+    colors = T.expiry_colors(len(expiries))
+
+    fig = go.Figure()
+    # Counted in STRIKES, not contract-days, because a strike is what the reader can see: a
+    # call and a put at the same strike share one point (their median), so a caption quoting
+    # contract-days invites a count that will never match the dots on screen. The panel-wide
+    # contract-day figure lives in the docs; this line has to describe this chart.
+    n_drawn = n_strikes = 0
+    for expiry, color in zip(expiries, colors):
+        side = (
+            sl[sl["expiry"].dt.normalize() == expiry]
+            if not sl.empty
+            else sl
+        )
+        xs, ys = _smile_points(side, x_mode, spot_val)
+        drawn = sum(1 for v in ys if v is not None)
+        n_drawn += drawn
+        n_strikes += len(xs)
+        fig.add_trace(
+            go.Scatter(
+                x=xs,
+                y=ys,
+                mode="lines+markers",
+                name=pd.Timestamp(expiry).strftime("%b %d"),
+                connectgaps=False,   # a refused strike is a break, never a bridged segment
+                line=dict(color=color, width=T.SMILE_LINE_WIDTH),
+                marker=dict(
+                    color=color, size=T.SMILE_MARKER_SIZE, symbol=T.SYMBOL_MARK,
+                    line=dict(width=0),
+                ),
+                showlegend=drawn > 0,
+                hovertemplate=(
+                    "<b>%{fullData.name}</b> expiry<br>"
+                    + ("K / S" if x_mode == "moneyness" else "K")
+                    + " %{x:.3f}<br>implied vol %{y:.1f}%<extra></extra>"
+                ),
+            )
+        )
+
+    asof_txt = str(pd.Timestamp(asof).date()) if asof is not None else "all dates"
+    fig.update_layout(
+        **T.figure_layout(
+            title=T.title(f"{ticker}  ·  implied vol from {MARK_LABEL}  ·  {asof_txt}"),
+            xaxis=T.axis(X_AXIS_TITLE[x_mode]),
+            yaxis=T.axis("Implied vol (%)"),
+            legend=T.legend(
+                yanchor="top", y=T.SMILE_LEGEND_Y, x=0.0, xanchor="left",
+                bgcolor=T.TRANSPARENT, bordercolor=T.BORDER,
+            ),
+            height=height,
+            margin=T.SMILE_MARGIN,
+            annotations=[
+                # ORDER IS A CONTRACT, like the trace order: [0] is date-independent, [1]
+                # carries per-date counts and the as-of listener rewrites it by index
+                # (IV_COUNT_ANNOTATION). See the T-44 note on `_smile`.
+                #
+                # Both lines are kept short enough to fit a 5-column tile. The first build
+                # ran the assumptions off the right edge, which loses exactly the words FR-11
+                # requires to be on the page — the panel header carries the rate too, but the
+                # figure has to stand on its own because that is what survives onto the
+                # static page.
+                T.caption(
+                    f"DERIVED &nbsp;·&nbsp; European Black-Scholes on {MARK_LABEL} "
+                    f"&nbsp;·&nbsp; r = {rate:.2%} &nbsp;·&nbsp; no dividends &nbsp;·&nbsp; "
+                    "act/365 &nbsp;·&nbsp; American exercise ignored",
+                    y=T.CAPTION_Y_OVER_LEGEND,
+                ),
+                T.caption(
+                    f"Not a tradable price &nbsp;·&nbsp; {n_drawn} of {n_strikes} listed "
+                    "strikes carry a vol &nbsp;·&nbsp; a break = one the solver refused",
+                    y=T.CAPTION_Y,
+                ),
+            ],
+        )
+    )
+    return fig
+
+
 # --------------------------------------------------------------- as-of frames (AD-5, T-42)
 
 
@@ -739,6 +919,32 @@ def _grid(fig):
     }
 
 
+# Which annotation on the IV figure carries per-date numbers. Lifted per date and rewritten
+# by the listener; see `iv_surface_figure`.
+IV_COUNT_ANNOTATION = 1
+
+
+def _smile(fig):
+    """Per-trace x / y / legend visibility + the per-date caption of the IV smile.
+
+    Everything the panel asserts about a date travels with the date — geometry, which expiries
+    are alive (so the legend does not advertise curves that are not there), and the caption's
+    inversion count. Carrying only geometry is what left the caption quoting the build date on
+    52 of 53 slider steps in the 3D version of this panel (T-44).
+    """
+    if not fig.data or fig.data[0].type != "scatter":
+        return None
+    notes = fig.layout.annotations
+    return {
+        "x": [_arr(t.x) for t in fig.data],
+        "y": [_arr(t.y) for t in fig.data],
+        "show": [bool(t.showlegend) for t in fig.data],
+        "note": (
+            notes[IV_COUNT_ANNOTATION].text if len(notes) > IV_COUNT_ANNOTATION else None
+        ),
+    }
+
+
 def asof_frames(wide: pd.DataFrame, cp: str = "C", dates=None) -> dict:
     """Per-date arrays for every supporting panel the as-of slider drives.
 
@@ -753,12 +959,18 @@ def asof_frames(wide: pd.DataFrame, cp: str = "C", dates=None) -> dict:
     first time a builder changed its aggregation; this cannot, by construction.
 
     Trace indices are part of the contract: `settle_vs_trade_figure` always emits
-    [Calls, Puts, y = x, bars], which is why it adds empty traces rather than skipping.
+    [Calls, Puts, y = x, bars] and `iv_smile_figure` always emits one trace per
+    expiry in `panel_expiries`, which is why both add empty traces rather than skipping.
     """
     if wide is None or wide.empty:
         return {}
     if dates is None:
         dates = sorted(wide["date"].dt.normalize().unique())
+
+    # Invert ONCE for the whole panel. `iv_smile_figure` recomputes only when the frame it is
+    # handed has no `iv` column, so pre-attaching here stops the inversion running twice per
+    # date (once per ruler) — 106 solves of the same numbers across a 53-date panel.
+    wide = attach_implied_vol(wide)
 
     frames = {}
     for asof in dates:
@@ -776,6 +988,15 @@ def asof_frames(wide: pd.DataFrame, cp: str = "C", dates=None) -> dict:
                 "bars": bar_y,
                 "range": [lo, hi],
                 "barmax": max(bar_y + [1]) * 1.18,
+            },
+            # Both rulers, because on the published page the smile's `x` is written by two
+            # controls — the as-of slider and the hero's axis menu — and the listener has to
+            # be able to produce any (date, mode) pair. `y`, `showlegend` and the caption
+            # ride inside each mode rather than beside them: a date with no underlying close
+            # has no K/S ruler at all, so in that mode the curves, the legend and the count
+            # are all legitimately empty while the strike ruler still draws (AD-9, FR-10).
+            "iv": {
+                mode: _smile(iv_smile_figure(wide, asof, x_mode=mode)) for mode in X_MODES
             },
             "spread": _grid(spread_heatmap(wide, asof, cp=cp)),
             "mark": _grid(coverage_heatmap(wide, asof, cp=cp, field="MARK")),

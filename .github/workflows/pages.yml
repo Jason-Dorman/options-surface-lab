@@ -94,7 +94,16 @@ jobs:
           grep -q "plotly-graph-div" "$page" || { echo "::error::no Plotly figures in the page"; exit 1; }
           figs=$(grep -o "plotly-graph-div" "$page" | wc -l)
           echo "published page carries $figs figures"
-          test "$figs" -ge 6 || { echo "::error::expected at least 6 figures, found $figs"; exit 1; }
+          test "$figs" -ge 7 || { echo "::error::expected at least 7 figures, found $figs"; exit 1; }
+          # FR-11's IV panel is the one figure that is a model output rather than data, so
+          # the page must always say so on its face. A silent restyle that dropped the
+          # assumptions line would leave a vol surface with no stated rate.
+          # Phrases chosen to survive Plotly's JSON encoder: no "/" (written /) and no
+          # "·" (the caption's separators are &nbsp;·&nbsp;). tests/test_build_preview.py
+          # pins this list to the page so a reworded caption cannot orphan the guard.
+          for phrase in "American exercise ignored" "no dividends" "European Black-Scholes" "Not a tradable price"; do
+            grep -q "$phrase" "$page" || { echo "::error::the IV panel shipped without its assumptions caption ($phrase)"; exit 1; }
+          done
           # The as-of slider drives the whole page (AD-5). Without the frames payload and its
           # listener the hero moves and every other panel stays on its build-time date, which
           # renders perfectly and shows two different as-of dates at once — invisible to the

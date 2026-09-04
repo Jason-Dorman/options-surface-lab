@@ -14,6 +14,7 @@ See docs/checkpoint_audit.md §3.
 from __future__ import annotations
 
 import datetime as dt
+import math
 import pickle
 import re
 import warnings
@@ -22,6 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy.interpolate import griddata
+from scipy.optimize import brentq
 from scipy.spatial import QhullError
 
 
@@ -583,3 +585,166 @@ def load_payload(cache_file: str = "option_pipeline_data.pkl") -> dict:
         RuntimeWarning,
     )
     return synthesize_demo_payload()
+
+
+# ------------------------------------------------------------------ implied vol (FR-11)
+
+# PRD OQ-2, closed by the PO on 2026-09-04: the constant risk-free rate, act/365.
+# "~3-month US T-bill, mid-2026" is the citation; the number is deliberately a round one
+# because it is an assumption printed on the page, not a measurement.
+#
+# How much it actually matters, measured on the committed panel rather than assumed.
+# Over the 6,229 contract-days invertible at **both** 0% and 4%, moving r from 0% to 4%
+# shifts the inverted vol by a median of **1.28 vol points**, p95 **5.69**, max **24.96**,
+# on a panel whose median vol is ~86%. (State the row set: a different one — say, rows
+# invertible at all of 0/2/4/6% — moves the tail figures, and quoting a number from one
+# definition under the sentence of another is how this comment was wrong on first landing.)
+# Small in the middle, emphatically not zero in the tails: the large shifts are deep-ITM
+# contracts, where the discounted strike moves the intrinsic floor and vega is nearly zero,
+# so a tiny price change maps to a huge vol change. That fragility is the point, not a
+# footnote — notebook 02 §5 plots the distribution. The choice of rate is defensible; the
+# sensitivity to it is a finding.
+RISK_FREE_RATE = 0.04
+
+# The bracket the solver searches: 0.01% to 500% annualised. Outside it we return a hole
+# rather than a number — a "vol" of 700% on a $0.02 quote is arithmetic, not information.
+IV_BOUNDS = (1e-4, 5.0)
+
+DAYS_PER_YEAR = 365.0
+
+# Absolute price tolerance on the no-arbitrage bounds. Quotes here are penny-grained, so
+# anything this close to intrinsic carries no time value to invert.
+_IV_PRICE_EPS = 1e-8
+
+
+def _norm_cdf(x: float) -> float:
+    """Standard normal CDF via erf — no scipy.stats import for one function."""
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def bs_price(
+    spot: float, strike: float, t_years: float, sigma: float, rate: float = RISK_FREE_RATE,
+    cp: str = "C",
+) -> float:
+    """European Black-Scholes price, no dividends, act/365.
+
+    Deliberately the plainest possible implementation: it exists to be inverted, and the
+    round-trip test (`price -> implied_vol -> sigma`) is only meaningful if the forward
+    direction is obviously right.
+    """
+    cp = str(cp).upper()
+    disc = math.exp(-rate * t_years)
+    if t_years <= 0 or sigma <= 0:
+        # zero time or zero vol: the option is worth its discounted intrinsic value
+        return max(spot - strike * disc, 0.0) if cp == "C" else max(strike * disc - spot, 0.0)
+    vol_t = sigma * math.sqrt(t_years)
+    d1 = (math.log(spot / strike) + (rate + 0.5 * sigma * sigma) * t_years) / vol_t
+    d2 = d1 - vol_t
+    if cp == "C":
+        return spot * _norm_cdf(d1) - strike * disc * _norm_cdf(d2)
+    return strike * disc * _norm_cdf(-d2) - spot * _norm_cdf(-d1)
+
+
+def iv_refusal(
+    price: float, spot: float, strike: float, t_years: float,
+    rate: float = RISK_FREE_RATE, cp: str = "C",
+) -> str | None:
+    """Why this row cannot be inverted, or ``None`` if it can.
+
+    Separated from :func:`implied_vol` so the reason is available as data. The solver has to
+    return a bare NaN — a figure cannot plot a sentence — but "how often, and why" is exactly
+    the question FR-11's degenerate cases raise, and notebook 02 answers it by applying this
+    function to the panel. Every branch here is a *hole* in the IV surface, never a fabricated
+    vol (AD-9).
+    """
+    cp = str(cp).upper()
+    # bs_price and the bounds both treat "not a call" as a put, so an unrecognised right
+    # would silently come back as a put vol rather than as a hole. Refuse it by name
+    # (adversarial review, 2026-09-04) — AD-9 says degrade honestly, and a vol for the wrong
+    # right is a fabricated number, not a degraded one.
+    if cp not in ("C", "P"):
+        return f"unrecognised right {cp!r}"
+    if not _finite(t_years) or t_years <= 0:
+        return "expiry day — no time left to carry a vol"
+    if not _finite(spot) or spot <= 0:
+        return "no underlying close for that date"
+    if not _finite(strike) or strike <= 0:
+        return "no strike"
+    if not _finite(price) or price <= 0:
+        return "no mark to invert"
+    lo, hi = _no_arbitrage_bounds(spot, strike, t_years, rate, cp)
+    if price <= lo + _IV_PRICE_EPS:
+        return "at or below intrinsic — no time value to explain"
+    if price >= hi - _IV_PRICE_EPS:
+        return "above the no-arbitrage cap"
+    return None
+
+
+def _finite(value) -> bool:
+    try:
+        return bool(np.isfinite(float(value)))
+    except (TypeError, ValueError):
+        return False
+
+
+def _no_arbitrage_bounds(
+    spot: float, strike: float, t_years: float, rate: float, cp: str
+) -> tuple[float, float]:
+    """(floor, cap) a European price must sit strictly inside for a vol to exist.
+
+    Floor is the discounted intrinsic (sigma -> 0); cap is the sigma -> infinity limit: a call
+    is never worth more than the stock, a put never more than its discounted strike.
+    """
+    disc = math.exp(-rate * t_years)
+    if cp == "C":
+        return max(spot - strike * disc, 0.0), spot
+    return max(strike * disc - spot, 0.0), strike * disc
+
+
+def implied_vol(
+    price: float, spot: float, strike: float, t_years: float,
+    rate: float = RISK_FREE_RATE, cp: str = "C", bounds: tuple = IV_BOUNDS,
+) -> float:
+    """Invert Black-Scholes for sigma, or return NaN (SYSTEM-SPEC §12).
+
+    NaN is the whole design: a degenerate input must produce a gap in the surface, never a
+    crash and never an absurd vol. :func:`iv_refusal` names the reason for the cases we can
+    describe analytically; a bracket that still fails to straddle zero — or a solver that
+    does not converge — falls through to the same NaN.
+    """
+    if iv_refusal(price, spot, strike, t_years, rate, cp) is not None:
+        return float("nan")
+    lo_sigma, hi_sigma = bounds
+
+    def gap(sigma: float) -> float:
+        return bs_price(spot, strike, t_years, sigma, rate, cp) - price
+
+    try:
+        if gap(lo_sigma) * gap(hi_sigma) > 0:
+            return float("nan")  # the price is not reachable anywhere in the bracket
+        return float(brentq(gap, lo_sigma, hi_sigma, xtol=1e-8, maxiter=100))
+    except (ValueError, RuntimeError):
+        return float("nan")
+
+
+def attach_implied_vol(
+    wide: pd.DataFrame, rate: float = RISK_FREE_RATE, price_col: str = "MARK"
+) -> pd.DataFrame:
+    """Add an ``iv`` column (decimal, e.g. 0.62 = 62%) to the wide table.
+
+    Inverted on the MARK slot, because that is the price that exists on most contract-days —
+    inverting the last trade would produce a vol surface as sparse as the print grid and
+    would be measuring liquidity, not volatility. Rows that cannot be inverted carry NaN.
+    """
+    out = wide.copy()
+    if out.empty:
+        out["iv"] = pd.Series(dtype=float)
+        return out
+    t_years = out["dte"].astype(float) / DAYS_PER_YEAR
+    out["iv"] = [
+        implied_vol(p, s, k, t, rate, cp)
+        for p, s, k, t, cp in zip(
+            out[price_col], out["spot"], out["strike"], t_years, out["cp"]
+        )
+    ]
+    return out

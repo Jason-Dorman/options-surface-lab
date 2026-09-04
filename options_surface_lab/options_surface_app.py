@@ -27,6 +27,7 @@ import reflex as rx
 
 from options_surface_lab.option_surface_utils import (
     MARK_FIELD_DEFAULT,
+    RISK_FREE_RATE,
     SETTLE_FIELD_CANDIDATES,
     attach_underlying,
     build_candidate_rics,
@@ -42,6 +43,7 @@ from options_surface_lab.option_surface_plot import (
     as_panel_figure,
     candlestick_figure,
     coverage_heatmap,
+    iv_smile_figure,
     price_surface_figure,
     settle_vs_trade_figure,
     spread_heatmap,
@@ -378,6 +380,7 @@ class State(rx.State):
     fig_heat_mark: go.Figure = go.Figure()
     fig_spread: go.Figure = go.Figure()
     fig_heat_trade: go.Figure = go.Figure()
+    fig_iv: go.Figure = go.Figure()
 
     _wide: pd.DataFrame | None = None
     _stock: pd.DataFrame | None = None
@@ -493,6 +496,9 @@ class State(rx.State):
             self.fig_heat_mark = tile
             self.fig_spread = tile
             self.fig_heat_trade = tile
+            self.fig_iv = go.Figure().update_layout(
+                **T.figure_layout(height=T.PANEL_FIGURE_HEIGHT)
+            )
             return
 
         asof = self.asof
@@ -539,6 +545,12 @@ class State(rx.State):
         self.fig_spread = as_panel_figure(spread_heatmap(wide, asof, cp=self.cp))
         self.fig_heat_trade = as_panel_figure(
             coverage_heatmap(wide, asof, cp=self.cp, field="TRDPRC_1")
+        )
+        # FR-11. Follows the same x_mode as the hero, so the surface and the smile derived
+        # from it are always read on the same ruler.
+        self.fig_iv = as_panel_figure(
+            iv_smile_figure(wide, asof, ticker=self.ticker, x_mode=self.x_mode),
+            margin=T.SMILE_MARGIN,
         )
 
 
@@ -727,15 +739,22 @@ def index() -> rx.Component:
             ),
             _panel(2, "Underlying", "spot context - close = TRDPRC_1",
                    State.fig_stock, HERO_H, width=T.W_SIDECAR),
-            # Row 2: is the mark right, and is it believable?
-            _panel(3, "Mark vs print", f"{MARK_FIELD_DEFAULT} against TRDPRC_1",
+            # Row 2: the same cloud read through a model, beside the evidence that the
+            # mark is not the print. The smile sits directly under the surface it comes
+            # from (PO, 2026-09-04) -- it is a transform of that price, not new data.
+            _panel(3, "Implied vol - derived",
+                   "one curve per expiry - a break = the solver refusing",
+                   State.fig_iv, TILE_H),
+            _panel(4, "Mark vs print", f"{MARK_FIELD_DEFAULT} against TRDPRC_1",
                    State.fig_compare, TILE_H),
-            _panel(4, "Spread - can you believe the mark?", "bid-ask as % of the mark",
-                   State.fig_spread, TILE_H),
-            # Row 3: where the data is not there at all. Paired so they can be compared.
-            _panel(5, "Mark occupancy", "lit = a mark exists",
+            # Row 3: can you believe the mark at all? Full width so the two occupancy
+            # grids below stay paired -- comparing them is the reason both are shown.
+            _panel(5, "Spread - can you believe the mark?", "bid-ask as % of the mark",
+                   State.fig_spread, TILE_H, width=T.W_FULL),
+            # Row 4: where the data is not there at all. Paired so they can be compared.
+            _panel(6, "Mark occupancy", "lit = a mark exists",
                    State.fig_heat_mark, TILE_H),
-            _panel(6, "Print occupancy", "lit = someone traded",
+            _panel(7, "Print occupancy", "lit = someone traded",
                    State.fig_heat_trade, TILE_H),
             columns=str(T.GRID_COLUMNS),
             spacing="3",

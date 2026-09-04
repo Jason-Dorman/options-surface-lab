@@ -190,7 +190,8 @@ simplest."*
 push to main
   → pytest in a clean container, no credentials      (proves NFR-4)
   → python build_preview.py → _site/index.html
-  → guards: refuse a synthetic build; refuse < 6 figures
+  → guards: refuse a synthetic build; refuse < 7 figures;
+            refuse an IV panel with no assumptions caption
   → deploy-pages
 ```
 
@@ -200,8 +201,8 @@ push to main
 - **The guards matter more than they look.** A build that silently fell back to the synthetic
   panel would deploy a page that renders beautifully and invents settles that do not exist.
   The workflow fails instead. Do not weaken them to get a green run.
-- **FR-4/FR-5/FR-10 are met without a backend.** The 3D figure carries three controls, all
-  of them figure JSON, so they work on a static host:
+- **FR-4/FR-5/FR-10 are met without a backend.** The hero 3D figure carries three controls,
+  all of them figure JSON, so they work on a static host:
   * an as-of **slider** over all 53 trading days (T-15), which **drives the whole page** —
     scatter, spread grid, both occupancy grids, the six readouts and the command bar's as-of
     (T-42). The underlying candlestick is the deliberate exception: it is 12 weeks of context,
@@ -210,7 +211,17 @@ push to main
     (puts start hidden).
   * an **X-axis dropdown**, strike ↔ `K / S` (T-16). It composes with the slider because the
     two write disjoint properties — the steps write `visible`, the menu writes `x`.
-- **The page is ~2.9 MB (≈1.0 MB gzipped) and carries ~308 traces.** That is deliberate: the
+
+  Panel **[3]**, FR-11's IV smile, is driven by **both** of those (T-17, T-43): the frames
+  payload carries a complete smile per `(date, ruler)` pair, and the listener restyles its
+  per-expiry traces by index. It has no menu of its own — it learns the ruler from the hero's
+  `plotly_buttonclicked`. The assumptions it renders under are fixed, not chosen: a reader who
+  could change the rate would be reading a different figure than the caption describes.
+
+  **Both 3D/2D panels open on Strike (K)**, matching the hero's `updatemenus` `active=0`, so
+  the whole page is in dollars at load.
+- **The page is ~3.0 MB (≈1.0 MB gzipped) and carries ~308 traces**, in seven panels.
+  T-17's IV cloud added ~130 KB of that. That is deliberate: the
   PO chose full date coverage over load time (AD-5), and FR-10's second x array per trace adds
   ~205 KB raw / ~70 KB gzipped on top. If it ever needs slimming, pass explicit dates —
   `static_surface_figure(wide, dates=curated_asof_dates(wide, n=10))` — rather than dropping
@@ -230,7 +241,8 @@ push to main
 
   Load `options_surface_preview.html` over `file://`, wait for `window.Plotly`, then read
   `gd._fullData[i].x` — **not** `gd.data[i].x`, which plotly.py may ship as base64 binary
-  (`{dtype, bdata}`) rather than a JSON array. Used on 2026-09-04 to verify FR-10 end to end.
+  (`{dtype, bdata}`) rather than a JSON array. Used on 2026-09-04 to verify FR-10 end to end,
+  and again the same day for FR-11's panel [7] following the as-of slider.
 
 ## 6. Quick troubleshooting
 

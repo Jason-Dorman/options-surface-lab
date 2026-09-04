@@ -4,10 +4,10 @@ This is the deliverable (AD-4). CI runs it, copies the output to _site/index.htm
 publishes that to GitHub Pages.
 
 Layout is the terminal arrangement from DESIGN-BRIEF §5: a command bar, a strip of readouts,
-then numbered panels on a 10-column hairline grid — the 3D surface at 7 columns with the
-underlying beside it at 3, then the remaining figures 5+5 beneath. All chrome comes from
-`theme.PAGE_CSS`; this module contains no colour, font or measurement of its own
-(FR-8 / AD-6).
+then numbered panels on a 10-column hairline grid — the 3D surface at 6 columns with the
+underlying beside it at 4, two 5+5 rows beneath, and the derived IV surface full width at the
+foot. All chrome comes from `theme.PAGE_CSS`; this module contains no colour, font or
+measurement of its own (FR-8 / AD-6).
 """
 
 import json
@@ -20,16 +20,22 @@ import pandas as pd
 
 from options_surface_lab import theme as T
 from options_surface_lab.option_surface_plot import (
+    X_AXIS_TITLE,
+    X_MODES,
+    X_MODE_LABEL,
     as_panel_figure,
     asof_frames,
     candlestick_figure,
     coverage_heatmap,
+    IV_COUNT_ANNOTATION,
+    iv_smile_figure,
     spread_heatmap,
     settle_vs_trade_figure,
     static_surface_figure,
 )
 from options_surface_lab.option_surface_utils import (
     MARK_FIELD_DEFAULT,
+    RISK_FREE_RATE,
     attach_underlying,
     flatten_lseg_options,
     load_payload,
@@ -67,7 +73,15 @@ def main() -> Path:
     )
     fig_hm_s = as_panel_figure(coverage_heatmap(wide, asof, cp="C", field="MARK"))
     fig_hm_t = as_panel_figure(coverage_heatmap(wide, asof, cp="C", field="TRDPRC_1"))
+    # Full width: with the smile taking half of row 2, the three remaining panels cannot tile
+    # two rows evenly. Spread goes wide (a strike x expiry grid only gains from the room) so
+    # the two occupancy grids stay paired, which is the whole reason both are shown
+    # (DESIGN-BRIEF section 5).
     fig_spread = as_panel_figure(spread_heatmap(wide, asof, cp="C"))
+    # FR-11. A tile beside the mark-vs-print scatter, directly under the surface it is
+    # derived from (PO, 2026-09-04): the smile is the same cloud read through a model, so it
+    # belongs next to the price rather than at the foot of the page.
+    fig_iv = as_panel_figure(iv_smile_figure(wide, asof, ticker=ticker), margin=T.SMILE_MARGIN)
 
     out = Path(__file__).resolve().parent / "options_surface_preview.html"
 
@@ -121,8 +135,10 @@ def main() -> Path:
 
     # The grid, in the reading order of the argument (DESIGN-BRIEF §5):
     #   row 1  the surface, with the underlying beside it as spot context
-    #   row 2  the evidence that mark ≠ print, and whether the mark is believable at all
-    #   row 3  where the data simply is not there — the two occupancy grids, paired so they
+    #   row 2  the same cloud read through a model, beside the evidence that mark ≠ print —
+    #          the smile sits under the surface it is derived from (PO, 2026-09-04)
+    #   row 3  whether the mark is believable at all
+    #   row 4  where the data simply is not there — the two occupancy grids, paired so they
     #          can be compared directly, which is the whole point of showing both
     panels = [
         # The note is where the hero's two native controls are advertised — the axis toggle
@@ -134,10 +150,18 @@ def main() -> Path:
                fig_surface, width=T.W_HERO),
         _panel(2, f"{ticker} underlying", "spot context · 12 weeks · close = TRDPRC_1",
                fig_cs, width=T.W_SIDECAR),
-        _panel(3, "Mark vs print", f"{mark_label} against TRDPRC_1", fig_cmp),
-        _panel(4, "Spread · can you believe the mark?", "bid-ask as % of the mark", fig_spread),
-        _panel(5, "Mark occupancy", "lit = a mark exists", fig_hm_s),
-        _panel(6, "Print occupancy", "lit = someone traded", fig_hm_t),
+        # Header kept to one line: the name and note wrapped on the first build, which made
+        # this panel 17px taller than the one beside it — visible on a hairline grid, since
+        # panels deliberately do not stretch to their row. The rate lives in the figure's
+        # own caption, which is what has to stand alone on the static page anyway.
+        _panel(3, "Implied vol · derived",
+               "one curve per expiry &nbsp;·&nbsp; a break = the solver refusing",
+               fig_iv),
+        _panel(4, "Mark vs print", f"{mark_label} against TRDPRC_1", fig_cmp),
+        _panel(5, "Spread · can you believe the mark?", "bid-ask as % of the mark",
+               fig_spread, width=T.W_FULL),
+        _panel(6, "Mark occupancy", "lit = a mark exists", fig_hm_s),
+        _panel(7, "Print occupancy", "lit = someone traded", fig_hm_t),
     ]
 
     parts = [
@@ -152,7 +176,7 @@ def main() -> Path:
         '<div class="osl-grid">',
         *panels,
         "</div>",
-        _asof_script(asof_frames(wide, cp="C")),
+        _asof_script(asof_frames(wide, cp="C"), asof_txt),
         "</body></html>",
     ]
     out.write_text("\n".join(parts), encoding="utf-8")
@@ -210,10 +234,15 @@ FIG_ID_PREFIX = "osl-fig-"
 
 # Which panel each frame key updates. Kept beside the script that reads it so a renamed key
 # and a stale selector cannot drift apart.
-_GRID_PANELS = (("spread", 4), ("mark", 5), ("trade", 6))
+_GRID_PANELS = (("spread", 5), ("mark", 6), ("trade", 7))
+
+# The smile follows the slider by trace rather than by grid: `iv_smile_figure` always emits
+# one trace per expiry in `panel_expiries`, panel-wide and chronological, so a restyle by
+# index is safe and an expiry keeps its colour across every step.
+_SMILE_PANELS = (("iv", 3),)
 
 
-def _asof_script(frames: dict) -> str:
+def _asof_script(frames: dict, default_label: str) -> str:
     """Embed the per-date frames and the listener that applies them (AD-5).
 
     A Plotly slider can only mutate the figure it lives in, so without this the hero moved and
@@ -230,7 +259,18 @@ def _asof_script(frames: dict) -> str:
     # `</script>` inside a JSON string would close the tag early; escaping `<` removes the
     # whole class of problem and stays valid JSON.
     payload = json.dumps(frames, separators=(",", ":")).replace("<", "\\u003c")
+    # Belt and braces: a build date missing from its own payload would leave the toggle
+    # pointing at nothing. Fall back to the first date rather than to `undefined`.
+    default_label = default_label if default_label in frames else next(iter(frames))
     grids = ", ".join(f'["{key}", "{FIG_ID_PREFIX}{n}"]' for key, n in _GRID_PANELS)
+    iv_note = IV_COUNT_ANNOTATION
+    smiles = ", ".join(f'["{key}", "{FIG_ID_PREFIX}{n}"]' for key, n in _SMILE_PANELS)
+    # The hero's axis menu is labelled, not keyed, so the listener maps label -> mode. Both
+    # sides come from the same two dicts in the plot module, so a renamed mode cannot leave
+    # the map behind.
+    mode_by_label = json.dumps({X_MODE_LABEL[m]: m for m in X_MODES})
+    mode_titles = json.dumps({m: X_AXIS_TITLE[m] for m in X_MODES})
+    default_mode = X_MODES[0]
     return f"""
 <script id="osl-frames" type="application/json">{payload}</script>
 <script>
@@ -243,11 +283,48 @@ def _asof_script(frames: dict) -> str:
   if (!hero || typeof hero.on !== "function") return;
 
   var GRIDS = [{grids}];
-  var CMP = "{FIG_ID_PREFIX}3";
+  var SMILES = [{smiles}];
+  var CMP = "{FIG_ID_PREFIX}4";
+
+  // The smile's `x` is the one property on this page written by TWO controls: the as-of
+  // slider picks the date, the hero's axis menu picks the ruler. T-16's rule — that two
+  // Plotly controls must write disjoint properties — is about controls acting on the figure
+  // *directly*; here neither one does. Both feed this listener, it holds the (date, mode)
+  // pair, and it is the only writer. That is what lets them compose instead of fighting.
+  var MODE_BY_LABEL = {mode_by_label};
+  var MODE_TITLE = {mode_titles};
+  var mode = "{default_mode}";   // must match the hero's updatemenus active index
+  // The date the page is currently showing. Seeded with the BUILD date rather than left null:
+  // the axis toggle re-reads the current date under the new ruler, and a null here sent it to
+  // whichever date happened to be first in the payload — so toggling the ruler before ever
+  // touching the slider silently swapped the smile to another date's data. Caught in a real
+  // browser, 2026-09-04; nothing in the figure JSON could have shown it.
+  var current = "{default_label}";
+
+  function applySmile(f) {{
+    if (!f) return;
+    for (var c = 0; c < SMILES.length; c++) {{
+      var byMode = f[SMILES[c][0]];
+      var sm = byMode && byMode[mode];
+      if (!sm) continue;                      // a date the model could not invert at all
+      try {{
+        // One trace per expiry, panel-wide and chronological, so the indices are stable.
+        // `showlegend` rides along so the legend stops advertising expiries that are not
+        // alive on this date, and so does the caption, which counts THIS date's strikes.
+        var idx = [];
+        for (var t = 0; t < sm.x.length; t++) idx.push(t);
+        Plotly.restyle(SMILES[c][1], {{x: sm.x, y: sm.y, showlegend: sm.show}}, idx);
+        var re = {{"xaxis.title.text": MODE_TITLE[mode]}};
+        if (sm.note) re["annotations[{iv_note}].text"] = sm.note;
+        Plotly.relayout(SMILES[c][1], re);
+      }} catch (e) {{}}
+    }}
+  }}
 
   function apply(label) {{
     var f = frames[label];
     if (!f) return;
+    current = label;
 
     for (var i = 0; i < GRIDS.length; i++) {{
       var g = f[GRIDS[i][0]];
@@ -256,6 +333,8 @@ def _asof_script(frames: dict) -> str:
         Plotly.restyle(GRIDS[i][1], {{x: [g.x], y: [g.y], z: [g.z]}}, [0]);
       }} catch (e) {{}}
     }}
+
+    applySmile(f);
 
     try {{
       // trace order is fixed at [Calls, Puts, y = x, bars] for every date
@@ -281,6 +360,19 @@ def _asof_script(frames: dict) -> str:
 
   hero.on("plotly_sliderchange", function (e) {{
     if (e && e.step && e.step.label) apply(e.step.label);
+  }});
+
+  // The hero's axis menu relabels the SURFACE by itself (its buttons carry the x arrays for
+  // both rulers). The smile has no menu of its own, so it learns the mode from this event
+  // and re-reads the current date under it — which is why the payload carries both rulers.
+  hero.on("plotly_buttonclicked", function (e) {{
+    try {{
+      var label = e && e.button && e.button.label;
+      var next = MODE_BY_LABEL[label];
+      if (!next || next === mode) return;
+      mode = next;
+      applySmile(frames[current]);
+    }} catch (err) {{}}
   }});
 }})();
 </script>"""
