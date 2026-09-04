@@ -14,8 +14,8 @@
 | [SYSTEM-SPEC.md](SYSTEM-SPEC.md) | Detailed behavior: schemas, algorithms, sequences, edge cases |
 | **ARCHITECTURE.md** (this) | Where things live, the load-bearing walls, why they were placed there, and where a given change belongs |
 
-The structure below is **current** as of 2026-08-29 — the FR-1 restructure has landed.
-Remaining not-yet-created pieces: `theme.py` (FR-8) and the CI workflow (FR-9).
+The structure below is **current** as of 2026-09-02. The FR-1 restructure, the CI workflow
+(FR-9) and `theme.py` (FR-8) have all landed; every module named below exists.
 
 ---
 
@@ -144,8 +144,12 @@ One builder per figure, `frame(s) + selection → go.Figure`. All styling via `t
 hardcoded hex values.
 
 **`options_surface_lab/theme.py`** — design tokens
-Semantic palette, font stacks, `figure_layout()` defaults. Imports nothing project-local.
-The FR-8 restyle happens here and only here.
+Semantic palette, font stacks, layout metrics, and the shared `figure_layout()` / `title()` /
+`caption()` / `axis()` / `scene()` / `legend()` / `slider()` builders. Also carries the two
+non-Plotly surfaces: `PANEL_STYLE` / `PANEL_HEADER_STYLE` for Reflex props and `PAGE_CSS`
+(the terminal grid) for the static page. Imports nothing
+project-local. Landed 2026-09-02 (T-13); direction in [DESIGN-BRIEF.md](DESIGN-BRIEF.md).
+The restyle happens here and only here — `tests/test_theme.py` enforces that mechanically.
 
 **`build_preview.py`** (repo root) — delivery fallback
 Assembles the same figures into one static HTML file. Kept alive as the emergency Pages
@@ -273,6 +277,14 @@ smell); FR-8 demands a full restyle; the site will gain pages all semester. *Dec
 semantic tokens + shared `figure_layout()` in `theme.py`, consumed by both Plotly builders
 and Reflex components. *Consequences:* the restyle is a one-file change; future pages
 inherit the identity for free; acceptance is mechanical (no literals outside theme).
+*Landed 2026-09-02 (T-13)* — every literal removed from `option_surface_plot.py`,
+`options_surface_app.py` and `build_preview.py`; `tests/test_theme.py` scans all three, so a
+regression fails the build rather than the review. The static builder's chrome moved into
+`theme.PAGE_CSS`, which is why `build_preview.py` now contains no styling at all. One
+consequence was not free: the identity's webfonts add `fonts.googleapis.com` /
+`fonts.gstatic.com` to the published page, so the self-containment guard in
+`tests/test_build_preview.py` now allows exactly those two hosts alongside the Plotly CDN.
+No backend was introduced, which is what AD-4/AD-5 actually constrain (DESIGN-BRIEF §6).
 
 **AD-7 — The synthetic panel is infrastructure, not a demo hack.**
 *Context:* development and CI need realistic sparse data without credentials; tests need
@@ -313,6 +325,8 @@ architecture change (§5, §6 first).
 | I want to… | Touch | Must not touch |
 |---|---|---|
 | Change colors / fonts / look | `theme.py` only | figure builders, app |
+| Change the page arrangement | `theme.PAGE_CSS` + the width/height tokens + the two `_panel()` composers (app, builder) | figure builders |
+| Add a figure to a panel | the builder, then `as_panel_figure()` at **both** call sites (app + `build_preview`) | the height tokens — a figure taller than its panel overflows it |
 | Add or modify a figure | `option_surface_plot.py` (+ page slot in app) | utils internals |
 | Add a derived column / stat / model (e.g. IV) | `option_surface_utils.py` + tests | plot, app |
 | Add a page for a new assignment | new module + `app.add_page` | existing page, utils |

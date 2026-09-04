@@ -18,6 +18,7 @@ and cite their IDs (FR-x, G-x, AD-x, NFR-x) when explaining decisions.
 | 3 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, module boundaries, decisions (AD-1…AD-9), the "where does my change go" table (§7) |
 | 3 | [docs/SYSTEM-SPEC.md](docs/SYSTEM-SPEC.md) | Schemas, algorithms, edge-case behavior, runtime modes |
 | 4 | [docs/ENGINEERING-PRINCIPLES.md](docs/ENGINEERING-PRINCIPLES.md) | Code quality: SOLID, cohesion/coupling, complexity < 10, tests before refactoring |
+| 4 | [docs/DESIGN-BRIEF.md](docs/DESIGN-BRIEF.md) | The graphical identity (FR-8): palette, typography, the rules the restyle may not break. PO-directed — read it before changing any value in `theme.py`. |
 | 5 | [docs/BACKLOG.md](docs/BACKLOG.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md) · [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) · [docs/checkpoint_audit.md](docs/checkpoint_audit.md) | Operational: the task board (work top-down, T-x IDs) · procedures (env, LSEG pull, run, deploy) · checkpoint demo plan · open questions for the instructor |
 
 If any two of these — or a document and the code — materially contradict, **stop and ask the
@@ -100,9 +101,37 @@ T-15 landed 2026-09-01: the published page's 3D figure carries an as-of **slider
 53 trading days plus **legend** toggles for calls/puts and each series (`static_surface_figure`),
 so FR-4/FR-5 are met without a backend.
 
-**Next up:** **T-13** (`theme.py`, FR-8 — needs the PO's design direction first) and **T-12**
-(the three PO-authored sentences, FR-7). 90 tests green. Update this paragraph
-as things land (lockstep rule).
+T-13 landed 2026-09-02 (FR-8, closing G-5). The PO's direction: a **deep-navy terminal** —
+**amber type** (`ACCENT` = `#FFB000`, headings/metric values/panel numbers/slider), warm
+off-white body, Space Grotesk / Inter / JetBrains Mono, and a **numbered-panel grid layout** on 10
+columns (command bar → readout strip → hero 3D surface at 6 cols with the underlying
+beside it at 4 → the remaining four figures 5+5). The underlying sits next to the
+surface because spot is what makes "near the money" mean anything and the dense part
+of the cloud is that band; hero and sidecar share `HERO_FIGURE_HEIGHT` so the row ends
+level. "Bloomberg" here means the
+*arrangement*, not the palette. README-locked cyan mark / magenta print; puts take the hues
+furthest from their own call — **violet** for the mark, **green** for the print — and every
+marker is filled. The glyph encodes the *role* (circle = mark, diamond = print) for both
+rights, so hue alone separates calls from puts. (The first attempt derived puts as near-shades of their calls with
+open symbols; both made the puts unreadable, and the scatter's puts looked missing entirely.)
+Amber is type and never encodes data. It all lives in `options_surface_lab/theme.py` and is documented in
+[docs/DESIGN-BRIEF.md](docs/DESIGN-BRIEF.md) — read that before changing any value.
+
+All colour/font literals are gone from `option_surface_plot.py`, `options_surface_app.py` and
+`build_preview.py`; `tests/test_theme.py` greps those three modules, repoints a token to prove
+the indirection is real, re-asserts FR-5's mark/print distinction, keeps amber out of the data
+channel, and pins WCAG AA on every rendered pairing. `as_panel_figure()` strips a tiled
+figure's title (its panel header carries it) — the hero keeps its own, because the as-of
+slider rewrites it. **Every figure must declare exactly the height its panel reserves**
+(`HERO_FIGURE_HEIGHT` / `PANEL_FIGURE_HEIGHT`): Plotly draws to `layout.height` regardless of
+the box, so a taller figure paints over the panel below — the dev app did precisely that
+until 2026-09-02. `tests/test_app_figures.py` guards it at the source level. Side effect: the published page now also reaches Google Fonts, so the
+self-containment guard in `tests/test_build_preview.py` allows that host pair alongside the
+Plotly CDN (DESIGN-BRIEF §7).
+
+**Next up:** **T-12** (the three PO-authored sentences, FR-7) — the last P0 gap. **134 tests
+green, no xfail** (the "90" this paragraph carried was stale — `tests/test_build_preview.py`
+was never counted into it). Update this paragraph as things land (lockstep rule).
 
 **Secrets:** `lseg-data.config.json` (repo root) holds the LSEG app-key. It is gitignored —
 never commit it, never print its contents, never copy it into anything that ships.
@@ -128,7 +157,9 @@ never commit it, never print its contents, never copy it into anything that ship
   by `MARK_FIELD_DEFAULT` = `MID_PRICE`. Keep mid and print distinct in color *and* symbol;
   label interpolation as interpolation; never extrapolate; holes render as holes and never
   vanish (AD-9).
-- **No visual literals outside `theme.py`** once FR-8 lands (AD-6).
+- **No visual literals outside `theme.py`** (AD-6, FR-8 — landed 2026-09-02). Enforced by
+  `tests/test_theme.py`, not by review. Read [docs/DESIGN-BRIEF.md](docs/DESIGN-BRIEF.md)
+  before re-toning anything; the cyan-mark / magenta-print encoding is fixed by the README.
 - **Anchor paths to `__file__`, never CWD.**
 - **Tests before refactoring** (NFR-2, ENGINEERING-PRINCIPLES) — the pure functions in
   `*utils.py` are the priority.

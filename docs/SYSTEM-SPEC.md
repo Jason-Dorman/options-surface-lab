@@ -90,9 +90,10 @@ Notes:
 - **Path resolution rule:** the cache path is anchored to the repo root via
   `Path(__file__).resolve().parents[1]`, never the process CWD — implemented in both the
   app's `CACHE_FILE` and `load_payload()`.
-- *Status 2026-08-29:* layout landed (G-1/G-2/G-8 resolved); `tests/` seeded with parsing
-  tests. Not yet created: `theme.py` (FR-8), `test_transforms.py`/`test_iv.py` (FR-3/FR-11),
-  `.github/workflows/deploy.yml` (FR-9).
+- *Status 2026-09-02:* layout landed (G-1/G-2/G-8 resolved); `theme.py` landed with FR-8
+  (T-13). `tests/` carries parsing, transform, RIC-building, acquisition, figure, preview and
+  theme suites. Not yet created: `test_iv.py` (FR-11). The Pages workflow lives at
+  `.github/workflows/pages.yml`, not `deploy.yml`.
 
 ## 4. Component architecture
 
@@ -399,8 +400,8 @@ The exported site cannot run the sequence above past "open page". Design respons
 ## 9. Figure inventory
 
 All builders live in `option_surface_plot.py`, take the wide table (or stock frame) plus an
-as-of/cp selection, and return `go.Figure`. All pull colors/fonts/layout from `theme.py`
-(FR-8; *today they hardcode hex values — G-5*).
+as-of/cp selection, and return `go.Figure`. All colors/fonts/layout come from `theme.py`
+(FR-8, landed 2026-09-02) — the module holds no visual literal of its own.
 
 | Figure | Builder | Encodes | Static interactivity |
 |---|---|---|---|
@@ -410,22 +411,47 @@ as-of/cp selection, and return `go.Figure`. All pull colors/fonts/layout from `t
 | Occupancy heatmaps ×2 | `coverage_heatmap` | (expiry × strike) grid, lit = a number exists that day; one per field, chronologically ordered expiries | Hover |
 | IV surface (FR-11) | *new* `iv_surface_figure` | Black–Scholes IV inverted from SETTLE; assumptions captioned on-figure | Legend, hover |
 
-Marker-identity invariant (FR-5): SETTLE and TRDPRC_1 differ in **both** color and symbol
-(circle vs diamond) in every theme, and the sheet stays translucent and legend-labeled as
-interpolation.
+Marker-identity invariant (FR-5): the mark and TRDPRC_1 differ in **both** color and symbol
+in every theme — circle = mark, diamond = print, for both rights — and the sheet stays
+translucent and legend-labeled as interpolation. Two further legibility rules are enforced
+alongside it: no marker may be an open symbol (they vanish at these sizes on a dark ground),
+and a right's colour must sit at least 60° of hue from its own counterpart, so calls and puts
+are never near-shades of one another.
 
 ## 10. Theme system (FR-8)
 
-`theme.py` is the single source of visual truth:
+`theme.py` is the single source of visual truth. **Landed 2026-09-02 (T-13);** the chosen
+identity — deep-navy terminal, ice-blue chrome, Space Grotesk / Inter / JetBrains Mono — is
+recorded in [DESIGN-BRIEF.md](DESIGN-BRIEF.md), which is the document to read before changing
+a value here.
 
-- **Tokens:** background, surface, border, text, muted-text, accent-settle, accent-trade,
-  accent-put, font stacks. Semantic names, not color names — the restyle changes values,
-  not call sites.
-- **`figure_layout(**overrides) -> dict`:** shared Plotly layout defaults (template, paper/plot
-  colors, font, margins, title style) merged into every figure — deleting today's copy-pasted
-  layout blocks (duplicated-code smell).
-- Both worlds consume it: Plotly builders and Reflex component styling.
-- Acceptance mirror of FR-8: zero color/font literals outside `theme.py`.
+- **Tokens:** `BG`, `SURFACE`, `SURFACE_ALT`, `BORDER`, `GRID`; `TEXT`, `TEXT_MUTED`,
+  `TEXT_INVERSE`; `ACCENT`, `ACCENT_DIM`; `MARK`/`MARK_PUT`, `TRADE`/`TRADE_PUT`,
+  `TRADE_EDGE`; `POSITIVE`, `NEGATIVE`, `WARN`, `NEUTRAL`; the sheet and spread colorscales;
+  three font stacks and the type scale. Semantic names, not color names — the restyle changes
+  values, not call sites.
+- **Marker identity is a token too.** `SYMBOL_MARK*` / `SYMBOL_TRADE*` live here beside the
+  colors, so FR-5's colour-*and*-symbol rule cannot be broken by a palette edit alone.
+- **Layout builders:** `figure_layout()`, `title()`, `caption()`, `axis()`, `scene_axis()`,
+  `scene()`, `legend()`, `slider()` — each returns a dict merged into a figure, which is what
+  removed the copy-pasted layout blocks (duplicated-code smell). They read module globals at
+  call time; capturing defaults at import would silently break the one-token-restyles test.
+- **Layout metrics** (`GUTTER`, `PAGE_PAD`, `PANEL_PAD`, `PANEL_FIGURE_MARGIN/HEIGHT`,
+  `HERO_FIGURE_HEIGHT`, `GRID_COLUMNS`, `W_HERO`/`W_SIDECAR`/`W_HALF`/`W_FULL`) live
+  here too: the terminal grid is part of the identity, not incidental spacing. The
+  widths must tile complete rows, and the hero row's two panels must share a height —
+  both asserted in `tests/test_theme.py`.
+- **Three worlds consume it:** the Plotly builders, the Reflex page (`PANEL_STYLE`,
+  `PANEL_HEADER_STYLE`), and the static builder (`PAGE_CSS`, `GOOGLE_FONTS_LINK`).
+- **`as_panel_figure()`** (in `option_surface_plot.py`, themed from here) strips a tiled
+  figure's own title and tightens its margins, because the panel header already names it.
+  The hero surface is exempt — its title is rewritten by the as-of slider (AD-5).
+- **Webfonts:** `GOOGLE_FONTS_CSS` is one URL — Reflex takes it as a stylesheet, the static
+  builder wraps it in `<link>` tags. Every stack falls back to a system face, so a font that
+  never loads degrades rather than breaks. This is the published page's only non-Plotly
+  network dependency (DESIGN-BRIEF §6).
+- Acceptance mirror of FR-8: zero color/font literals outside `theme.py` — asserted by
+  `tests/test_theme.py`, which also pins WCAG AA on every rendered foreground/ground pair.
 
 ## 11. Synthetic data generator (dev/test infrastructure)
 
@@ -514,7 +540,7 @@ flowchart LR
 
 - [ ] Production renders with zero network calls (cache/synthetic only)
 - [ ] `utils` imports no UI library; `theme` imports nothing project-local
-- [ ] No color/font literals outside `theme.py`
+- [x] No color/font literals outside `theme.py` *(enforced: `tests/test_theme.py`)*
 - [ ] SETTLE vs TRDPRC_1: distinct color **and** symbol, everywhere
 - [ ] Interpolation never extrapolates beyond the data's convex hull, and is always labeled
 - [ ] Missing data renders as holes/empties, never fabricated values, never exceptions

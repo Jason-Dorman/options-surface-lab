@@ -35,7 +35,9 @@ from options_surface_lab.option_surface_utils import (
     summarize_sparsity,
     synthesize_demo_payload,
 )
+from options_surface_lab import theme as T
 from options_surface_lab.option_surface_plot import (
+    as_panel_figure,
     candlestick_figure,
     coverage_heatmap,
     price_surface_figure,
@@ -417,7 +419,12 @@ class State(rx.State):
         else:
             self.asof = ""
 
-        self.fig_stock = candlestick_figure(payload["stock"], self.ticker)
+        # Panelised exactly as `build_preview` does it: the panel header carries the
+        # name, and the figure must declare the height its panel reserves.
+        self.fig_stock = as_panel_figure(
+            candlestick_figure(payload["stock"], self.ticker),
+            height=T.HERO_FIGURE_HEIGHT,
+        )
         self._rebuild_option_figs()
 
         # AD-9: holes render as holes, but a panel with NO settle side at all is a
@@ -459,13 +466,18 @@ class State(rx.State):
     def _rebuild_option_figs(self):
         wide = self._wide
         if wide is None or wide.empty or not self.asof:
-            empty = go.Figure()
-            empty.update_layout(template="plotly_dark", paper_bgcolor="#0d1117")
-            self.fig_surface = empty
-            self.fig_compare = empty
-            self.fig_heat_mark = empty
-            self.fig_spread = empty
-            self.fig_heat_trade = empty
+            # Heights are not decoration here: an undeclared height renders at Plotly's
+            # 450 default and spills out of a 360px tile.
+            self.fig_surface = go.Figure().update_layout(
+                **T.figure_layout(height=T.HERO_FIGURE_HEIGHT)
+            )
+            tile = go.Figure().update_layout(
+                **T.figure_layout(height=T.PANEL_FIGURE_HEIGHT)
+            )
+            self.fig_compare = tile
+            self.fig_heat_mark = tile
+            self.fig_spread = tile
+            self.fig_heat_trade = tile
             return
 
         asof = self.asof
@@ -502,185 +514,221 @@ class State(rx.State):
             show_interpolated=self.show_sheet,
             ticker=self.ticker,
         )
-        self.fig_compare = settle_vs_trade_figure(wide, asof, ticker=self.ticker)
-        self.fig_heat_mark = coverage_heatmap(wide, asof, cp=self.cp, field="MARK")
-        self.fig_spread = spread_heatmap(wide, asof, cp=self.cp)
-        self.fig_heat_trade = coverage_heatmap(wide, asof, cp=self.cp, field="TRDPRC_1")
+        self.fig_compare = as_panel_figure(
+            settle_vs_trade_figure(wide, asof, ticker=self.ticker)
+        )
+        self.fig_heat_mark = as_panel_figure(
+            coverage_heatmap(wide, asof, cp=self.cp, field="MARK")
+        )
+        self.fig_spread = as_panel_figure(spread_heatmap(wide, asof, cp=self.cp))
+        self.fig_heat_trade = as_panel_figure(
+            coverage_heatmap(wide, asof, cp=self.cp, field="TRDPRC_1")
+        )
 
 
-def _metric(label: str, value) -> rx.Component:
-    return rx.card(
-        rx.text(label, size="2", color="#8b949e"),
-        rx.text(value, size="6", color="#00ffcc", weight="bold"),
-        bg="#161b22",
-        border="1px solid #30363d",
-        padding="1rem",
+# Panel figure heights, in CSS units. Derived from the theme so the dev app and the
+# published page cannot drift; the hero and its sidecar must match exactly (DESIGN-BRIEF §5).
+HERO_H = f"{T.HERO_FIGURE_HEIGHT}px"
+TILE_H = f"{T.PANEL_FIGURE_HEIGHT}px"
+
+
+def _readout(label: str, value) -> rx.Component:
+    """One cell of the readout strip: quiet uppercase label, the number in mono amber."""
+    return rx.box(
+        rx.text(
+            label,
+            size="1",
+            color=T.TEXT_MUTED,
+            style={"letter_spacing": "1.2px", "text_transform": "uppercase"},
+        ),
+        rx.text(
+            value,
+            size="6",
+            color=T.ACCENT,
+            weight="bold",
+            font_family=T.FONT_MONO,
+            style={"line_height": "1.15", "margin_top": "3px"},
+        ),
+        bg=T.SURFACE,
+        padding="9px 12px 10px 12px",
+        flex="1 1 158px",
+        min_width="0",
+    )
+
+
+def _panel(
+    n: int, name: str, note: str, fig, height: str, width: int = T.W_HALF
+) -> rx.Component:
+    """A numbered panel: header rule carrying `[n] NAME`, then the figure.
+
+    `width` is in grid columns out of `theme.GRID_COLUMNS`. Mirrors `build_preview._panel`
+    deliberately -- the checkpoint demo and the published page are the same product, so they
+    wear the same chrome (DESIGN-BRIEF section 5).
+    """
+    return rx.box(
+        rx.hstack(
+            rx.text(
+                f"[{n}]",
+                color=T.ACCENT,
+                font_family=T.FONT_MONO,
+                size="1",
+                weight="bold",
+            ),
+            rx.text(
+                name,
+                color=T.TEXT,
+                font_family=T.FONT_DISPLAY,
+                size="1",
+                style={"letter_spacing": "1.4px", "text_transform": "uppercase"},
+            ),
+            rx.spacer(),
+            rx.text(note, color=T.TEXT_MUTED, font_family=T.FONT_MONO, size="1"),
+            spacing="2",
+            align="baseline",
+            **T.PANEL_HEADER_STYLE,
+        ),
+        rx.box(
+            rx.plotly(data=fig, style={"width": "100%", "height": height}),
+            padding=T.PANEL_PAD,
+        ),
+        style={"grid_column": f"span {width}"},
+        min_width="0",
+        **T.PANEL_STYLE,
     )
 
 
 def index() -> rx.Component:
-    return rx.container(
-        rx.vstack(
-            rx.hstack(
-                rx.heading(
-                    "OPTIONS SURFACE LAB",
-                    size="8",
-                    color="#00ffcc",
-                    style={"letter_spacing": "2px"},
-                ),
-                rx.spacer(),
-                rx.badge(
-                    rx.cond(State.is_loading, rx.spinner(size="1"), rx.fragment()),
-                    State.status_msg,
-                    color_scheme=rx.cond(State.is_loading, "amber", "cyan"),
-                    variant="solid",
-                ),
-                width="100%",
-                align="center",
-                padding_y="1rem",
+    return rx.box(
+        # ---- command bar -------------------------------------------------------------
+        rx.hstack(
+            rx.heading(
+                "Options Surface Lab",
+                size="6",
+                color=T.ACCENT,
+                font_family=T.FONT_DISPLAY,
+                style={"letter_spacing": T.TRACKING, "text_transform": "uppercase"},
             ),
-            rx.text(State.data_note, color="#8b949e", size="2"),
-            rx.cond(
-                State.data_warning != "",
-                rx.callout(
-                    State.data_warning,
-                    icon="triangle_alert",
-                    color_scheme="amber",
-                    variant="surface",
-                    size="1",
-                    width="100%",
-                ),
-                rx.fragment(),
-            ),
-            rx.hstack(
-                _metric("Underlying", State.ticker),
-                _metric("Option series", State.option_count),
-                _metric("Quotes on as-of date", State.n_quotes),
-                _metric("Mark, no print", State.mark_no_print),
-                _metric("Median |mark − trade|", State.median_gap),
-                _metric("Median bid-ask spread", State.median_spread),
-                rx.button(
-                    rx.cond(State.is_loading, "Working…", "Reload data"),
-                    on_click=State.load_data,
-                    disabled=State.is_loading,
-                    bg="#238636",
-                    color="#ffffff",
-                    _hover={"bg": "#2ea043"},
-                    size="3",
-                ),
-                spacing="4",
-                width="100%",
-                align="center",
-                wrap="wrap",
-            ),
-            rx.box(
-                rx.plotly(data=State.fig_stock, style={"width": "100%", "height": "420px"}),
-                width="100%",
-                bg="#161b22",
-                border="1px solid #30363d",
-                border_radius="8px",
-                padding="1rem",
-            ),
-            rx.hstack(
-                rx.text("As-of date", color="#8b949e", size="2"),
-                rx.select(
-                    State.asof_options,
-                    value=State.asof,
-                    on_change=State.set_asof,
-                    size="2",
-                ),
-                rx.text("Right", color="#8b949e", size="2"),
-                rx.select(
-                    ["C", "P"],
-                    value=State.cp,
-                    on_change=State.set_cp,
-                    size="2",
-                ),
-                rx.switch(checked=State.show_mark, on_change=State.toggle_mark),
-                rx.text(f"MARK ({MARK_FIELD_DEFAULT})", color="#00ffcc", size="2"),
-                rx.switch(checked=State.show_trade, on_change=State.toggle_trade),
-                rx.text("TRDPRC_1", color="#ff0055", size="2"),
-                rx.switch(checked=State.show_sheet, on_change=State.toggle_sheet),
-                rx.text("Interpolated sheet", color="#8b949e", size="2"),
-                spacing="3",
-                align="center",
-                wrap="wrap",
-                width="100%",
-            ),
+            rx.spacer(),
             rx.text(
-                f"Cyan dots = the quoted mark ({MARK_FIELD_DEFAULT}). Magenta diamonds = last trade. "
-                "US listed equity options have no exchange settlement price — every mark is derived. "
-                "The translucent sheet is linearly interpolated and will happily "
-                "invent prices in strikes that never printed. Turn it off.",
-                color="#8b949e",
+                State.data_note,
+                color=T.TEXT_MUTED,
+                font_family=T.FONT_MONO,
+                size="1",
+            ),
+            rx.badge(
+                rx.cond(State.is_loading, rx.spinner(size="1"), rx.fragment()),
+                State.status_msg,
+                color_scheme=rx.cond(State.is_loading, "amber", "gray"),
+                variant="solid",
+            ),
+            rx.button(
+                rx.cond(State.is_loading, "Working...", "Reload"),
+                on_click=State.load_data,
+                disabled=State.is_loading,
+                bg=T.ACCENT_DIM,
+                color=T.TEXT,
+                _hover={"bg": T.ACCENT, "color": T.TEXT_INVERSE},
                 size="2",
             ),
-            rx.box(
-                rx.plotly(data=State.fig_surface, style={"width": "100%", "height": "640px"}),
+            align="center",
+            spacing="3",
+            wrap="wrap",
+            width="100%",
+            bg=T.SURFACE,
+            border=f"1px solid {T.BORDER}",
+            padding="10px 14px",
+        ),
+        # ---- readout strip -----------------------------------------------------------
+        rx.flex(
+            _readout("Underlying", State.ticker),
+            _readout("Option series", State.option_count),
+            _readout("Quotes on as-of date", State.n_quotes),
+            _readout("Mark, no print", State.mark_no_print),
+            _readout("Median |mark - trade|", State.median_gap),
+            _readout("Median bid-ask spread", State.median_spread),
+            wrap="wrap",
+            spacing="0",
+            width="100%",
+            bg=T.BORDER,
+            border=f"1px solid {T.BORDER}",
+            border_top="0",
+            gap=T.GUTTER,
+            margin_bottom="10px",
+        ),
+        rx.cond(
+            State.data_warning != "",
+            rx.callout(
+                State.data_warning,
+                icon="triangle_alert",
+                color_scheme="amber",
+                variant="surface",
+                size="1",
                 width="100%",
-                bg="#161b22",
-                border="1px solid #30363d",
-                border_radius="8px",
-                padding="1rem",
+                margin_bottom="10px",
             ),
-            rx.box(
-                rx.plotly(data=State.fig_compare, style={"width": "100%", "height": "460px"}),
-                width="100%",
-                bg="#161b22",
-                border="1px solid #30363d",
-                border_radius="8px",
-                padding="1rem",
+            rx.fragment(),
+        ),
+        # ---- controls: local dev only. The published page has no backend, so its
+        # equivalents are the Plotly slider and legend inside the hero figure (AD-5).
+        rx.hstack(
+            rx.text("As-of", color=T.TEXT_MUTED, size="1", font_family=T.FONT_MONO),
+            rx.select(State.asof_options, value=State.asof, on_change=State.set_asof, size="1"),
+            rx.text("Right", color=T.TEXT_MUTED, size="1", font_family=T.FONT_MONO),
+            rx.select(["C", "P"], value=State.cp, on_change=State.set_cp, size="1"),
+            rx.switch(checked=State.show_mark, on_change=State.toggle_mark),
+            rx.text(f"MARK ({MARK_FIELD_DEFAULT})", color=T.MARK, size="1"),
+            rx.switch(checked=State.show_trade, on_change=State.toggle_trade),
+            rx.text("TRDPRC_1", color=T.TRADE, size="1"),
+            rx.switch(checked=State.show_sheet, on_change=State.toggle_sheet),
+            rx.text("Interpolated sheet", color=T.TEXT_MUTED, size="1"),
+            spacing="3",
+            align="center",
+            wrap="wrap",
+            width="100%",
+            bg=T.SURFACE,
+            border=f"1px solid {T.BORDER}",
+            padding="8px 12px",
+            margin_bottom="10px",
+        ),
+        # ---- the panel grid ----------------------------------------------------------
+        rx.grid(
+            # Row 1: the surface, with the underlying beside it. Spot is what makes "near
+            # the money" mean anything, and the dense part of the cloud is exactly that
+            # band -- so the two belong side by side. Equal heights keep the row square.
+            _panel(
+                1, "Price surface - 3D",
+                "cyan = mark, magenta = print, sheet is interpolated",
+                State.fig_surface, HERO_H, width=T.W_HERO,
             ),
-            rx.hstack(
-                rx.box(
-                    rx.plotly(
-                        data=State.fig_heat_mark,
-                        style={"width": "100%", "height": "380px"},
-                    ),
-                    width="50%",
-                    bg="#161b22",
-                    border="1px solid #30363d",
-                    border_radius="8px",
-                    padding="0.5rem",
-                ),
-                rx.box(
-                    rx.plotly(
-                        data=State.fig_heat_trade,
-                        style={"width": "100%", "height": "380px"},
-                    ),
-                    width="50%",
-                    bg="#161b22",
-                    border="1px solid #30363d",
-                    border_radius="8px",
-                    padding="0.5rem",
-                ),
-                width="100%",
-                spacing="3",
-            ),
-            rx.text(
-                "Occupancy says whether a number exists. The spread says whether to believe it — "
-                "a mark halfway between a $0.10 bid and a $2.00 ask is not a price you can trade.",
-                color="#8b949e",
-                size="2",
-            ),
-            rx.box(
-                rx.plotly(data=State.fig_spread, style={"width": "100%", "height": "420px"}),
-                width="100%",
-                bg="#161b22",
-                border="1px solid #30363d",
-                border_radius="8px",
-                padding="1rem",
-            ),
-            spacing="5",
+            _panel(2, "Underlying", "spot context - close = TRDPRC_1",
+                   State.fig_stock, HERO_H, width=T.W_SIDECAR),
+            # Row 2: is the mark right, and is it believable?
+            _panel(3, "Mark vs print", f"{MARK_FIELD_DEFAULT} against TRDPRC_1",
+                   State.fig_compare, TILE_H),
+            _panel(4, "Spread - can you believe the mark?", "bid-ask as % of the mark",
+                   State.fig_spread, TILE_H),
+            # Row 3: where the data is not there at all. Paired so they can be compared.
+            _panel(5, "Mark occupancy", "lit = a mark exists",
+                   State.fig_heat_mark, TILE_H),
+            _panel(6, "Print occupancy", "lit = someone traded",
+                   State.fig_heat_trade, TILE_H),
+            columns=str(T.GRID_COLUMNS),
+            spacing="3",
             width="100%",
         ),
         on_mount=State.load_data,
-        background_color="#0d1117",
+        background_color=T.BG,
+        color=T.TEXT,
+        font_family=T.FONT_BODY,
         min_height="100vh",
-        max_width="100%",
-        padding="2rem",
+        width="100%",
+        padding=T.PAGE_PAD,
     )
 
 
-app = rx.App()
+app = rx.App(
+    # The webfonts the identity is built on (FR-8). Reflex injects these into <head>;
+    # every stack in theme.py falls back to a system face if they never arrive.
+    stylesheets=[T.GOOGLE_FONTS_CSS],
+)
 app.add_page(index)

@@ -1,4 +1,9 @@
-"""Plotly figures for the options surface lab."""
+"""Plotly figures for the options surface lab.
+
+Every visual constant comes from :mod:`options_surface_lab.theme` (FR-8 / AD-6). If you
+find yourself typing a `#` followed by six hex digits in this file, the token you want is
+missing from the theme — add it there.
+"""
 
 from __future__ import annotations
 
@@ -7,31 +12,37 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from options_surface_lab import theme as T
 from options_surface_lab.option_surface_utils import MARK_FIELD_DEFAULT, surface_grid
 
 # Labels name the field the mark actually comes from. There is no SETTLE for US
 # listed equity options (checkpoint_audit.md §3) — saying so on the axis is the point.
 MARK_LABEL = MARK_FIELD_DEFAULT
 
+# FR-5's marker-identity invariant, in one place: the mark and the print differ in colour
+# *and* symbol for both rights, so no restyle can collapse them into one another.
+SERIES_STYLE = {
+    ("C", "mark"): dict(color=T.MARK, symbol=T.SYMBOL_MARK, size=T.SIZE_MARK),
+    ("P", "mark"): dict(color=T.MARK_PUT, symbol=T.SYMBOL_MARK_PUT, size=T.SIZE_MARK),
+    ("C", "trade"): dict(color=T.TRADE, symbol=T.SYMBOL_TRADE, size=T.SIZE_TRADE),
+    ("P", "trade"): dict(color=T.TRADE_PUT, symbol=T.SYMBOL_TRADE_PUT, size=T.SIZE_TRADE),
+}
+SHEET_SCALE = {"C": T.SHEET_SCALE, "P": T.SHEET_SCALE_PUT}
+STYLED_RIGHTS = frozenset(SHEET_SCALE)
 
-def _scene_axis(title: str) -> dict:
-    """Shared 3D axis styling — used by both the interactive and the static surface."""
-    return dict(
-        title=dict(text=title, font=dict(size=12, family="Inter, system-ui, sans-serif")),
-        backgroundcolor="#161b22",
-        gridcolor="#30363d",
-        showbackground=True,
-        zeroline=False,
-        tickfont=dict(size=10, family="Inter, system-ui, sans-serif"),
+
+def _empty_figure(message: str, height: int | None = None) -> go.Figure:
+    """A themed 'nothing to draw' panel. Never raise at a hole (AD-9, SYSTEM-SPEC §11).
+
+    Defaults to the tile height rather than Plotly's 450: an empty figure that does not
+    declare a height renders taller than the box reserved for it and spills into the
+    panel below.
+    """
+    return go.Figure().update_layout(
+        **T.figure_layout(
+            title=T.title(message), height=height or T.PANEL_FIGURE_HEIGHT
+        )
     )
-
-
-DARK = dict(
-    template="plotly_dark",
-    paper_bgcolor="#0d1117",
-    plot_bgcolor="#161b22",
-    font=dict(color="#e6edf3", family="monospace"),
-)
 
 
 def candlestick_figure(df_stock: pd.DataFrame, ticker: str) -> go.Figure:
@@ -43,42 +54,44 @@ def candlestick_figure(df_stock: pd.DataFrame, ticker: str) -> go.Figure:
                 high=df_stock["HIGH_1"],
                 low=df_stock["LOW_1"],
                 close=df_stock["TRDPRC_1"],
-                increasing_line_color="#00ffcc",
-                increasing_fillcolor="#00ffcc",
-                decreasing_line_color="#ff0055",
-                decreasing_fillcolor="#ff0055",
+                increasing_line_color=T.POSITIVE,
+                increasing_fillcolor=T.POSITIVE,
+                decreasing_line_color=T.NEGATIVE,
+                decreasing_fillcolor=T.NEGATIVE,
                 name=ticker,
             )
         ]
     )
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#161b22",
-        font=dict(color="#e6edf3", family="Inter, system-ui, sans-serif", size=12),
-        title=dict(
-            text=f"{ticker}  ·  underlying OHLC",
-            font=dict(size=16),
-            x=0.02,
-            xanchor="left",
-        ),
-        xaxis=dict(gridcolor="#30363d", rangeslider=dict(visible=False)),
-        yaxis=dict(gridcolor="#30363d", title="Price ($)"),
-        margin=dict(l=48, r=24, t=56, b=40),
-        height=420,
-        annotations=[
-            dict(
-                text="Close field is TRDPRC_1 (last trade) — not an option settle",
-                xref="paper",
-                yref="paper",
-                x=0.0,
-                y=1.02,
-                showarrow=False,
-                font=dict(size=11, color="#8b949e"),
-            )
-        ],
+        **T.figure_layout(
+            title=T.title(f"{ticker}  ·  underlying OHLC"),
+            xaxis=T.axis(rangeslider=dict(visible=False)),
+            yaxis=T.axis("Price ($)"),
+            margin=dict(l=48, r=24, t=56, b=40),
+            height=420,
+            annotations=[
+                T.caption("Close field is TRDPRC_1 (last trade) — not an option settle")
+            ],
+        )
     )
     return fig
+
+
+def as_panel_figure(fig: go.Figure, height: int | None = None) -> go.Figure:
+    """Strip a figure's own title and tighten it for a tiled panel (DESIGN-BRIEF §5).
+
+    In the terminal layout each panel carries a header rule with its number and name, so a
+    Plotly title inside the plot area would say the same thing twice and eat a third of the
+    tile. The caption annotation stays — it is the "how to read this" line, not a label.
+
+    Not applied to the hero surface: its title tracks the as-of slider, so it has to live
+    inside the figure JSON where the slider can rewrite it (AD-5).
+    """
+    return fig.update_layout(
+        title_text=None,
+        margin=T.PANEL_FIGURE_MARGIN,
+        height=height or T.PANEL_FIGURE_HEIGHT,
+    )
 
 
 def _slice_wide(wide: pd.DataFrame, asof, cp: str) -> pd.DataFrame:
@@ -91,6 +104,73 @@ def _slice_wide(wide: pd.DataFrame, asof, cp: str) -> pd.DataFrame:
     return sl
 
 
+def _mark_trace(frame: pd.DataFrame, cp: str, name: str, **overrides) -> go.Scatter3d:
+    st = SERIES_STYLE[(cp, "mark")]
+    return go.Scatter3d(
+        x=frame["strike"],
+        y=frame["dte"],
+        z=frame["MARK"],
+        mode="markers",
+        name=name,
+        marker=dict(
+            size=st["size"], color=st["color"], opacity=0.85, symbol=st["symbol"],
+            line=dict(width=0),
+        ),
+        hovertemplate=(
+            f"<b>{MARK_LABEL}</b> $%{{z:.3f}}<br>K=%{{x:.2f}}<br>DTE=%{{y}}"
+            "<br>%{customdata[0]}<extra></extra>"
+        ),
+        customdata=np.stack([frame["ric"].astype(str)], axis=1),
+        **overrides,
+    )
+
+
+def _trade_trace(frame: pd.DataFrame, cp: str, name: str, **overrides) -> go.Scatter3d:
+    st = SERIES_STYLE[(cp, "trade")]
+    return go.Scatter3d(
+        x=frame["strike"],
+        y=frame["dte"],
+        z=frame["TRDPRC_1"],
+        mode="markers",
+        name=name,
+        marker=dict(
+            size=st["size"], color=st["color"], opacity=1.0, symbol=st["symbol"],
+            line=dict(width=0.5, color=T.TRADE_EDGE),
+        ),
+        hovertemplate=(
+            "<b>TRDPRC_1</b> $%{z:.3f}<br>K=%{x:.2f}<br>DTE=%{y}"
+            "<br>%{customdata[0]}<extra></extra>"
+        ),
+        customdata=np.stack([frame["ric"].astype(str)], axis=1),
+        **overrides,
+    )
+
+
+def _sheet_trace(grid: dict, cp: str, name: str, **overrides) -> go.Surface:
+    """The interpolated sheet — translucent and label-led, because it is not a market."""
+    return go.Surface(
+        x=grid["x"],
+        y=grid["y"],
+        z=grid["z"],
+        name=name,
+        colorscale=SHEET_SCALE[cp],
+        opacity=T.SHEET_OPACITY,
+        showscale=False,
+        hoverinfo="skip",
+        contours=dict(x=dict(show=False), y=dict(show=False), z=dict(show=False)),
+        **overrides,
+    )
+
+
+def _surface_scene() -> dict:
+    # near-dated in front: reverse DTE so 0 sits toward the viewer
+    return T.scene(
+        xaxis=T.scene_axis("Strike ($)"),
+        yaxis=T.scene_axis("Days to expiry", autorange="reversed"),
+        zaxis=T.scene_axis("Option price ($)"),
+    )
+
+
 def price_surface_figure(
     wide: pd.DataFrame,
     asof,
@@ -101,158 +181,50 @@ def price_surface_figure(
     ticker: str = "UUUU",
 ) -> go.Figure:
     sl = _slice_wide(wide, asof, cp)
-    fig = go.Figure()
-
     if sl.empty:
-        fig.update_layout(
-            **DARK,
-            title=dict(
-                text="No quotes on this date / filter",
-                font=dict(size=16, family="Inter, system-ui, sans-serif"),
-            ),
-            height=620,
-        )
-        return fig
+        return _empty_figure("No quotes on this date / filter", height=T.HERO_FIGURE_HEIGHT)
 
+    fig = go.Figure()
     spot = sl["spot"].dropna()
     spot_val = float(spot.median()) if len(spot) else None
     cp_label = {"C": "Calls", "P": "Puts", "B": "Puts + Calls"}.get(cp, cp)
     asof_txt = str(pd.Timestamp(asof).date()) if asof is not None else "all dates"
     spot_txt = f"  ·  spot ${spot_val:.2f}" if spot_val is not None else ""
-
-    def _axis(title: str) -> dict:
-        return dict(
-            title=dict(text=title, font=dict(size=12, family="Inter, system-ui, sans-serif")),
-            backgroundcolor="#161b22",
-            gridcolor="#30363d",
-            showbackground=True,
-            zeroline=False,
-            tickfont=dict(size=10, family="Inter, system-ui, sans-serif"),
-        )
+    # "B" draws both rights; the style table is keyed per right, so fall back to calls.
+    style_cp = cp if cp in STYLED_RIGHTS else "C"
 
     if show_mark and sl["MARK"].notna().any():
         s = sl.dropna(subset=["MARK"])
-        fig.add_trace(
-            go.Scatter3d(
-                x=s["strike"],
-                y=s["dte"],
-                z=s["MARK"],
-                mode="markers",
-                name="MARK",
-                marker=dict(
-                    size=4,
-                    color="#00ffcc",
-                    opacity=0.85,
-                    symbol="circle",
-                    line=dict(width=0),
-                ),
-                hovertemplate=(
-                    f"<b>mark ({MARK_LABEL})</b> $%{{z:.3f}}<br>K=%{{x:.2f}}<br>DTE=%{{y}}"
-                    "<br>%{customdata[0]}<extra></extra>"
-                ),
-                customdata=np.stack([s["ric"].astype(str), s["cp"].astype(str)], axis=1),
-            )
-        )
+        fig.add_trace(_mark_trace(s, style_cp, "MARK"))
         if show_interpolated:
             grid = surface_grid(s, "MARK")
             if grid is not None:
-                fig.add_trace(
-                    go.Surface(
-                        x=grid["x"],
-                        y=grid["y"],
-                        z=grid["z"],
-                        name="Interpolated sheet",
-                        colorscale=[[0, "#0d3d38"], [0.5, "#1a7a6e"], [1, "#00ffcc"]],
-                        opacity=0.28,
-                        showscale=False,
-                        hoverinfo="skip",
-                        contours=dict(
-                            x=dict(show=False),
-                            y=dict(show=False),
-                            z=dict(show=False),
-                        ),
-                    )
-                )
+                fig.add_trace(_sheet_trace(grid, style_cp, "Interpolated sheet"))
 
     if show_trade and sl["TRDPRC_1"].notna().any():
         t = sl.dropna(subset=["TRDPRC_1"])
-        fig.add_trace(
-            go.Scatter3d(
-                x=t["strike"],
-                y=t["dte"],
-                z=t["TRDPRC_1"],
-                mode="markers",
-                name="TRDPRC_1",
-                marker=dict(
-                    size=6,
-                    color="#ff0055",
-                    opacity=1.0,
-                    symbol="diamond",
-                    line=dict(width=0.5, color="#ff6b9d"),
-                ),
-                hovertemplate=(
-                    "<b>TRDPRC_1</b> $%{z:.3f}<br>K=%{x:.2f}<br>DTE=%{y}"
-                    "<br>%{customdata[0]}<extra></extra>"
-                ),
-                customdata=np.stack([t["ric"].astype(str), t["cp"].astype(str)], axis=1),
-            )
-        )
+        fig.add_trace(_trade_trace(t, style_cp, "TRDPRC_1"))
 
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#161b22",
-        font=dict(color="#e6edf3", family="Inter, system-ui, sans-serif", size=12),
-        title=dict(
-            text=f"{ticker}  {cp_label}  ·  {asof_txt}{spot_txt}",
-            font=dict(size=16, color="#e6edf3", family="Inter, system-ui, sans-serif"),
-            x=0.02,
-            xanchor="left",
-            y=0.98,
-            yanchor="top",
-        ),
-        scene=dict(
-            xaxis=_axis("Strike ($)"),
-            # near-dated in front: reverse DTE so 0 sits toward the viewer
-            yaxis={**_axis("Days to expiry"), "autorange": "reversed"},
-            zaxis=_axis("Option price ($)"),
-            bgcolor="#0d1117",
-            aspectmode="manual",
-            aspectratio=dict(x=1.15, y=1.0, z=0.7),
-            camera=dict(
-                eye=dict(x=1.55, y=-1.45, z=0.85),
-                center=dict(x=0, y=0, z=-0.05),
-            ),
-        ),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.0,
-            x=1.0,
-            xanchor="right",
-            bgcolor="rgba(13,17,23,0.7)",
-            bordercolor="#30363d",
-            borderwidth=1,
-            font=dict(size=11),
-            itemsizing="constant",
-        ),
-        height=640,
-        margin=dict(l=10, r=10, t=56, b=10),
-        annotations=[
-            dict(
-                text="Cyan = quoted mark &nbsp;·&nbsp; Magenta = last trade (TRDPRC_1) &nbsp;·&nbsp; Sheet is interpolated, not a market",
-                xref="paper",
-                yref="paper",
-                x=0.0,
-                y=1.0,
-                xanchor="left",
-                yanchor="bottom",
-                showarrow=False,
-                font=dict(size=11, color="#8b949e", family="Inter, system-ui, sans-serif"),
-            )
-        ],
+        **T.figure_layout(
+            title=T.title(f"{ticker}  {cp_label}  ·  {asof_txt}{spot_txt}"),
+            scene=_surface_scene(),
+            legend=T.legend(),
+            # Same height as the published page's hero, because it sits in the same
+            # panel slot. A figure taller than its panel overflows into the row below.
+            height=T.HERO_FIGURE_HEIGHT,
+            margin=dict(l=10, r=10, t=56, b=10),
+            annotations=[
+                T.caption(
+                    "Cyan = quoted mark &nbsp;·&nbsp; Magenta = last trade (TRDPRC_1) "
+                    "&nbsp;·&nbsp; Sheet is interpolated, not a market",
+                    y=1.0,
+                )
+            ],
+        )
     )
     return fig
+
 
 
 def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") -> go.Figure:
@@ -280,11 +252,7 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
     dropped entirely.
     """
     if wide is None or wide.empty:
-        return go.Figure().update_layout(
-            **DARK,
-            height=640,
-            title=dict(text="No data", font=dict(size=16, family="Inter, system-ui, sans-serif")),
-        )
+        return _empty_figure("No data", height=T.HERO_FIGURE_HEIGHT)
 
     # Every trading day by default — the PO's call (2026-09-01): render all the data we have
     # and accept the load time. To trim, pass an explicit list; `curated_asof_dates(wide, n)`
@@ -294,12 +262,6 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
     if len(dates) == 0:
         return price_surface_figure(wide, None, ticker=ticker)
 
-    STYLE = {
-        ("C", "mark"): dict(color="#00ffcc", symbol="circle", size=4),
-        ("P", "mark"): dict(color="#7ee787", symbol="circle-open", size=4),
-        ("C", "trade"): dict(color="#ff0055", symbol="diamond", size=6),
-        ("P", "trade"): dict(color="#ffa657", symbol="diamond-open", size=6),
-    }
     fig = go.Figure()
     per_date, spots = [], {}
 
@@ -316,28 +278,10 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
 
             mk = sl.dropna(subset=["MARK"])
             if len(mk):
-                st = STYLE[(cp, "mark")]
                 fig.add_trace(
-                    go.Scatter3d(
-                        x=mk["strike"],
-                        y=mk["dte"],
-                        z=mk["MARK"],
-                        mode="markers",
-                        name=f"{MARK_LABEL} · {right}",
-                        visible=False,
-                        legendgroup=f"mark-{cp}",
-                        marker=dict(
-                            size=st["size"],
-                            color=st["color"],
-                            opacity=0.85,
-                            symbol=st["symbol"],
-                            line=dict(width=0),
-                        ),
-                        hovertemplate=(
-                            f"<b>{MARK_LABEL}</b> $%{{z:.3f}}<br>K=%{{x:.2f}}"
-                            "<br>DTE=%{y}<br>%{customdata[0]}<extra></extra>"
-                        ),
-                        customdata=np.stack([mk["ric"].astype(str)], axis=1),
+                    _mark_trace(
+                        mk, cp, f"{MARK_LABEL} · {right}",
+                        visible=False, legendgroup=f"mark-{cp}",
                     )
                 )
                 idx[(cp, "mark")] = len(fig.data) - 1
@@ -345,53 +289,19 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
                 grid = surface_grid(mk, "MARK")
                 if grid is not None:
                     fig.add_trace(
-                        go.Surface(
-                            x=grid["x"],
-                            y=grid["y"],
-                            z=grid["z"],
-                            name=f"Interpolated sheet · {right}",
-                            visible=False,
-                            showlegend=True,
-                            legendgroup=f"sheet-{cp}",
-                            colorscale=(
-                                [[0, "#0d3d38"], [0.5, "#1a7a6e"], [1, "#00ffcc"]]
-                                if cp == "C"
-                                else [[0, "#12301c"], [0.5, "#2f6b3a"], [1, "#7ee787"]]
-                            ),
-                            opacity=0.26,
-                            showscale=False,
-                            hoverinfo="skip",
-                            contours=dict(
-                                x=dict(show=False), y=dict(show=False), z=dict(show=False)
-                            ),
+                        _sheet_trace(
+                            grid, cp, f"Interpolated sheet · {right}",
+                            visible=False, showlegend=True, legendgroup=f"sheet-{cp}",
                         )
                     )
                     idx[(cp, "sheet")] = len(fig.data) - 1
 
             tr = sl.dropna(subset=["TRDPRC_1"])
             if len(tr):
-                st = STYLE[(cp, "trade")]
                 fig.add_trace(
-                    go.Scatter3d(
-                        x=tr["strike"],
-                        y=tr["dte"],
-                        z=tr["TRDPRC_1"],
-                        mode="markers",
-                        name=f"TRDPRC_1 · {right}",
-                        visible=False,
-                        legendgroup=f"trade-{cp}",
-                        marker=dict(
-                            size=st["size"],
-                            color=st["color"],
-                            opacity=1.0,
-                            symbol=st["symbol"],
-                            line=dict(width=0.5, color="#ff6b9d"),
-                        ),
-                        hovertemplate=(
-                            "<b>TRDPRC_1</b> $%{z:.3f}<br>K=%{x:.2f}"
-                            "<br>DTE=%{y}<br>%{customdata[0]}<extra></extra>"
-                        ),
-                        customdata=np.stack([tr["ric"].astype(str)], axis=1),
+                    _trade_trace(
+                        tr, cp, f"TRDPRC_1 · {right}",
+                        visible=False, legendgroup=f"trade-{cp}",
                     )
                 )
                 idx[(cp, "trade")] = len(fig.data) - 1
@@ -432,72 +342,22 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
     ]
 
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#161b22",
-        font=dict(color="#e6edf3", family="Inter, system-ui, sans-serif", size=12),
-        title=dict(
-            text=_title(per_date[default][0]),
-            font=dict(size=16, color="#e6edf3", family="Inter, system-ui, sans-serif"),
-            x=0.02,
-            xanchor="left",
-            y=0.98,
-            yanchor="top",
-        ),
-        scene=dict(
-            xaxis=_scene_axis("Strike ($)"),
-            yaxis={**_scene_axis("Days to expiry"), "autorange": "reversed"},
-            zaxis=_scene_axis("Option price ($)"),
-            bgcolor="#0d1117",
-            aspectmode="manual",
-            aspectratio=dict(x=1.15, y=1.0, z=0.7),
-            camera=dict(eye=dict(x=1.55, y=-1.45, z=0.85), center=dict(x=0, y=0, z=-0.05)),
-        ),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.0,
-            x=1.0,
-            xanchor="right",
-            bgcolor="rgba(13,17,23,0.7)",
-            bordercolor="#30363d",
-            borderwidth=1,
-            font=dict(size=10),
-            itemsizing="constant",
-        ),
-        sliders=[
-            dict(
-                active=default,
-                steps=steps,
-                pad=dict(t=8, b=8),
-                x=0.02,
-                len=0.96,
-                currentvalue=dict(prefix="As-of  ", font=dict(size=13, color="#00ffcc")),
-                bgcolor="#30363d",
-                activebgcolor="#00ffcc",
-                bordercolor="#30363d",
-                font=dict(size=9, color="#8b949e"),
-                tickcolor="#30363d",
-            )
-        ],
-        height=760,
-        margin=dict(l=10, r=10, t=96, b=90),
-        annotations=[
-            dict(
-                text=(
+        **T.figure_layout(
+            title=T.title(_title(per_date[default][0])),
+            scene=_surface_scene(),
+            legend=T.legend(font=dict(size=T.SIZE_TICK, color=T.TEXT, family=T.FONT_BODY)),
+            sliders=[T.slider(active=default, steps=steps)],
+            height=T.HERO_FIGURE_HEIGHT,
+            margin=dict(l=8, r=8, t=88, b=84),
+            annotations=[
+                T.caption(
                     "Drag the slider to change as-of date &nbsp;·&nbsp; puts start hidden — "
-                    "click them in the legend &nbsp;·&nbsp; the sheet is interpolated, not a market"
-                ),
-                xref="paper",
-                yref="paper",
-                x=0.0,
-                y=1.045,
-                xanchor="left",
-                yanchor="bottom",
-                showarrow=False,
-                font=dict(size=11, color="#8b949e", family="Inter, system-ui, sans-serif"),
-            )
-        ],
+                    "click them in the legend &nbsp;·&nbsp; the sheet is interpolated, "
+                    "not a market",
+                    y=1.045,
+                )
+            ],
+        )
     )
     return fig
 
@@ -516,33 +376,47 @@ def settle_vs_trade_figure(wide: pd.DataFrame, asof=None, ticker: str = "UUUU") 
     )
 
     if len(both):
-        color = both["cp"].map({"C": "#00ffcc", "P": "#d2a8ff"})
-        fig.add_trace(
-            go.Scatter(
-                x=both["TRDPRC_1"],
-                y=both["MARK"],
-                mode="markers",
-                marker=dict(size=7, color=color, opacity=0.85),
-                customdata=np.stack(
-                    [
-                        both["ric"].astype(str),
-                        both["strike"],
-                        both["dte"],
-                        both["cp"],
-                    ],
-                    axis=1,
+        # One trace per right, not one trace coloured by a mapped array. The array version
+        # produced a single unlabelled legend entry, so a reader had no way to confirm the
+        # puts were there at all — and with the old put hue sitting next to the call hue,
+        # the honest first read was "the puts are missing". Two named traces make the split
+        # explicit, and the legend doubles as a filter.
+        #
+        # Both rights draw the mark, so both are circles; hue alone separates them, which is
+        # why the two hues are 83 degrees apart rather than neighbouring shades.
+        for cp, label, colour, symbol in (
+            ("C", "Calls", T.MARK, T.SYMBOL_MARK),
+            ("P", "Puts", T.MARK_PUT, T.SYMBOL_MARK_PUT),
+        ):
+            side = both[both["cp"] == cp]
+            if not len(side):
+                continue
+            fig.add_trace(
+                go.Scatter(
+                    x=side["TRDPRC_1"],
+                    y=side["MARK"],
+                    mode="markers",
+                    name=label,
+                    marker=dict(
+                        size=7,
+                        color=colour,
+                        opacity=0.85,
+                        symbol=symbol,
+                        line=dict(width=0.5, color=T.SURFACE_ALT),
+                    ),
+                    customdata=np.stack(
+                        [side["ric"].astype(str), side["strike"], side["dte"]], axis=1
+                    ),
+                    hovertemplate=(
+                        f"<b>{label[:-1]}</b>  trade $%{{x:.3f}}  mark $%{{y:.3f}}"
+                        "<br>K=%{customdata[1]} DTE=%{customdata[2]}"
+                        "<br>%{customdata[0]}<extra></extra>"
+                    ),
+                    showlegend=True,
                 ),
-                hovertemplate=(
-                    "trade $%{x:.3f}  settle $%{y:.3f}"
-                    "<br>%{customdata[3]} K=%{customdata[1]} DTE=%{customdata[2]}"
-                    "<br>%{customdata[0]}<extra></extra>"
-                ),
-                name="Paired quotes",
-                showlegend=False,
-            ),
-            row=1,
-            col=1,
-        )
+                row=1,
+                col=1,
+            )
         lo = float(min(both["TRDPRC_1"].min(), both["MARK"].min()))
         hi = float(max(both["TRDPRC_1"].max(), both["MARK"].max()))
         pad = (hi - lo) * 0.06 if hi > lo else 0.05
@@ -551,7 +425,7 @@ def settle_vs_trade_figure(wide: pd.DataFrame, asof=None, ticker: str = "UUUU") 
                 x=[lo - pad, hi + pad],
                 y=[lo - pad, hi + pad],
                 mode="lines",
-                line=dict(color="#8b949e", dash="dash", width=1),
+                line=dict(color=T.TEXT_MUTED, dash="dash", width=1),
                 name="y = x",
                 showlegend=True,
             ),
@@ -569,11 +443,11 @@ def settle_vs_trade_figure(wide: pd.DataFrame, asof=None, ticker: str = "UUUU") 
         go.Bar(
             x=["Settle only", "Both", "Print only"],
             y=[n_settle_only, n_both, n_trade_only],
-            marker_color=["#00ffcc", "#58a6ff", "#ff0055"],
+            marker_color=[T.MARK, T.NEUTRAL, T.TRADE],
             showlegend=False,
             text=[n_settle_only, n_both, n_trade_only],
             textposition="inside",
-            textfont=dict(color="#0d1117", size=12),
+            textfont=dict(color=T.TEXT_INVERSE, size=12, family=T.FONT_MONO),
             cliponaxis=False,
         ),
         row=1,
@@ -581,72 +455,31 @@ def settle_vs_trade_figure(wide: pd.DataFrame, asof=None, ticker: str = "UUUU") 
     )
     fig.update_yaxes(range=[0, ymax * 1.18], row=1, col=2)
 
-    fig.update_xaxes(
-        title_text="TRDPRC_1 ($)",
-        row=1,
-        col=1,
-        gridcolor="#30363d",
-        zeroline=False,
-        title_font=dict(size=12),
-        tickfont=dict(size=11),
-    )
-    fig.update_yaxes(
-        title_text=f"mark — {MARK_LABEL} ($)",
-        row=1,
-        col=1,
-        gridcolor="#30363d",
-        zeroline=False,
-        title_font=dict(size=12),
-        tickfont=dict(size=11),
-    )
-    fig.update_xaxes(title_text=None, row=1, col=2, tickfont=dict(size=11))
-    fig.update_yaxes(
-        title_text="Series count",
-        row=1,
-        col=2,
-        gridcolor="#30363d",
-        title_font=dict(size=12),
-        tickfont=dict(size=11),
-    )
+    fig.update_xaxes(T.axis("TRDPRC_1 ($)"), row=1, col=1)
+    fig.update_yaxes(T.axis(f"mark — {MARK_LABEL} ($)"), row=1, col=1)
+    fig.update_xaxes(T.axis(), row=1, col=2)
+    fig.update_yaxes(T.axis("Series count"), row=1, col=2)
+
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#161b22",
-        font=dict(color="#e6edf3", family="Inter, system-ui, sans-serif", size=12),
-        title=dict(
-            text=f"{ticker}  ·  last trade is not the settle",
-            font=dict(size=16, family="Inter, system-ui, sans-serif"),
-            x=0.02,
-            xanchor="left",
-            y=0.98,
-            yanchor="top",
-        ),
-        height=460,
-        margin=dict(l=56, r=24, t=72, b=52),
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.18,
-            x=0.0,
-            xanchor="left",
-            font=dict(size=11),
-            bgcolor="rgba(0,0,0,0)",
-        ),
-        annotations=[
-            dict(
-                text="Off-diagonal = mark ≠ print &nbsp;·&nbsp; Cyan calls, purple puts &nbsp;·&nbsp; Bars: listed series that day",
-                xref="paper",
-                yref="paper",
-                x=0.0,
-                y=1.02,
-                xanchor="left",
-                yanchor="bottom",
-                showarrow=False,
-                font=dict(size=11, color="#8b949e", family="Inter, system-ui, sans-serif"),
-            )
-        ],
+        **T.figure_layout(
+            title=T.title(f"{ticker}  ·  last trade is not the settle"),
+            height=460,
+            margin=dict(l=56, r=24, t=72, b=52),
+            legend=T.legend(
+                yanchor="top", y=-0.18, x=0.0, xanchor="left",
+                bgcolor=T.TRANSPARENT, bordercolor=T.BORDER,
+            ),
+            annotations=[
+                T.caption(
+                    "Off-diagonal = mark ≠ print &nbsp;·&nbsp; cyan = calls, violet = puts "
+                    "&nbsp;·&nbsp; bars: listed series that day"
+                )
+            ],
+        )
     )
-    fig.update_annotations(font=dict(size=13, family="Inter, system-ui, sans-serif", color="#e6edf3"))
+    # subplot titles are annotations too, and update_layout above replaced the list —
+    # restyle whatever survived so the two subplot headers take the display face
+    fig.update_annotations(font=dict(size=13, family=T.FONT_DISPLAY, color=T.TEXT))
     return fig
 
 
@@ -659,14 +492,8 @@ def spread_heatmap(wide: pd.DataFrame, asof, cp: str = "C") -> go.Figure:
     two-sided quote stay empty, because a spread is undefined there (AD-9).
     """
     sl = _slice_wide(wide, asof, cp)
-    empty = go.Figure().update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        title=dict(text="No two-sided quotes", font=dict(size=16, family="Inter, system-ui, sans-serif")),
-        height=380,
-    )
     if sl.empty or "spread_pct" not in sl.columns or not sl["spread_pct"].notna().any():
-        return empty
+        return _empty_figure("No two-sided quotes")
 
     sl = sl.copy()
     sl["expiry_label"] = sl["expiry"].dt.strftime("%b ") + sl["expiry"].dt.day.astype(int).astype(str)
@@ -679,36 +506,38 @@ def spread_heatmap(wide: pd.DataFrame, asof, cp: str = "C") -> go.Figure:
             z=pivot.values,
             x=[f"{c:.2f}" for c in pivot.columns],
             y=list(pivot.index),
-            colorscale=[[0.0, "#0b3d2e"], [0.35, "#00ffcc"], [0.7, "#ffb000"], [1.0, "#ff0055"]],
+            colorscale=T.SPREAD_SCALE,
             zmin=0,
             zmax=100,
-            colorbar=dict(title=dict(text="% of mark", font=dict(size=11)), tickfont=dict(size=10)),
+            colorbar=dict(
+                title=dict(
+                    text="% of mark",
+                    font=dict(size=T.SIZE_CAPTION, color=T.TEXT, family=T.FONT_BODY),
+                ),
+                tickfont=dict(size=T.SIZE_TICK, color=T.TEXT_MUTED, family=T.FONT_MONO),
+                outlinecolor=T.BORDER,
+            ),
             xgap=2,
             ygap=2,
             hovertemplate="K=%{x}  expiry=%{y}  spread=%{z:.0f}% of mark<extra></extra>",
         )
     )
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#161b22",
-        font=dict(color="#e6edf3", family="Inter, system-ui, sans-serif", size=12),
-        title=dict(
-            text="How much is the mark worth believing? (bid-ask spread)",
-            font=dict(size=16, family="Inter, system-ui, sans-serif"),
-            x=0.02, xanchor="left", y=0.98, yanchor="top",
-        ),
-        xaxis=dict(title="Strike ($)", gridcolor="#30363d", tickangle=-45,
-                   tickfont=dict(size=10), title_font=dict(size=12)),
-        yaxis=dict(title="Expiry", gridcolor="#30363d", tickfont=dict(size=11),
-                   title_font=dict(size=12)),
-        height=380,
-        margin=dict(l=70, r=20, t=54, b=70),
-    )
-    fig.add_annotation(
-        text="Green = tight, tradeable · Red = the midpoint is a guess between two far-apart quotes",
-        xref="paper", yref="paper", x=0.02, y=1.10, showarrow=False,
-        font=dict(size=11, color="#8b949e"),
+        **T.figure_layout(
+            title=T.title("How much is the mark worth believing? (bid-ask spread)"),
+            xaxis=T.axis("Strike ($)", tickangle=-45),
+            yaxis=T.axis("Expiry"),
+            height=380,
+            margin=dict(l=70, r=20, t=54, b=70),
+            annotations=[
+                T.caption(
+                    "Green = tight, tradeable · Red = the midpoint is a guess between "
+                    "two far-apart quotes",
+                    y=1.10,
+                    x=0.02,
+                )
+            ],
+        )
     )
     return fig
 
@@ -717,12 +546,7 @@ def coverage_heatmap(wide: pd.DataFrame, asof, cp: str = "C", field: str = "TRDP
     """2D occupancy grid: which (strike, expiry) cells actually have a number."""
     sl = _slice_wide(wide, asof, cp)
     if sl.empty:
-        return go.Figure().update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117",
-            title=dict(text="No data", font=dict(size=16, family="Inter, system-ui, sans-serif")),
-            height=380,
-        )
+        return _empty_figure("No data")
 
     sl = sl.copy()
     sl["expiry_label"] = sl["expiry"].dt.strftime("%b ") + sl["expiry"].dt.day.astype(int).astype(str)
@@ -738,13 +562,15 @@ def coverage_heatmap(wide: pd.DataFrame, asof, cp: str = "C", field: str = "TRDP
     pivot = pivot.reindex(order, axis=0)
     pivot = pivot.reindex(sorted(pivot.columns), axis=1)
 
-    accent = "#00ffcc" if field == "MARK" else "#ff0055"
+    # A lit cell takes the colour of the series it belongs to, so the two occupancy panels
+    # are readable side by side as "the mark grid" and "the print grid".
+    accent = T.MARK if field == "MARK" else T.TRADE
     fig = go.Figure(
         data=go.Heatmap(
             z=pivot.values,
             x=[f"{c:.2f}" for c in pivot.columns],
             y=list(pivot.index),
-            colorscale=[[0, "#161b22"], [1, accent]],
+            colorscale=[[0, T.SURFACE_ALT], [1, accent]],
             zmin=0,
             zmax=1,
             showscale=False,
@@ -754,45 +580,15 @@ def coverage_heatmap(wide: pd.DataFrame, asof, cp: str = "C", field: str = "TRDP
         )
     )
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#161b22",
-        font=dict(color="#e6edf3", family="Inter, system-ui, sans-serif", size=12),
-        title=dict(
-            text=f"{field} occupancy",
-            font=dict(size=16, family="Inter, system-ui, sans-serif"),
-            x=0.02,
-            xanchor="left",
-            y=0.98,
-            yanchor="top",
-        ),
-        xaxis=dict(
-            title="Strike ($)",
-            gridcolor="#30363d",
-            tickangle=-45,
-            tickfont=dict(size=10),
-            title_font=dict(size=12),
-        ),
-        yaxis=dict(
-            title="Expiry",
-            gridcolor="#30363d",
-            tickfont=dict(size=11),
-            title_font=dict(size=12),
-        ),
-        height=380,
-        margin=dict(l=72, r=16, t=56, b=56),
-        annotations=[
-            dict(
-                text="Lit cell = a number exists &nbsp;·&nbsp; Dark cell = no quote that day",
-                xref="paper",
-                yref="paper",
-                x=0.0,
-                y=1.02,
-                xanchor="left",
-                yanchor="bottom",
-                showarrow=False,
-                font=dict(size=11, color="#8b949e", family="Inter, system-ui, sans-serif"),
-            )
-        ],
+        **T.figure_layout(
+            title=T.title(f"{field} occupancy"),
+            xaxis=T.axis("Strike ($)", tickangle=-45),
+            yaxis=T.axis("Expiry"),
+            height=380,
+            margin=dict(l=72, r=16, t=56, b=56),
+            annotations=[
+                T.caption("Lit cell = a number exists &nbsp;·&nbsp; Dark cell = no quote that day")
+            ],
+        )
     )
     return fig

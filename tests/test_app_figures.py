@@ -5,6 +5,8 @@ rename (show_settle -> show_mark) desynced them without failing anything. These 
 signatures the app actually calls.
 """
 
+import pathlib
+
 import pandas as pd
 import pytest
 
@@ -102,3 +104,98 @@ def test_static_surface_degrades_instead_of_raising():
     from options_surface_lab.option_surface_plot import static_surface_figure
 
     assert static_surface_figure(pd.DataFrame()) is not None
+
+
+# ------------------------------------------------- figures must fit the panels that hold them
+
+
+def test_panelised_figures_declare_exactly_the_reserved_heights(wide, asof):
+    """A figure taller than its panel overflows into the row below it.
+
+    This is a real defect, not a hypothetical: the dev app handed un-panelised figures to the
+    terminal grid — the surface declaring 640 and the comparison 460 — while their panels
+    reserved 600 and 360. The surface spilled over the top of the mark-vs-print panel
+    underneath it. Reflex and the static builder both size the container from these tokens,
+    so the figure and its box have to agree exactly.
+    """
+    from options_surface_lab import theme as T
+    from options_surface_lab.option_surface_plot import as_panel_figure
+
+    hero = app.price_surface_figure(wide, asof, cp="C", ticker="UUUU")
+    assert hero.layout.height == T.HERO_FIGURE_HEIGHT, "the hero must fill its panel, not exceed it"
+
+    sidecar = as_panel_figure(
+        app.candlestick_figure(app.synthesize_demo_payload()["stock"], "UUUU"),
+        height=T.HERO_FIGURE_HEIGHT,
+    )
+    assert sidecar.layout.height == T.HERO_FIGURE_HEIGHT, "the hero row must end level"
+
+    for name, fig in (
+        ("compare", app.settle_vs_trade_figure(wide, asof, ticker="UUUU")),
+        ("mark occupancy", app.coverage_heatmap(wide, asof, cp="C", field="MARK")),
+        ("print occupancy", app.coverage_heatmap(wide, asof, cp="C", field="TRDPRC_1")),
+        ("spread", app.spread_heatmap(wide, asof, cp="C")),
+    ):
+        assert as_panel_figure(fig).layout.height == T.PANEL_FIGURE_HEIGHT, name
+
+
+def _statement_at(lines, i):
+    """The full logical statement starting at `lines[i]`, joined.
+
+    Reading a fixed window of following lines is not good enough: a six-line lookahead from
+    one assignment reaches into the *next* one, so a bare figure passes the check on its
+    neighbour's `as_panel_figure`. Balancing brackets stops exactly at the statement's end.
+    """
+    depth, out = 0, []
+    for line in lines[i:]:
+        out.append(line)
+        depth += line.count("(") + line.count("[") - line.count(")") - line.count("]")
+        if depth <= 0:
+            break
+    return "\n".join(out)
+
+
+def test_the_app_hands_no_raw_figure_to_a_panel():
+    """Every figure the app puts in a panel must declare a height.
+
+    Checked at the source level because that is where the mistake is made: the builders were
+    all correct on their own, the app simply forgot to panelise what it passed on, and nothing
+    downstream could tell. Two rules close the hole — an assignment either panelises inline or
+    hands over a local that was itself built with a height, and no bare `go.Figure()` may
+    escape without one (an undeclared height renders at Plotly's 450 and spills out of a tile).
+    """
+    lines = pathlib.Path(app.__file__).read_text(encoding="utf-8").splitlines()
+    panelised = ("as_panel_figure", "price_surface_figure", "height=")
+    offenders = []
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("self.fig_"):
+            continue
+        rhs = stripped.split("=", 1)[1].strip()
+        if rhs.isidentifier():
+            continue  # a plain local — covered by the go.Figure() rule below
+        if any(tok in _statement_at(lines, i) for tok in panelised):
+            continue
+        offenders.append(f"{i + 1}: {stripped}")
+
+    for i, line in enumerate(lines):
+        if "go.Figure()" not in line or line.strip().startswith("#"):
+            continue
+        if ": go.Figure = go.Figure()" in line:
+            continue  # a State var default, replaced before it is ever rendered
+        if "height=" not in _statement_at(lines, i):
+            offenders.append(f"{i + 1}: {line.strip()}")
+
+    assert not offenders, (
+        "these figures reach a panel without a declared height and will overflow it:\n"
+        + "\n".join(offenders)
+    )
+
+
+def test_the_app_and_the_published_page_reserve_the_same_heights():
+    """The demo and the graded page are one product (DESIGN-BRIEF §5)."""
+    from options_surface_lab import theme as T
+
+    assert app.HERO_H == f"{T.HERO_FIGURE_HEIGHT}px"
+    assert app.TILE_H == f"{T.PANEL_FIGURE_HEIGHT}px"

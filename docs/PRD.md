@@ -57,7 +57,8 @@ What exists — this is instructor starter code plus a synthetic data cache:
 |---|---|
 | [options_surface_app.py](../options_surface_lab/options_surface_app.py) | Reflex page + `State` + cache-first LSEG loader. In the package; imports verified. |
 | [option_surface_utils.py](../options_surface_lab/option_surface_utils.py) | `parse_option_ric`, `flatten_lseg_options`, `attach_underlying`, `pivot_trade_settle`, `summarize_sparsity`, `synthesize_demo_payload`, `surface_grid`. Solid; locked by the FR-3 transform suite (40 tests, T-4). |
-| [option_surface_plot.py](../options_surface_lab/option_surface_plot.py) | Candlestick, 3D price surface, settle-vs-trade scatter + occupancy bars, coverage heatmaps. Starter cyan/magenta theme hardcoded per-figure. |
+| [option_surface_plot.py](../options_surface_lab/option_surface_plot.py) | Candlestick, 3D price surface, settle-vs-trade scatter + occupancy bars, coverage + spread heatmaps, the published page's static surface. All styling via `theme.py` (FR-8 landed 2026-09-02). |
+| [theme.py](../options_surface_lab/theme.py) | Design tokens — the only file holding a colour or a font name. Direction recorded in [DESIGN-BRIEF.md](DESIGN-BRIEF.md). |
 | [build_preview.py](../build_preview.py) | Standalone static HTML preview (no Reflex). Works; useful fallback and export ingredient. |
 | `option_pipeline_data.synthetic.pkl` | **Orphaned** — nothing loads it, and it fails to unpickle under the installed pandas. The no-cache fallback is generated in-process by `synthesize_demo_payload()`. |
 | `option_pipeline_data.trdprc-only.pkl` | The 2026-08-30 pull: 148 series, TRDPRC_1 only, calls only, no SETTLE. Kept as evidence for [checkpoint_audit.md](checkpoint_audit.md) §3; **not** a usable cache. |
@@ -73,7 +74,9 @@ What exists — this is instructor starter code plus a synthetic data cache:
 - **G-3** Rubric item 5a: the **percent** of settle-with-no-trade series is computed
   (`State.pct_settle_no_trade`) but never displayed — the page shows only the raw count.
 - **G-4** Rubric "three sentences under the plot" — missing entirely.
-- **G-5** Rubric item 6: graphical identity is still the starter theme; must become mine.
+- **G-5** ✅ *Resolved 2026-09-02* — FR-8 landed (T-13). Deep-navy terminal identity in
+  `theme.py`, direction recorded in [DESIGN-BRIEF.md](DESIGN-BRIEF.md); no colour or font
+  literal survives outside that module, enforced by `tests/test_theme.py`.
 - **G-6** Not a git repository; nothing on GitHub; no deployment.
 - **G-7** ✅ *Resolved 2026-08-29* — pytest 9.1.1 confirmed in the `algo` env (T-3);
   `tests/test_ric_parsing.py` (6) plus `tests/test_transforms.py` (34) run green — the full
@@ -223,6 +226,13 @@ chosen background.
 *Accepted when:* no color/font literals remain in `*plot.py` or the page outside the theme
 module; changing one token restyles everything; the result is distinct from the starter look
 and I'd put my name on it.
+**✅ Met 2026-09-02 (T-13).** All three acceptance clauses are executable tests rather than
+judgements: `test_no_colour_literals_outside_the_theme` /
+`test_no_font_literals_outside_the_theme` scan the three consuming modules, and
+`test_one_token_restyles_every_figure` repoints a token and asserts the rebuild follows.
+The identity itself — deep navy, ice-blue chrome, Space Grotesk + JetBrains Mono — is the
+PO's, recorded in [DESIGN-BRIEF.md](DESIGN-BRIEF.md). FR-5's mark/print distinction and
+AD-9's subordinate sheet are re-asserted under the new palette.
 
 **FR-9 — Ship it** *(fixes G-6)*
 `git init` → GitHub repo → `build_preview.py` static page → GitHub Pages (Actions workflow)
