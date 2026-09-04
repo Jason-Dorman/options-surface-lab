@@ -155,9 +155,17 @@ could not: the buttons write only `x` and the scene's X title, the steps write o
 The toggle is a change of **ruler, never of data** — same traces, same colours, same symbols,
 same prices, and the interpolated sheet is *rescaled* rather than re-interpolated (one date
 has one spot, so K/S is an exact affine map). A date with no underlying close gets no K/S
-ruler at all rather than strikes mislabelled as ratios. Deviates from SPEC §12's "pre-rendered
-trace pair" sketch — one x array per trace per mode instead, +205 KB raw / ~+70 KB gz rather
-than doubling a 2.4 MB page; SPEC §12 records the change. `theme.MENU_ACTIVE_BG` is a new kind
+ruler at all rather than strikes mislabelled as ratios. SPEC §12's **"pre-rendered trace
+pair" sketch is retired** (PO, 2026-09-04): it dated from the original brief's "you will lose
+functionality on the published page", which the revised brief lifted — so the page gets the
+real control, one x array per trace per mode, +205 KB raw / ~+70 KB gz rather than doubling a
+2.4 MB page. **This retires the pre-rendering strategy only** — the published page still has
+no backend (that comes from T-41, not from the old line), so AD-5's Plotly-native rule stands.
+**Driven in a real Chromium on the built page**, not just asserted against the figure JSON:
+the toggle rebases the points and relabels the axis, the slider still drives the whole page
+while in K/S and rebases against the new date's spot, and switching back keeps the slider
+position. Zero page/console errors. That check is a throwaway venv, not part of the suite —
+`pytest` still cannot see the deployed page. `theme.MENU_ACTIVE_BG` is a new kind
 of token: a colour plotly.js hardcodes and we cannot override, recorded so the contrast test
 can measure a ground we really do render type against.
 

@@ -313,9 +313,11 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
     legend choices reset on a date change.
 
     The axis toggle carries one x array per trace per mode rather than a second set of
-    pre-rendered traces (which is what SYSTEM-SPEC §12 originally sketched). Same behaviour,
-    a fraction of the weight: duplicating 300-odd traces would roughly double a 2.4 MB page,
-    while duplicating one of each trace's three coordinate arrays costs a fraction of that.
+    pre-rendered traces. Same behaviour, a fraction of the weight: duplicating 300-odd traces
+    would roughly double a 2.4 MB page to change the units on one axis, while duplicating one
+    of each trace's three coordinate arrays costs +205 KB raw / ~+70 KB gzipped. (SPEC §12
+    originally sketched the trace pair; that sketch was written while the brief still expected
+    the published page to lose functionality, and the PO retired it on 2026-09-04.)
 
     Dates with too few expiries to triangulate simply contribute no sheet
     (:func:`surface_grid` returns ``None``) — they still show their points rather than being

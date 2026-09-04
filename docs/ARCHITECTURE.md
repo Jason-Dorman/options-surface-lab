@@ -271,6 +271,19 @@ fight the legend; the checkpoint demo can still use full server-side interactivi
 > the documented trim lever if that ever needs revisiting. The Reflex switches remain for
 > local dev and are untouched.
 
+> **The axis mode is an `updatemenus` over *swapped x arrays*, not over pre-rendered trace
+> sets (2026-09-04, T-16).** This decision's original wording assumed every menu would toggle
+> duplicate traces, which is what the *original* brief's "you will lose functionality on the
+> published page" invited. The revised brief lifted that, so FR-10 ships the real control: two
+> buttons that rewrite each trace's `x` and the scene's X title. Duplicating ~308 traces to
+> change the units on one axis would have roughly doubled a 2.4 MB page; this costs +205 KB
+> raw / ~+70 KB gzipped.
+>
+> It is also what makes a **third** control possible at all. T-15's note above is right that
+> two *visibility* menus fight — but these two do not overlap: the slider steps write only
+> `visible`, the axis buttons write only `x` and the axis title. Disjointness, not mechanism,
+> is the rule. Verified in a browser on the built page, not only in the figure JSON.
+
 **AD-5 amendment — the slider drives the whole page (2026-09-03, T-42).**
 *Context:* a Plotly slider can only mutate the figure it lives in, so T-15 put the as-of
 control inside the hero and left the five supporting panels rendered for one build-time date.

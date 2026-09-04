@@ -110,7 +110,7 @@ interactive control on the published site must work client-side**, or be pre-bak
 | Starter control | Static-site strategy |
 |---|---|
 | SETTLE / TRDPRC_1 / sheet switches | Replace with Plotly **legend toggles** (native, client-side). |
-| Calls/Puts select, as-of date select | Plotly `updatemenus` dropdowns toggling pre-rendered trace sets, **or** pre-render a curated set of (date × C/P) figures behind client-only tabs. Curate dates (e.g. last 5 sessions) to cap page size. |
+| Calls/Puts select, as-of date select | ~~Plotly `updatemenus` dropdowns toggling pre-rendered trace sets, **or** pre-render a curated set of (date × C/P) figures behind client-only tabs. Curate dates (e.g. last 5 sessions) to cap page size.~~ **Superseded by what shipped:** the right rides the **legend**, the as-of date is a **slider** over every trading day (T-15), and the K vs K/S axis is an `updatemenus` dropdown that swaps x arrays (T-16). No curation cap — the PO chose full coverage (AD-5). |
 | "Reload data" button | Meaningless without a backend — omit from the exported page. |
 | Full interactivity | Preserved locally via `reflex run` for the checkpoint demo. |
 
@@ -255,7 +255,7 @@ The one clause still open is the Canvas submission.
 **FR-10 — Moneyness slicing**
 A toggle to switch the 3D figure's strike axis between raw K and moneyness `K / S` (spot
 joined per date — `attach_underlying` already computes it), so two as-of dates become
-comparable. On the static site this is another pre-rendered variant (see §5).
+comparable. ~~On the static site this is another pre-rendered variant (see §5).~~
 *Accepted when:* switching axes preserves toggles and marker identity, and axis labeling
 makes clear which mode is shown.
 **✅ Met 2026-09-04 (T-16).** `price_surface_figure(..., x_mode=)` drives a select in the
@@ -268,11 +268,27 @@ UUUU makes the case on its own: the median $14.50 strike is 0.88 in K/S on 2026-
 1.28 on 2026-07-24, and the near-the-money band walks from $16.00–17.00 to $11.00–11.50
 (notebook 01 §6a).
 
-> **Deviation from the §5 sketch, worth a PO glance.** SYSTEM-SPEC §12 sketched the static
-> variant as a *pre-rendered trace pair*. That would have doubled ~308 traces and roughly
-> doubled a 2.4 MB page for a change of units. Shipped instead: one x array per trace per
-> mode, swapped by the button. Identical behaviour, **+205 KB raw / ~+70 KB gzipped**. The
-> requirement is unchanged; only the mechanism is, and it is now recorded in SPEC §12.
+> **The "pre-rendered variant" clause is retired, not deviated from** (PO, 2026-09-04). It
+> came from the *original* brief's "I understand you will lose functionality on the published
+> page"; the revised brief says use what you want, so the published page gets the real control
+> rather than a baked substitute for one. Shipped: one x array per trace per mode, swapped by
+> an `updatemenus` dropdown — **+205 KB raw / ~+70 KB gzipped**, against roughly doubling a
+> 2.4 MB page to pre-render 308 duplicate traces. SPEC §12 and AD-5 record the mechanism.
+>
+> This retires the *pre-rendering strategy* only. The published page still has **no backend**
+> — that follows from T-41's static-page resolution with the instructor, not from the old
+> lost-functionality line — so AD-5's "every published interaction must be Plotly-native"
+> stands unchanged. That is precisely why FR-10's control is a Plotly menu.
+
+**✅ Verified in a real browser on the built page, 2026-09-04.** Reasoning about figure JSON
+is not the same as clicking the control, and this project's worst defects have all been
+deploy-only. Chromium was driven over `options_surface_preview.html`: opening on strike
+(K = 11.00, 11.50, …, as-of 2026-07-10, spot $13.58), clicking **Moneyness (K/S)** rebases the
+same points to 0.810, 0.847, … (= K / 13.58) and relabels the axis, with `z`, `y` and every
+legend state untouched; dragging the as-of slider *while in K/S* moves the whole page to
+2026-08-03 and re-bases against **that** date's spot ($12.15) without dropping out of
+moneyness; switching back to strike keeps the slider where it is. Zero page errors, zero
+console errors.
 
 **FR-11 — Crude IV surface from settles**
 Invert Black–Scholes on SETTLE (European approximation) using a constant rate; assumptions

@@ -481,10 +481,13 @@ assertions on hand-built panels. See PRD OQ-6.
 
 - **FR-10 moneyness axis — landed 2026-09-04 (T-16).** The wide table already carries
   `moneyness`, so the surface builder takes `x_mode ∈ {strike, moneyness}` and re-labels the
-  X axis. Static site: an `updatemenus` axis toggle, as sketched — but carrying **one x array
-  per trace per mode**, not the pre-rendered *trace pair* this line originally specified.
-  Doubling ~308 traces would have roughly doubled a 2.4 MB page to change the units on one
-  axis; swapping the x arrays costs +205 KB raw (~+70 KB gzipped) for the same behaviour.
+  X axis. Static site: an `updatemenus` axis toggle carrying **one x array per trace per
+  mode**. The *pre-rendered trace pair* this line originally specified is **retired** (PO,
+  2026-09-04) — it was written while the brief still expected the published page to lose
+  functionality, and the revised brief lifted that. Doubling ~308 traces would have roughly
+  doubled a 2.4 MB page to change the units on one axis; swapping the x arrays costs +205 KB
+  raw (~+70 KB gzipped) for the same behaviour. The page is still backend-free, so the
+  control is still Plotly-native (AD-5).
   Two invariants make it safe to call a change of ruler rather than a change of data:
   * The mode never touches `z`, `y`, a trace name, a colour or a symbol — FR-10's acceptance
     criterion, asserted trace-for-trace.
@@ -493,6 +496,12 @@ assertions on hand-built panels. See PRD OQ-6.
     K/S space would re-triangulate the cloud and could return a subtly different surface for
     what has to be one object. A date with no underlying close yields no K/S ruler at all
     rather than raw strikes plotted against a ratio axis (AD-9).
+
+  Driven in a real browser on the built page (2026-09-04), because that is the only place the
+  control exists: strike → moneyness rebases the points and relabels the axis with `z`, `y`
+  and every legend state untouched; the as-of slider still moves the whole page while in K/S
+  and rebases against the newly selected date's spot; switching back leaves the slider where
+  it is. No page or console errors.
 - **FR-11 IV inversion (in `utils`, pure):** European Black–Scholes, price = SETTLE, `S` =
   as-of spot, `T = dte/365`, constant `r` (value: PRD OQ-2, printed on the page), no
   dividends. Solve for σ by Brent/bisection on [1e-4, 5]. **Skip (NaN) rather than solve**
@@ -529,7 +538,7 @@ flowchart LR
     push["git push main"] --> ci["GitHub Actions"]
     ci --> test["pytest on clean checkout, no LSEG creds"]
     test --> export["build_preview.py → single self-contained index.html"]
-    export --> bundle["Static bundle: baked default state + curated pre-rendered variants"]
+    export --> bundle["One self-contained index.html: real figures + Plotly-native controls"]
     bundle --> deploy["Publish to GitHub Pages"]
     deploy --> url["Pages URL — submitted on Canvas"]
 ```
