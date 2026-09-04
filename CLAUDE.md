@@ -135,7 +135,7 @@ can look perfect under `reflex run` and be broken on Pages. CSS fails open, so a
 is silent. The width classes are generated from `GRID_COLUMNS` and two tests guard it, but
 **check the built `options_surface_preview.html`, not just the dev app, before pushing.**
 
-**Next up:** **T-12** (the three PO-authored sentences, FR-7) — the last P0 gap. **136 tests
+**Next up:** **T-12** (the three PO-authored sentences, FR-7) — the last P0 gap. **138 tests
 green, no xfail** (the "90" this paragraph carried was stale — `tests/test_build_preview.py`
 was never counted into it). Update this paragraph as things land (lockstep rule).
 

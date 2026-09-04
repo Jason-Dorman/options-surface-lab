@@ -213,12 +213,11 @@ def price_surface_figure(
             # Same height as the published page's hero, because it sits in the same
             # panel slot. A figure taller than its panel overflows into the row below.
             height=T.HERO_FIGURE_HEIGHT,
-            margin=dict(l=10, r=10, t=56, b=10),
+            margin=T.HERO_MARGIN,
             annotations=[
                 T.caption(
-                    "Cyan = quoted mark &nbsp;·&nbsp; Magenta = last trade (TRDPRC_1) "
-                    "&nbsp;·&nbsp; Sheet is interpolated, not a market",
-                    y=1.0,
+                    "The translucent sheet is interpolated — not a market",
+                    y=T.CAPTION_Y_OVER_LEGEND,
                 )
             ],
         )
@@ -348,13 +347,14 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
             legend=T.legend(font=dict(size=T.SIZE_TICK, color=T.TEXT, family=T.FONT_BODY)),
             sliders=[T.slider(active=default, steps=steps)],
             height=T.HERO_FIGURE_HEIGHT,
-            margin=dict(l=8, r=8, t=88, b=84),
+            margin=T.HERO_MARGIN_WITH_SLIDER,
             annotations=[
+                # Short on purpose: the panel header already says "drag the slider · legend
+                # toggles puts", and the long version ran the width of the plot and straight
+                # into the legend. What is left is the one thing no other chrome says (AD-9).
                 T.caption(
-                    "Drag the slider to change as-of date &nbsp;·&nbsp; puts start hidden — "
-                    "click them in the legend &nbsp;·&nbsp; the sheet is interpolated, "
-                    "not a market",
-                    y=1.045,
+                    "The translucent sheet is interpolated — not a market",
+                    y=T.CAPTION_Y_OVER_LEGEND,
                 )
             ],
         )

@@ -188,6 +188,43 @@ def test_the_interpolated_sheet_stays_subordinate(wide, asof):
 # ------------------------------------------------------------------- the terminal grid
 
 
+def test_a_caption_never_shares_the_band_with_a_top_legend(wide, asof):
+    """A horizontal legend at y=1.0 is about 0.05 of the plot area tall.
+
+    A caption placed at 1.02 or 1.045 therefore lands *inside* it and the two print over each
+    other — which is what the hero surface shipped with: the "drag the slider..." line ran
+    straight through the legend swatches. Captions on a figure with a top legend must clear
+    it, and the clearance lives in one token so both surfaces move together.
+    """
+    assert T.CAPTION_Y_OVER_LEGEND - T.LEGEND_Y >= 0.08, (
+        "the clearance is smaller than a legend row is tall"
+    )
+
+    for name, fig in (
+        ("static hero", static_surface_figure(wide, ticker="UUUU")),
+        ("app hero", price_surface_figure(wide, asof, cp="C", ticker="UUUU")),
+    ):
+        legend = fig.layout.legend
+        if legend.y is None or legend.y < 1:
+            continue  # no top legend, nothing to clear
+        captions = [a for a in fig.layout.annotations if a.yref == "paper"]
+        assert captions, f"{name}: expected a how-to-read caption"
+        for ann in captions:
+            assert ann.y >= T.CAPTION_Y_OVER_LEGEND, (
+                f"{name}: caption at y={ann.y} sits in the legend's band (y={legend.y})"
+            )
+
+
+def test_the_top_margin_has_room_for_the_whole_stack():
+    """Title, caption and legend all live in the top margin; too little and they collide."""
+    for name, margin in (
+        ("hero", T.HERO_MARGIN),
+        ("hero with slider", T.HERO_MARGIN_WITH_SLIDER),
+    ):
+        assert margin["t"] >= 100, f"{name}: {margin['t']}px cannot hold title + caption + legend"
+    assert T.HERO_MARGIN_WITH_SLIDER["b"] >= 80, "the as-of slider needs its own bottom room"
+
+
 def test_every_width_token_has_a_stylesheet_class():
     """A width token with no matching CSS class silently collapses that panel to one column.
 

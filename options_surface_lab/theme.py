@@ -149,6 +149,19 @@ TRACKING = "2px"         # letter-spacing on the wordmark
 
 TRANSPARENT = "rgba(0,0,0,0)"  # a legend backdrop that must not paint
 
+# The band above a plot holds, bottom to top: the legend, then the caption, then the title.
+# A horizontal legend anchored at y=1.0 is roughly 0.05 of the plot area tall, so a caption
+# placed at 1.02 or 1.045 lands *inside* it and the two print over each other. Figures with a
+# top legend put their caption at CAPTION_Y_OVER_LEGEND; figures without one use CAPTION_Y.
+LEGEND_Y = 1.0
+CAPTION_Y = 1.02
+CAPTION_Y_OVER_LEGEND = 1.12
+
+# Top margin has to hold title + caption + legend without them stacking into one another.
+# The slider variant also reserves the bottom for the as-of control (T-15).
+HERO_MARGIN = dict(l=10, r=10, t=104, b=12)
+HERO_MARGIN_WITH_SLIDER = dict(l=8, r=8, t=116, b=84)
+
 TEMPLATE = "plotly_dark"  # base only — every colour below is overridden explicitly
 
 
@@ -188,14 +201,18 @@ def title(text: str, **overrides) -> dict:
     return spec
 
 
-def caption(text: str, y: float = 1.02, **overrides) -> dict:
-    """The one-line "how to read this" note that sits above each figure."""
+def caption(text: str, y: float | None = None, **overrides) -> dict:
+    """The one-line "how to read this" note that sits above each figure.
+
+    Pass ``y=CAPTION_Y_OVER_LEGEND`` on any figure carrying a top legend — the default sits
+    in the legend's own band and the two overprint.
+    """
     spec = dict(
         text=text,
         xref="paper",
         yref="paper",
         x=0.0,
-        y=y,
+        y=CAPTION_Y if y is None else y,
         xanchor="left",
         yanchor="bottom",
         showarrow=False,
@@ -252,7 +269,7 @@ def legend(**overrides) -> dict:
     spec = dict(
         orientation="h",
         yanchor="bottom",
-        y=1.0,
+        y=LEGEND_Y,
         x=1.0,
         xanchor="right",
         bgcolor=_rgba(BG, 0.72),

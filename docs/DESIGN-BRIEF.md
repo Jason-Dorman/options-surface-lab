@@ -181,6 +181,17 @@ defines.
   row because comparing them *is* the reason both are shown.
 - **The next step in the same direction** is FR-12's spot plane at `K = S`, which puts spot
   *inside* the surface rather than beside it. The two compose: adjacency first, plane second.
+- **The band above a plot stacks: legend, then caption, then title.** A horizontal legend
+  anchored at `y=1.0` is roughly 0.05 of the plot area tall, so a caption at 1.02 or 1.045
+  lands *inside* it and the two print over each other — the hero shipped that way, with its
+  "drag the slider…" line running through the legend swatches. Figures with a top legend put
+  their caption at `CAPTION_Y_OVER_LEGEND` (1.12) and reserve `HERO_MARGIN` /
+  `HERO_MARGIN_WITH_SLIDER` for the stack. Asserted by
+  `test_a_caption_never_shares_the_band_with_a_top_legend`.
+- **A caption says only what no other chrome says.** The hero's caption was three clauses
+  long and two of them repeated its panel header note. It is now the AD-9 point alone —
+  *the translucent sheet is interpolated, not a market* — which also stopped it running the
+  full width of the plot.
 - **Titles live in the header, not the figure.** `as_panel_figure()` strips each tiled
   figure's Plotly title and tightens its margins, because the panel header already says the
   name and an in-plot title would eat a third of the tile. The **hero is the exception** —
@@ -234,6 +245,7 @@ judgement calls; they are executable now.
 | 2026-09-02 | Adopted. First pass shipped ice-blue chrome and a single-column layout; the PO corrected both — "Bloomberg" meant the **page layout**, and the font colours needed to change. Amber type and the panel grid replaced them; puts moved off amber onto the blue-shift rule (§3). Navy ground unchanged throughout. |
 | 2026-09-02 | PO asked to pair the underlying with the price surface. Grid moved from 2 columns to 10 so the hero row could be 7/3 rather than an even split; the remaining four figures re-flowed 5+5 across two rows. |
 | 2026-09-02 | PO caught three defects by eye. Put markers were unreadable (open symbols, and hues derived as near-shades of their calls) — puts re-hued to violet/green, all markers filled (§3). The mark-vs-print scatter drew one unlabelled array-coloured trace, so the puts read as missing — split into named Calls/Puts traces with a legend. And the hero row wasted vertical space — height 760 → 600 plus `align-items:start` (§5). All three now have tests. |
+| 2026-09-02 | Hero caption overprinted its own legend — both sat in the band just above the plot. Caption clearance and the top margins are tokens now, and the caption was cut to the one thing the panel header does not already say. |
 | 2026-09-02 | **Deploy-only breakage.** The published page rendered the surface and the underlying one column wide: `.osl-w6`/`.osl-w4` were never added when the split moved from 7/3 to 6/4, and an undefined CSS class fails open. Width classes are now generated from `GRID_COLUMNS`; a token-vs-stylesheet test and an orphan-class test over the built page both guard it (§5). |
 | 2026-09-02 | PO found the 3D surface overflowing into the mark-vs-print panel in the **dev app**: it was handing un-panelised figures to the terminal grid, so titles doubled with the panel headers and declared heights (640, 460) exceeded the boxes reserved for them (600, 360). App figures now panelise exactly as the builder's do; `price_surface_figure` reads `HERO_FIGURE_HEIGHT`; empty figures declare a height. Guarded by tests (§5). |
 | 2026-09-02 | PO refined the correction: the put **colours** were the problem, not the glyphs — square/cross reverted to circle/diamond, so the glyph encodes the role and hue alone separates the rights. Hero row widened from 7/3 to 6/4. |

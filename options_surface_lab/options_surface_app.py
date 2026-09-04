@@ -697,7 +697,7 @@ def index() -> rx.Component:
             # band -- so the two belong side by side. Equal heights keep the row square.
             _panel(
                 1, "Price surface - 3D",
-                "cyan = mark, magenta = print, sheet is interpolated",
+                "drag to rotate - legend toggles series",
                 State.fig_surface, HERO_H, width=T.W_HERO,
             ),
             _panel(2, "Underlying", "spot context - close = TRDPRC_1",
