@@ -62,6 +62,26 @@ hue, a collision that only became visible once amber became the heading colour.
 | `TRADE_PUT` | `#3DDC84` | TRDPRC_1, puts — filled diamond |
 | `NEUTRAL` | `#6E8CB8` | the "both mark and print" bar — the uninteresting middle |
 | `POSITIVE` / `NEGATIVE` | `#2FD4A0` / `#FF4D6D` | underlying up/down candles |
+| **Reference** | | |
+| `SPOT_PLANE` | `#7FA8D9` | FR-12's wall at `K = S` — slate, at `SPOT_PLANE_OPACITY` 0.18 |
+
+**The plane is neither data nor chrome, and it has to look like neither** (T-18, 2026-09-04).
+It is the one object in the scene that is a *ruler*: it asserts where the money was on the
+as-of date and nothing else. So it takes no series hue — a reader would start looking for the
+points that belong to it — and not the amber, which is type everywhere else on the page and
+would read as chrome bolted onto the chart.
+
+Slate is deliberately the same family as `NEUTRAL` (3° apart in hue; `SPOT_PLANE` is the
+lighter tint). `NEUTRAL` is already this palette's *not-a-series* colour — the "both mark and
+print" bar, "the one bar that takes neither a data colour nor the chrome amber" — so the two
+objects that mean **"this is not one of the four series"** look related on purpose. They never
+share a panel: `NEUTRAL` is a bar in [4], `SPOT_PLANE` a translucent wall in [1]. Measured
+distances from the four data hues: 39° (MARK), 43° (MARK_PUT), 66° (TRADE_PUT), 122°
+(TRADE), and 171° from the amber. It is fainter
+than the interpolated sheet on purpose: the sheet lies *over* the cloud in one thin layer,
+while the plane stands side-on *through* the middle of it, so at the sheet's 0.26 it fogged
+every point behind it. `test_the_spot_plane_is_neither_a_series_nor_the_chrome` holds all of
+it, including the flat colour scale — a ramp would imply the wall measures something.
 
 **The put rule.** Puts take the two hues furthest from both locked colours *and* from the
 amber type — separation is largest **within** a role, because calls-against-puts inside one
@@ -257,8 +277,10 @@ defines.
   type has to clear AA on that near-white *and* on our own ground. Amber type fails there
   (1.7:1); dark type on an amber chip clears both, and `test_the_axis_menu_is_legible_in_both_of_its_states`
   measures it off `theme.menu()` itself.
-- **The next step in the same direction** is FR-12's spot plane at `K = S`, which puts spot
-  *inside* the surface rather than beside it. The two compose: adjacency first, plane second.
+- **The next step in the same direction — taken 2026-09-04 (T-18)** — is FR-12's spot plane
+  at `K = S`, which puts spot *inside* the surface rather than beside it. The two compose:
+  adjacency first, plane second. In K/S it stands on 1.00, so the plane and the axis say the
+  same thing two ways.
 - **The band above a plot stacks: legend, then caption, then title.** A horizontal legend
   anchored at `y=1.0` is roughly 0.05 of the plot area tall, so a caption at 1.02 or 1.045
   lands *inside* it and the two print over each other — the hero shipped that way, with its
@@ -301,8 +323,13 @@ assignment escapes without a height.
    absence, so an empty cell is visibly empty rather than invisibly missing.
 5. **No visual literal outside `theme.py`**, across `option_surface_plot.py`,
    `options_surface_app.py` and `build_preview.py`.
+6. **A reference is not a series** (FR-12). The spot plane wears neither a data hue nor the
+   amber, carries no colorbar, and stays fainter than the sheet it cuts through.
+7. **Nothing is drawn in the band above a plot** (T-47). Captions are HTML in the panel, so
+   they wrap; a figure that draws its own text there will collide with a wrapping legend at
+   some width, and *some width* always arrives.
 
-All five are asserted in `tests/test_theme.py`. FR-8's acceptance criteria were three
+All seven are asserted in `tests/test_theme.py`. FR-8's acceptance criteria were three
 judgement calls; they are executable now.
 
 ## 7. Consequences accepted
@@ -320,6 +347,8 @@ judgement calls; they are executable now.
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **The page holds its shape at every width (T-47).** A 14-viewport audit found 131 layout defects, one of them at every width. Three changes, all PO-chosen: **captions are HTML** in the panel, not annotations in the plot, so they wrap instead of colliding or clipping — that band is now empty by rule, and `CAPTION_Y*` / `LEGEND_ROW` / `LEGEND_BOX_PAD` / `LEGEND_ENTRIES_PER_ROW` / `theme.caption()` are deleted along with the arithmetic that policed them; a **width floor** (`FIGURE_MIN_WIDTH`, `HERO_MIN_WIDTH`) below which a panel scrolls rather than squeezing a figure into a shape its own chrome cannot fit; and a **third grid band** at `BREAK_TWO_COL` (1400px) so a 1366px laptop stops crowding the 6+4 split. The Reflex app now renders this stylesheet and these class names instead of restating the chrome as inline props — it had no breakpoints at all — so `PANEL_STYLE` and `PANEL_HEADER_STYLE` are gone. Audit after: 0 defects across 14 widths. |
+| 2026-09-04 | **FR-12's spot plane (T-18).** One new palette entry, `SPOT_PLANE` — slate, deliberately outside both the data and the chrome families, because the plane is a *ruler* and has to read as neither (§3, rule 6). It is also the hero's **seventh** legend entry: the legend wrapped to two rows and the caption at `CAPTION_Y_OVER_LEGEND` printed over its panel — the 2026-09-02 defect below arriving by a route a single token could not see. The clearance a caption needs depends on how many entries the legend has, so it is now `LEGEND_ROW` + `LEGEND_BOX_PAD` arithmetic with a token per row count (`CAPTION_Y_OVER_LEGEND_2`), and the test does the sum — deriving the row count from the figure's own entries via `LEGEND_ENTRIES_PER_ROW` rather than from a number a human typed, since the entry count is exactly what changed (T-46). |
 | 2026-09-02 | Adopted. First pass shipped ice-blue chrome and a single-column layout; the PO corrected both — "Bloomberg" meant the **page layout**, and the font colours needed to change. Amber type and the panel grid replaced them; puts moved off amber onto the blue-shift rule (§3). Navy ground unchanged throughout. |
 | 2026-09-02 | PO asked to pair the underlying with the price surface. Grid moved from 2 columns to 10 so the hero row could be 7/3 rather than an even split; the remaining four figures re-flowed 5+5 across two rows. |
 | 2026-09-02 | PO caught three defects by eye. Put markers were unreadable (open symbols, and hues derived as near-shades of their calls) — puts re-hued to violet/green, all markers filled (§3). The mark-vs-print scatter drew one unlabelled array-coloured trace, so the puts read as missing — split into named Calls/Puts traces with a legend. And the hero row wasted vertical space — height 760 → 600 plus `align-items:start` (§5). All three now have tests. |

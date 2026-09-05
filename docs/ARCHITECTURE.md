@@ -148,8 +148,12 @@ One builder per figure, `frame(s) + selection → go.Figure`. All styling via `t
 builders serve the hero: `price_surface_figure` (one date, driven by `State`) and
 `static_surface_figure` (every date, controls baked into the figure JSON for the published
 page — AD-5). Both take FR-10's `x_mode` vocabulary (`X_MODES`, `X_AXIS_TITLE`,
-`X_MODE_LABEL`); `asof_frames()` builds the per-date payload the published page's slider
-applies (T-42).
+`X_MODE_LABEL`) and draw FR-12's spot plane (`_plane_x`, `_plane_extents`,
+`_spot_plane_trace`, sized over `OPENING_RIGHT` — T-18/T-46). A figure carries its
+"how to read this" line as DATA, via `with_caption` / `figure_caption` — each page renders it
+as HTML, because a Plotly annotation cannot wrap and so collides at some width (T-47); `asof_frames()` builds the
+per-date payload the published page's slider applies (T-42). The derived IV smile
+(`panel_expiries`, `iv_smile_figure`) lives here too (FR-11, T-17/T-45).
 *Does not belong here:* data reshaping beyond slicing/dropna (→ utils), Reflex components,
 hardcoded hex values.
 
@@ -173,7 +177,7 @@ entirely. AD-4.)*
 **`tests/`** — mirrors the transform core first, then everything a defect could reach the
 published page through. Uses the seeded synthetic panel as its fixture (AD-7), exposed as the
 session-scoped `synthetic_payload` / `synthetic_wide` fixtures in `tests/conftest.py`.
-**202 green, no xfail (2026-09-04):** `test_ric_parsing` / `test_ric_building` /
+**213 green, no xfail (2026-09-04):** `test_ric_parsing` / `test_ric_building` /
 `test_transforms` / `test_acquisition` cover the FR-3 chain and the pull; `test_iv` covers
 FR-11 — the Black-Scholes round trip and, at equal weight, every path on which the inversion
 must refuse; `test_app_figures` pins the app→plot call sites, the published hero's controls,

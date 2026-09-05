@@ -208,7 +208,8 @@ push to main
     (T-42). The underlying candlestick is the deliberate exception: it is 12 weeks of context,
     not an as-of cut.
   * the **legend**, toggling MID_PRICE / TRDPRC_1 / the interpolated sheet for calls and puts
-    (puts start hidden).
+    (puts start hidden) — and FR-12's **spot plane** at `K = S` (T-18), which opens visible
+    and is the seventh entry, so the legend now wraps to two rows.
   * an **X-axis dropdown**, strike ↔ `K / S` (T-16). It composes with the slider because the
     two write disjoint properties — the steps write `visible`, the menu writes `x`.
 
@@ -220,8 +221,10 @@ push to main
 
   **Both 3D/2D panels open on Strike (K)**, matching the hero's `updatemenus` `active=0`, so
   the whole page is in dollars at load.
-- **The page is ~3.0 MB (≈1.0 MB gzipped) and carries ~308 traces**, in seven panels.
-  T-17's IV cloud added ~130 KB of that. That is deliberate: the
+- **The page is ~3.05 MB (≈1.05 MB gzipped) and carries ~370 traces**, in seven panels.
+  T-17's IV cloud added ~130 KB of that and FR-12's 48 spot planes ~35 KB (48, not 53: the
+  panel's last five days have a single expiry alive, so there is no box for a wall to span —
+  see SPEC §12). That is deliberate: the
   PO chose full date coverage over load time (AD-5), and FR-10's second x array per trace adds
   ~205 KB raw / ~70 KB gzipped on top. If it ever needs slimming, pass explicit dates —
   `static_surface_figure(wide, dates=curated_asof_dates(wide, n=10))` — rather than dropping
@@ -242,7 +245,33 @@ push to main
   Load `options_surface_preview.html` over `file://`, wait for `window.Plotly`, then read
   `gd._fullData[i].x` — **not** `gd.data[i].x`, which plotly.py may ship as base64 binary
   (`{dtype, bdata}`) rather than a JSON array. Used on 2026-09-04 to verify FR-10 end to end,
-  and again the same day for FR-11's panel [7] following the as-of slider.
+  the same day for FR-11's panel following the as-of slider, and again for FR-12's plane.
+
+  Driving the hero's own controls: the as-of slider responds to a real click on
+  `rect.slider-rail-touch-rect` (a synthetic `plotly_sliderchange` would test the listener
+  and not plotly's own visibility pass), and the X-ruler chip is a *closed dropdown* — click
+  `.updatemenu-header-group rect` to open it, then the row in
+  `.updatemenu-dropdown-button-group` whose text matches the mode.
+
+  **And take a screenshot, not only measurements.** T-18's assertions were all green while
+  the hero's caption was printing over a legend that had just wrapped to two rows; nothing
+  short of looking at the picture would have caught it.
+
+  **Audit the WIDTHS, not just one.** `reflex run` and a 1600px browser agree with each
+  other and with nothing else. Load the built page, step the viewport through
+  1920 / 1600 / 1440 / 1366 / 1280 / 1200 / 1101 / 1099 / 1024 / 900 / 820 / 768 / 600 / 430,
+  and at each width check: does the document scroll sideways; does anything overflow its
+  panel; do a figure's own title / legend / axis-menu boxes overlap each other or fall
+  outside the figure; does a panel header wrap (which leaves its row ragged); are readout
+  labels truncated. That sweep found 131 defects on a page that looked perfect at 1600px,
+  including one present at every width since T-13 (T-47). The three bands to check either
+  side of are `BREAK_TWO_COL` (1400) and `BREAK_ONE_COL` (1100).
+
+  **Never compare a thing against something it produced.** T-18's drive checked that the spot
+  plane did not reach past `scene.zaxis.range` — the range plotly had autoranged *from the
+  plane*. It passed while the plane was stretching that axis on 34 of 53 dates (T-46). Compare
+  against the other traces the step lights, and walk **every** step: three sampled dates hid a
+  defect present on two thirds of them.
 
 ## 6. Quick troubleshooting
 

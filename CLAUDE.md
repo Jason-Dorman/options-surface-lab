@@ -225,8 +225,65 @@ scatter form. Three things worth carrying forward:
   Chromium: panel [7] follows the as-of slider, keeps its `[Calls, Puts]` trace identity, and
   spans all ten columns. Zero page/console errors.
 
+T-18 landed 2026-09-04 (FR-12, the last P1 — **M3 is complete**), corrected the same day by
+T-46's adversarial review. A translucent wall at `K = S` in the hero: a constant-x
+`go.Surface`, two columns at one strike, spanning the DTE and price box of **the rows that are
+actually drawn**. It is **one plane per as-of date**, lit by the slider's existing visibility
+array — the mechanism was already there, so FR-12 needed no new control on the published
+page; the legend hides it there and a `show_spot_plane` switch does in the app.
+Four things worth carrying:
+
+- **It composes with FR-10 for nothing.** `K = S` is the spot in dollars and *exactly 1.00* in
+  moneyness, so the axis menu carries one number per ruler for the plane — and the wall then
+  lands on the tick the K/S axis already calls the money. **No spot, no plane** (AD-9), the
+  same rule that gives such a date no K/S ruler at all.
+- **A new kind of token: `SPOT_PLANE`.** The plane is neither data nor chrome but a *ruler*,
+  so it wears neither a series hue (a reader would hunt for its points) nor the amber (it
+  would read as chrome bolted onto the chart), and it is fainter than the sheet because it
+  stands side-on *through* the cloud rather than lying over it. DESIGN-BRIEF §3, rule 6.
+- **The render caught what 25 browser assertions did not.** The plane is the hero's seventh
+  legend entry; the legend wrapped to two rows and the caption printed over its panel —
+  DESIGN-BRIEF §8's 2026-09-02 defect by a route the token could not see. A caption's
+  clearance depends on the legend's **entry count**, so the row count is now derived from the
+  figure itself (`LEGEND_ENTRIES_PER_ROW`). **Measure the picture, not only the numbers.**
+- **A CHECK THAT READS BACK ITS OWN EFFECT IS NOT A CHECK** (T-46, the review's headline).
+  The plane shipped sized over *both* rights while the published page opens with puts parked
+  on the legend — and plotly's 3D bounds ignore a parked trace, so the wall alone stretched
+  the price axis on **34 of 53 dates, up to 6.8x**, flattening the call cloud. Both the test
+  and the browser drive certified it: the test compared the plane against the same slice it
+  fed the figure, and the drive compared the plane's top against the axis range *the plane
+  had just set*. **Compare a thing against something it did not produce** — here, the traces
+  the step actually lights. `OPENING_RIGHT` now names the coupling between what opens lit and
+  what the plane is sized over. And when a guard is written for a defect, **mutate the code
+  and watch it fail**: 8 of 8 injected defects are caught now, 5 of 8 were before.
+
+T-47 landed 2026-09-04 (PO: *"make all the elements dynamic so they don't shift around on
+different screen sizes, both pages"*). A 14-viewport audit of the built page found **131
+layout defects**, one of them at every width since T-13: panel [4] drew its caption **twice,
+on top of itself** — `update_layout(annotations=[...])` **broadcasts** a one-element list
+across every existing annotation, so the caption had silently overwritten both subplot
+titles. Three things worth carrying:
+
+- **A Plotly caption cannot wrap, so it will collide eventually.** It is one line of SVG text
+  pinned to a fraction of a box whose pixel width changes with the viewport, sharing the band
+  above the plot with a legend that GROWS as the figure narrows. That arrangement produced
+  the same defect five times here at five different widths. **Captions are HTML now**
+  (`with_caption` / `figure_caption` → `layout.meta` → both pages render it), and the rule
+  that replaced three tokens and two arithmetic tests is: *the band above a plot is empty*.
+  A guard with no arithmetic in it cannot have the arithmetic wrong.
+- **A width floor beats a squeeze.** A 53-step slider and a seven-entry legend do not fit a
+  phone however carefully they are placed, so below `FIGURE_MIN_WIDTH` the panel scrolls
+  rather than the figure deforming. "The chart scrolls" is honest; "the chart is broken" is
+  not (AD-9's posture, applied to layout).
+- **One stylesheet, both renderings.** The Reflex app had restated the panel chrome as inline
+  component props and therefore had **no breakpoints at all** — it stayed a 10-column grid at
+  every width while the published page collapsed. It now renders `theme.PAGE_CSS` and the
+  same `osl-*` class names, so a responsive rule cannot be right in one product and missing
+  in the other. `PANEL_STYLE` / `PANEL_HEADER_STYLE` deleted. Verified in a real Chromium:
+  **0 defects across all 14 widths**, and Reflex switching 10 → 2 → 1 columns.
+
 **Next up:** **T-12** (the three PO-authored sentences, FR-7) — the last P0 gap, and the only
-rubric item with nothing on the page at all. Then T-18 (FR-12) if M4 allows. **202 tests
+rubric item with nothing on the page at all. Then M4: T-19/T-20/T-21/T-22. **213 tests
 green, no xfail.** Update this paragraph as things land (lockstep rule).
 
 **Secrets:** `lseg-data.config.json` (repo root) holds the LSEG app-key. It is gitignored —

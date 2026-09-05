@@ -58,7 +58,7 @@ package with a real committed LSEG panel, a test suite, and a live deployment.
 |---|---|
 | [options_surface_app.py](../options_surface_lab/options_surface_app.py) | Reflex page + `State` + cache-first LSEG loader. **Local dev and the checkpoint demo only** — the published page runs no Reflex code (AD-4). |
 | [option_surface_utils.py](../options_surface_lab/option_surface_utils.py) | `parse_option_ric`, `build_option_ric`/`build_candidate_rics`, `flatten_lseg_options`, `attach_underlying`, `pivot_trade_settle`, `summarize_sparsity`, `synthesize_demo_payload`, `surface_grid`, `curated_asof_dates`, and FR-11's inversion — `bs_price`, `iv_refusal`, `implied_vol`, `attach_implied_vol` (T-17). Locked by the FR-3 transform suite (T-4) and `tests/test_iv.py`. |
-| [option_surface_plot.py](../options_surface_lab/option_surface_plot.py) | Candlestick, 3D price surface (`x_mode` = strike or K/S, FR-10), settle-vs-trade scatter + occupancy bars, coverage + spread heatmaps, the derived IV smile (`iv_smile_figure`, FR-11), the published page's static surface + its per-date `asof_frames()` payload. All styling via `theme.py` (FR-8 landed 2026-09-02). |
+| [option_surface_plot.py](../options_surface_lab/option_surface_plot.py) | Candlestick, 3D price surface (`x_mode` = strike or K/S, FR-10), settle-vs-trade scatter + occupancy bars, coverage + spread heatmaps, the derived IV smile (`iv_smile_figure`, FR-11), FR-12's spot plane at `K = S`, the published page's static surface + its per-date `asof_frames()` payload. All styling via `theme.py` (FR-8 landed 2026-09-02). |
 | [theme.py](../options_surface_lab/theme.py) | Design tokens — the only file holding a colour or a font name — plus the shared figure builders (`figure_layout`, `title`, `caption`, `axis`, `scene`, `legend`, `slider`, `menu`). Direction recorded in [DESIGN-BRIEF.md](DESIGN-BRIEF.md). |
 | [build_preview.py](../build_preview.py) | **The deliverable** (AD-4/T-41): builds the single self-contained `index.html` that Pages serves. CI runs it on every push. |
 | `option_pipeline_data.synthetic.pkl` | **Orphaned** — nothing loads it, and it fails to unpickle under the installed pandas. The no-cache fallback is generated in-process by `synthesize_demo_payload()`. |
@@ -325,11 +325,56 @@ the bracket. The round trip (BS-price a known σ, invert, recover it) is paramet
 eight ITM/ATM/OTM × call/put cases. The panel follows the as-of slider like every other one
 (AD-5/T-42). Co-built with `notebooks/02_iv_surface.ipynb` (T-25).
 
-**FR-12 — Spot plane overlay**
+**FR-12 — Spot plane overlay** — ✅ **met 2026-09-04 (T-18)**
 In the 3D figure, a translucent vertical plane at `K = S` (as-of date's underlying close),
 toggleable like the sheet, so at/in/out-of-the-money reads at a glance.
 *Accepted when:* plane sits at the correct spot for the selected date, is obviously not data,
 and can be hidden.
+
+*Acceptance record (2026-09-04):* a constant-x `go.Surface` — two columns at one strike, so
+the sheet degenerates into an upright rectangle — spanning exactly the slice's own DTE and
+price box, in `theme.SPOT_PLANE` at 18% opacity with a flat colour scale, no colorbar and
+`hoverinfo="skip"`. **One plane per as-of date that can carry one** (48 of 53), carried by the same
+visibility mechanism the slider already drives (AD-5), so the wall follows the date rather
+than needing a control that can read the slider's state. Hidden from the legend on the
+published page and from a switch in the Reflex app.
+
+Three things the requirement did not say but the figure needs:
+
+- **It composes with FR-10 for free.** `K = S` is the spot in dollars and *exactly 1.00* in
+  moneyness, so the axis menu moves the wall onto the tick the ruler already calls the money.
+  The plane's x is one number per ruler, which is all the menu's payload carries for it.
+- **No spot, no plane** (AD-9). A date with no underlying close gets no wall rather than one
+  standing at a neighbouring day's spot — a reader has no way to check a plane, so a wrong
+  one is indistinguishable from a right one. Same rule that gives that date no K/S ruler.
+- **It spans the box of the rows that are actually DRAWN.** Plotly autoranges a 3D scene
+  from traces whose `visible` is exactly `True` and ignores the ones parked on the legend, so
+  a wall sized over a cloud the reader cannot see silently sets the axis for the cloud they
+  can. **This shipped and was caught by the T-46 review:** sized over both rights while the
+  page opens with puts parked, the plane stretched the price axis on 34 of 53 dates — up to
+  6.8x — flattening the call surface onto the floor of the box. It is now sized over the
+  right that opens lit, and a test walks every slider step comparing the wall against the
+  traces that step actually lights.
+- **A date with nothing to span draws no wall.** The last five days of this panel have a
+  single expiry alive, so the DTE span collapses and the surface's four corners are collinear
+  — a zero-area mesh that renders nothing while its legend entry stays lit. `_plane_extents`
+  returns `None` for a degenerate box, and the caption drops its plane clause on those dates
+  (a caption is an assertion about what is on screen — T-44's lesson, one size smaller).
+
+**Driven in a real Chromium on the built page** (RUNBOOK §5): the wall stands at each date's
+own spot as the slider moves, lands on 1.00 under K/S and back on dollars when the ruler
+flips, and hides and returns from the legend taking nothing else with it. **One defect was
+visible only in the render:** the plane is the hero's *seventh* legend entry, the legend
+wrapped to two rows, and the caption at `CAPTION_Y_OVER_LEGEND` printed over it — the
+DESIGN-BRIEF §8 defect arriving by a route the token could not see. The clearance a caption
+needs is a function of the entry count, so the row count is now derived from the figure's own
+legend entries (`LEGEND_ENTRIES_PER_ROW`) instead of typed in.
+
+**Then the T-46 adversarial review found the axis defect that browser check had missed** —
+because the check compared the plane's top against the axis range *the plane itself had set*.
+A circular check is not a check. The second drive walks all 53 slider steps and compares the
+wall against the traces each step lights: 19 checks green, worst plane/cloud ratio 1.000,
+5 dates correctly planeless, zero page and console errors.
 
 ## 7. Non-functional requirements
 
@@ -426,7 +471,7 @@ site with the rubric complete outranks it on the deadline.)
 ## 12. Definition of done (submission checklist)
 
 - [ ] All P0 acceptance criteria met (FR-1 … FR-9)
-- [◐] All P1 acceptance criteria met (FR-10 … FR-12) — FR-10 met *(T-16, 2026-09-04)*, FR-11 met *(T-17, 2026-09-04)*; FR-12 open, cuttable per §8
+- [x] All P1 acceptance criteria met (FR-10 … FR-12) — FR-10 *(T-16)*, FR-11 *(T-17/T-45)*, FR-12 *(T-18)*, all 2026-09-04
 - [x] Tests green on a clean clone with no LSEG credentials *(CI, every push — NFR-4)*
 - [◐] Pages URL renders in incognito: figures, toggles, numbers ✅ *(PO-verified 2026-09-03)* — **three sentences still missing (G-4 / T-12)**
 - [ ] Canvas submission posted with the repo + site link

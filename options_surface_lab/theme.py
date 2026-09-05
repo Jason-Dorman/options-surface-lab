@@ -92,6 +92,19 @@ SHEET_OPACITY = 0.26
 SHEET_SCALE = [[0.0, "#0A2E3A"], [0.5, "#12897F"], [1.0, MARK]]
 SHEET_SCALE_PUT = [[0.0, "#1B1435"], [0.5, "#5B45A0"], [1.0, MARK_PUT]]
 
+# FR-12's spot plane. It is the one object in the scene that is neither a market nor a model
+# — a ruler standing where the money is on the as-of date — so it takes neither a series hue
+# nor the chrome amber. A cool slate reads as *reference* beside four saturated data colours,
+# and it is far enough from all of them (and from the amber type) that a reader never has to
+# ask whether the wall is a series.
+#
+# Fainter than the interpolated sheet, deliberately. The sheet lies over the cloud in one thin
+# layer; the plane stands side-on *through* the middle of it, so at the sheet's opacity it
+# would fog every point behind it. It must be visible without becoming the thing you look at.
+SPOT_PLANE = "#7FA8D9"
+SPOT_PLANE_OPACITY = 0.18
+SPOT_PLANE_SCALE = [[0.0, SPOT_PLANE], [1.0, SPOT_PLANE]]  # flat: it encodes no magnitude
+
 # --------------------------------------------------------------------------- semantic status
 
 POSITIVE = "#2FD4A0"     # underlying up-candle
@@ -154,13 +167,23 @@ TRACKING = "2px"         # letter-spacing on the wordmark
 
 TRANSPARENT = "rgba(0,0,0,0)"  # a legend backdrop that must not paint
 
-# The band above a plot holds, bottom to top: the legend, then the caption, then the title.
-# A horizontal legend anchored at y=1.0 is roughly 0.05 of the plot area tall, so a caption
-# placed at 1.02 or 1.045 lands *inside* it and the two print over each other. Figures with a
-# top legend put their caption at CAPTION_Y_OVER_LEGEND; figures without one use CAPTION_Y.
 LEGEND_Y = 1.0
-CAPTION_Y = 1.02
-CAPTION_Y_OVER_LEGEND = 1.12
+
+# **Captions are HTML, not annotations** (T-47). They used to live inside the figure, in
+# `paper` coordinates, in the band above the plot — sharing it with the title and a legend
+# that GROWS as the figure narrows. A Plotly annotation is one unwrappable line of text
+# pinned to a fraction of a box whose pixel size changes with the viewport, so that band was
+# a standing collision waiting for a width: the hero's caption printed through its own legend
+# (2026-09-02), the IV assumptions line was clipped clean off the canvas (T-17), then ran off
+# a 5-column tile (T-45), then printed over a legend that had wrapped to two rows (T-18) —
+# and a width audit found it escaping the figure entirely below 1440px and the hero's legend
+# reaching SIX rows on a phone. Every one of those is the same defect wearing a new width.
+#
+# A caption in the panel's own HTML wraps like any other text, can never overlap anything,
+# and cannot be clipped. The tokens that used to position it — CAPTION_Y,
+# CAPTION_Y_OVER_LEGEND(_2), LEGEND_ROW, LEGEND_BOX_PAD, LEGEND_ENTRIES_PER_ROW — are gone
+# with it, along with the arithmetic tests that policed them. `.osl-caption` below is the
+# whole of the styling now, and both renderings read it.
 
 # FR-10's axis control sits *inside* the plot, top-left, rather than in the band above it.
 # Everything at or above LEGEND_Y is already spoken for (legend, caption, title) and Plotly's
@@ -169,9 +192,13 @@ CAPTION_Y_OVER_LEGEND = 1.12
 MENU_X = 0.01
 MENU_Y = 0.98
 
-# Top margin has to hold title + caption + legend without them stacking into one another.
-# The slider variant also reserves the bottom for the as-of control (T-15).
-HERO_MARGIN = dict(l=10, r=10, t=104, b=12)
+# The top margin holds the title and the legend — the caption left this band in T-47, so it
+# is two tenants now, not three. The dev hero shows one right at a time and its legend is a
+# single row; the published one carries seven entries and wraps to three rows at
+# FIGURE_MIN_WIDTH, which is what 116 reserves. Sized for the WORST case rather than tuned to
+# one width, so the slack at 1600px is deliberate: a margin that fits only the width it was
+# measured at is the defect this whole task was about.
+HERO_MARGIN = dict(l=10, r=10, t=80, b=12)
 HERO_MARGIN_WITH_SLIDER = dict(l=8, r=8, t=116, b=84)
 
 # FR-11's smile colours by expiry, and expiry is an ORDERED variable — near-dated through
@@ -183,12 +210,11 @@ HERO_MARGIN_WITH_SLIDER = dict(l=8, r=8, t=116, b=84)
 # no new hue and leaves the README-locked cyan-mark / magenta-print encoding untouched (§3).
 EXPIRY_RAMP = (MARK, MARK_PUT)
 
-# The smile puts its legend BELOW the plot and keeps two caption lines above it. A horizontal
-# legend of nine expiries is far too wide to share the top band with a caption on a 5-column
-# tile — they overprinted on the first build — and there is no room to stack a third row up
-# there. Bottom is free, and it is the same arrangement `settle_vs_trade_figure` already uses.
-# The top figure is sized by `test_every_caption_fits_inside_the_margin_reserved_for_it`.
-SMILE_MARGIN = dict(l=56, r=18, t=58, b=88)
+# The smile puts its legend BELOW the plot: a horizontal legend of nine expiries is far too
+# wide for the top band of a 5-column tile, and bottom is free — the same arrangement
+# `settle_vs_trade_figure` uses. Its top margin was 58 to hold two caption lines; those are
+# HTML now (T-47) and the band above the plot is empty, so it is back to a tile's clearance.
+SMILE_MARGIN = dict(l=56, r=18, t=26, b=88)
 SMILE_LEGEND_Y = -0.30
 
 SMILE_LINE_WIDTH = 1.6
@@ -252,27 +278,6 @@ def title(text: str, **overrides) -> dict:
         xanchor="left",
         y=0.98,
         yanchor="top",
-    )
-    spec.update(overrides)
-    return spec
-
-
-def caption(text: str, y: float | None = None, **overrides) -> dict:
-    """The one-line "how to read this" note that sits above each figure.
-
-    Pass ``y=CAPTION_Y_OVER_LEGEND`` on any figure carrying a top legend — the default sits
-    in the legend's own band and the two overprint.
-    """
-    spec = dict(
-        text=text,
-        xref="paper",
-        yref="paper",
-        x=0.0,
-        y=CAPTION_Y if y is None else y,
-        xanchor="left",
-        yanchor="bottom",
-        showarrow=False,
-        font=dict(size=SIZE_CAPTION, color=TEXT_MUTED, family=FONT_BODY),
     )
     spec.update(overrides)
     return spec
@@ -423,6 +428,13 @@ PANEL_FIGURE_HEIGHT = 360
 # and left a visibly dead half-panel underneath. Shorter here is strictly better: the whole
 # page gets shorter and nothing is squeezed. See also `align-items:start` in PAGE_CSS.
 HERO_FIGURE_HEIGHT = 600
+# NOT width-dependent, and it cannot be. In the two-column band the hero runs the full row,
+# and a 3D scene keeps its own proportions (`aspectmode="manual"`), so the cloud sits in a
+# wider box with navy either side. Giving the container more height there does NOT fix it:
+# plotly only sizes a figure to its container for dimensions the layout leaves unset, and
+# this one is set — a CSS override just adds empty box below the plot. Measured 2026-09-04.
+# The honest options are a resize listener (more custom JS than this page is allowed) or
+# living with a roomier hero between 1101 and 1399px. We live with it.
 
 # Panel widths in grid columns. Ten divides cleanly into both 6+4 (the hero row) and 5+5
 # (everything else), which a 2- or 12-column grid does not.
@@ -432,6 +444,28 @@ HERO_FIGURE_HEIGHT = 600
 # 53 steps, which is the constraint that stops this going to 5/5.
 GRID_COLUMNS = 10
 W_HERO, W_SIDECAR, W_HALF, W_FULL = 6, 4, 5, 10
+
+# Three layout bands, not two (T-47). The single 1100px breakpoint left a wide gap where the
+# 6+4 and 5+5 splits were cramped but had not yet collapsed — a 1366x768 laptop, the most
+# common screen there is, sat squarely in it: panel headers wrapped and left rows ragged, and
+# the IV panel's assumptions line ran off its tile. Below MID the grid drops to two equal
+# columns with the hero across both; below NARROW everything is one column.
+#
+#   >= 1400   the full 10-column grid   6+4 / 5+5 / 10 / 5+5
+#   1101-1399 two equal columns         hero full, then pairs — the occupancy grids stay paired
+#   <= 1100   one column
+BREAK_TWO_COL = 1400
+BREAK_ONE_COL = 1100
+MID_COLUMNS = 2
+
+# A figure is never rendered narrower than this; its panel body scrolls instead. Plotly lays
+# a legend, a slider and an axis out in PIXELS inside a box we size in percent, so below some
+# width the chrome simply does not fit however carefully it is placed — 53 slider steps and a
+# seven-entry legend need room that a 380px phone does not have. A floor turns "the chart is
+# broken" into "the chart scrolls", which is the honest trade (AD-9's posture, applied to
+# layout). The hero carries both the slider and the widest legend, so it needs more.
+FIGURE_MIN_WIDTH = 520
+HERO_MIN_WIDTH = 680
 PAGE_PAD = "14px"
 PANEL_PAD = "10px 12px 12px 12px"
 HEADER_PAD = "7px 12px"
@@ -443,18 +477,11 @@ HEADER_PAD = "7px 12px"
 # props and the static builder's inline styles. Both render the identical panel chrome, so
 # the checkpoint demo and the graded page look like one product.
 
-PANEL_STYLE = dict(
-    bg=SURFACE,
-    border=f"1px solid {BORDER}",
-    padding="0",
-)
-
-PANEL_HEADER_STYLE = dict(
-    bg=SURFACE_ALT,
-    border_bottom=f"1px solid {BORDER}",
-    padding=HEADER_PAD,
-    width="100%",
-)
+# The Reflex page used to restate the panel chrome here as component props while the static
+# builder used the classes below. Two spellings of one design is how the published page once
+# shipped with the hero one column wide while `reflex run` looked perfect -- and, later, how
+# the Reflex app ended up with no responsive breakpoints at all. Both pages now render the
+# same class names against PAGE_CSS, so these props are gone (T-47).
 
 # Every width from 1..GRID_COLUMNS gets a class, generated rather than listed. Hand-listing
 # them is how the published page broke on 2026-09-02: the hero split moved from 7/3 to 6/4,
@@ -499,7 +526,10 @@ PAGE_CSS = f"""
   .osl-readout {{ background:{SURFACE}; padding:9px 12px 10px 12px; }}
   .osl-readout-label {{
     color:{TEXT_MUTED}; font-size:10px; letter-spacing:1.2px; text-transform:uppercase;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    /* Wraps rather than truncating: "Median |mark - trade|" was being cut to "Median |mark"
+       below 1024px, which reads as a different statistic. The strip is a grid, so a
+       two-line label lifts every cell in the row together and nothing goes ragged. */
+    overflow-wrap:anywhere;
   }}
   .osl-readout-value {{
     color:{ACCENT}; font-family:{FONT_MONO}; font-size:20px; font-weight:700;
@@ -514,10 +544,34 @@ PAGE_CSS = f"""
     align-items:start;
   }}
 {_WIDTH_CLASSES}
-  /* Below this the adjacency is not worth the squeeze — everything goes full width. */
-  @media (max-width: 1100px) {{
-    .osl-grid {{ grid-template-columns:minmax(0, 1fr); }}
+  /* The hero names itself rather than being recognised by its span, because the span changes
+     between bands and the identity does not. Defined at BASE level, not only inside a media
+     query: a class that exists only in an override is how `.osl-w6` went missing from the
+     published page while the Reflex app looked perfect. */
+  .osl-hero {{ grid-column:span {W_HERO}; }}
+  /* Two equal columns: the hero goes full width and everything else pairs off, so the
+     occupancy grids — the one pair whose whole point is being compared — stay side by side.
+     Without this band a 1366px laptop kept the 6+4 split and crowded every panel in it. */
+  @media (max-width: {BREAK_TWO_COL - 1}px) and (min-width: {BREAK_ONE_COL + 1}px) {{
+    .osl-grid {{ grid-template-columns:repeat({MID_COLUMNS}, minmax(0, 1fr)); }}
     {_WIDTH_SELECTORS} {{ grid-column:span 1; }}
+    /* The hero, its sidecar and the full-width panel each take the whole row, which leaves
+       the two genuine PAIRS -- smile beside mark-vs-print, and the two occupancy grids --
+       side by side, where comparing them is the entire reason both are shown. Pairing the
+       sidecar with a tile instead put a 600px candlestick beside a 360px one and left 224px
+       of dead navy under the short one. */
+    .osl-hero, .osl-w{W_SIDECAR}, .osl-w{W_FULL} {{ grid-column:span {MID_COLUMNS}; }}
+    /* Half a 1280px screen is narrow enough that FR-11's assumptions line wraps to three
+       rows while its row-mate's caption still fits two, which put the pair 16px apart.
+       Reserve the taller here rather than everywhere: at full width two lines is the most
+       any caption needs, and 16px of dead navy under all seven panels to fix a band 300px
+       wide is a bad trade. */
+    .osl-panel .osl-caption {{ min-height:calc(3 * 1.45em + 8px); }}
+  }}
+  /* Below this the adjacency is not worth the squeeze — everything goes full width. */
+  @media (max-width: {BREAK_ONE_COL}px) {{
+    .osl-grid {{ grid-template-columns:minmax(0, 1fr); }}
+    {_WIDTH_SELECTORS}, .osl-hero {{ grid-column:span 1; }}
   }}
 
   .osl-panel {{ background:{SURFACE}; border:1px solid {BORDER}; min-width:0; }}
@@ -535,8 +589,31 @@ PAGE_CSS = f"""
   }}
   .osl-panel-note {{
     font-family:{FONT_MONO}; font-size:10px; color:{TEXT_MUTED}; text-align:right;
+    /* One line, always. A wrapped note makes its panel taller than the one beside it, and
+       on a hairline grid where panels deliberately do not stretch, 17px of that reads as a
+       rendering fault. It truncates instead; the caption below carries the same ground. */
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
   }}
-  .osl-panel-body {{ padding:{PANEL_PAD}; }}
+  .osl-panel-head > div:first-child {{ white-space:nowrap; }}
+
+  /* ---- the caption: the "how to read this" line, in HTML so it can WRAP ---- */
+  .osl-caption {{
+    color:{TEXT_MUTED}; font-family:{FONT_BODY}; font-size:{SIZE_CAPTION}px;
+    line-height:1.45; padding:8px 12px 0 12px;
+    /* Two lines' worth, always. FR-11's panel carries two caption lines and its row-mate
+       carries one, so without this the pair sat 16px apart -- and on a hairline grid where
+       panels deliberately do not stretch, a small mismatch between two panels that should
+       match reads as a rendering fault. Reserving the taller of the two keeps every row
+       level; a caption that wraps further still grows, which is the correct trade. */
+    min-height:calc(2 * 1.45em + 8px);
+  }}
+  .osl-caption-line {{ display:block; }}
+
+  /* Below the floor the panel scrolls rather than squeezing a figure into a shape where its
+     own legend and slider collide. See FIGURE_MIN_WIDTH. */
+  .osl-panel-body {{ padding:{PANEL_PAD}; overflow-x:auto; }}
+  .osl-figure {{ min-width:{FIGURE_MIN_WIDTH}px; }}
+  .osl-figure-hero {{ min-width:{HERO_MIN_WIDTH}px; }}
 
   /* ---- prose blocks sit in the grid like any other panel ---- */
   .osl-note {{ color:{TEXT}; font-size:12.5px; line-height:1.55; }}

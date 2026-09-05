@@ -25,9 +25,10 @@ from options_surface_lab.option_surface_plot import (
     X_MODE_LABEL,
     as_panel_figure,
     asof_frames,
+    figure_caption,
     candlestick_figure,
     coverage_heatmap,
-    IV_COUNT_ANNOTATION,
+    IV_COUNT_LINE,
     iv_smile_figure,
     spread_heatmap,
     settle_vs_trade_figure,
@@ -147,7 +148,7 @@ def main() -> Path:
         _panel(1, "Price surface · 3D",
                "drag the slider — the whole page follows &nbsp;·&nbsp; "
                "K / S rebases to spot, 1.00 = at the money",
-               fig_surface, width=T.W_HERO),
+               fig_surface, width=T.W_HERO, hero=True),
         _panel(2, f"{ticker} underlying", "spot context · 12 weeks · close = TRDPRC_1",
                fig_cs, width=T.W_SIDECAR),
         # Header kept to one line: the name and note wrapped on the first build, which made
@@ -198,10 +199,17 @@ def _readout(index: int, label: str, value) -> str:
     )
 
 
-def _panel(n: int, name: str, note: str, fig, width: int = None) -> str:
-    """A numbered panel: a header rule carrying `[n] NAME` and a note, then the figure.
+def _panel(n: int, name: str, note: str, fig, width: int = None, hero: bool = False) -> str:
+    """A numbered panel: a header rule, the figure's caption, then the figure.
 
-    `width` is in grid columns out of `theme.GRID_COLUMNS` (default: half the row).
+    `width` is in grid columns out of `theme.GRID_COLUMNS` (default: half the row); `hero`
+    marks the one panel that goes full width in the two-column band (theme.BREAK_TWO_COL).
+
+    **The caption is HTML here, not an annotation inside the plot** (T-47). It therefore
+    wraps, and can neither collide with the figure's own chrome nor be clipped by its
+    margins — two failure modes this project shipped four times between them. The text comes
+    from the figure itself (`figure_caption`), so the published page and the Reflex app
+    cannot disagree about what a panel says.
 
     The plot div takes a stable id (`osl-fig-{n}`) rather than Plotly's random uuid, because
     the as-of listener addresses the panels by id — a uuid regenerated on every build would
@@ -218,19 +226,29 @@ def _panel(n: int, name: str, note: str, fig, width: int = None) -> str:
         div_id=f"{FIG_ID_PREFIX}{n}",
     )
     _plotly_included = True
+    lines = "".join(
+        f'<span class="osl-caption-line" data-osl-cap-line="{i}">{line}</span>'
+        for i, line in enumerate(figure_caption(fig))
+    )
+    caption = f'<div class="osl-caption" id="{CAP_ID_PREFIX}{n}">{lines}</div>' if lines else ""
+    fig_class = "osl-figure osl-figure-hero" if hero else "osl-figure"
     return (
-        f'<div class="osl-panel osl-w{width or T.W_HALF}">'
+        f'<div class="osl-panel osl-w{width or T.W_HALF}{" osl-hero" if hero else ""}">'
         '<div class="osl-panel-head">'
         f'<div><span class="osl-panel-n">[{n}]</span>'
         f'<span class="osl-panel-name">{name}</span></div>'
         f'<div class="osl-panel-note">{note}</div>'
         "</div>"
-        f'<div class="osl-panel-body">{body}</div>'
+        f"{caption}"
+        f'<div class="osl-panel-body"><div class="{fig_class}">{body}</div></div>'
         "</div>"
     )
 
 
 FIG_ID_PREFIX = "osl-fig-"
+# The caption element the as-of listener rewrites, per panel. Captions are HTML now, so a
+# Plotly slider step cannot reach them — the listener applies them like the readouts (T-47).
+CAP_ID_PREFIX = "osl-cap-"
 
 # Which panel each frame key updates. Kept beside the script that reads it so a renamed key
 # and a stale selector cannot drift apart.
@@ -263,7 +281,7 @@ def _asof_script(frames: dict, default_label: str) -> str:
     # pointing at nothing. Fall back to the first date rather than to `undefined`.
     default_label = default_label if default_label in frames else next(iter(frames))
     grids = ", ".join(f'["{key}", "{FIG_ID_PREFIX}{n}"]' for key, n in _GRID_PANELS)
-    iv_note = IV_COUNT_ANNOTATION
+    iv_note = IV_COUNT_LINE
     smiles = ", ".join(f'["{key}", "{FIG_ID_PREFIX}{n}"]' for key, n in _SMILE_PANELS)
     # The hero's axis menu is labelled, not keyed, so the listener maps label -> mode. Both
     # sides come from the same two dicts in the plot module, so a renamed mode cannot leave
@@ -281,6 +299,18 @@ def _asof_script(frames: dict, default_label: str) -> str:
   try {{ frames = JSON.parse(node.textContent); }} catch (e) {{ return; }}
   var hero = document.getElementById("{FIG_ID_PREFIX}1");
   if (!hero || typeof hero.on !== "function") return;
+
+  // A caption is HTML now, so the listener owns it the way it owns the readouts. Panels
+  // are addressed by the figure id with the caption prefix swapped in, which keeps one id
+  // scheme for both.
+  function setCaptionLine(figId, line, text) {{
+    try {{
+      var cap = document.getElementById(figId.replace("{FIG_ID_PREFIX}", "{CAP_ID_PREFIX}"));
+      if (!cap) return;
+      var el = cap.querySelector('[data-osl-cap-line="' + line + '"]');
+      if (el) el.textContent = text;
+    }} catch (e) {{}}
+  }}
 
   var GRIDS = [{grids}];
   var SMILES = [{smiles}];
@@ -314,9 +344,9 @@ def _asof_script(frames: dict, default_label: str) -> str:
         var idx = [];
         for (var t = 0; t < sm.x.length; t++) idx.push(t);
         Plotly.restyle(SMILES[c][1], {{x: sm.x, y: sm.y, showlegend: sm.show}}, idx);
-        var re = {{"xaxis.title.text": MODE_TITLE[mode]}};
-        if (sm.note) re["annotations[{iv_note}].text"] = sm.note;
-        Plotly.relayout(SMILES[c][1], re);
+        Plotly.relayout(SMILES[c][1], {{"xaxis.title.text": MODE_TITLE[mode]}});
+        // the count line lives in the panel's HTML caption, not in the figure (T-47)
+        if (sm.note) setCaptionLine(SMILES[c][1], {iv_note}, sm.note);
       }} catch (e) {{}}
     }}
   }}
@@ -355,6 +385,9 @@ def _asof_script(frames: dict, default_label: str) -> str:
       }}
       var asof = document.getElementById("osl-asof");
       if (asof) asof.textContent = label;
+      // Five dates in this panel draw no spot plane at all, so the hero's caption has to
+      // stop naming one. A caption is an assertion about what is on screen (T-44, T-46).
+      if (f.hero_caption) setCaptionLine("{FIG_ID_PREFIX}1", 0, f.hero_caption);
     }} catch (e) {{}}
   }}
 

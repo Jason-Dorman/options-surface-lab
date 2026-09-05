@@ -40,7 +40,7 @@ def test_sparsity_keys_match_what_the_state_reads(wide, asof):
 def test_surface_figure_accepts_the_app_call_signature(wide, asof):
     fig = app.price_surface_figure(
         wide, asof, cp="C", show_trade=True, show_mark=True,
-        show_interpolated=True, ticker="UUUU",
+        show_interpolated=True, show_spot_plane=True, ticker="UUUU",
     )
     assert len(fig.data) >= 1
 
@@ -171,6 +171,10 @@ def test_the_app_hands_no_raw_figure_to_a_panel():
     for i, line in enumerate(lines):
         stripped = line.strip()
         if not stripped.startswith("self.fig_"):
+            continue
+        # A bare reference, not an assignment -- `_lift_captions` lists the figures to read
+        # captions off. Only what is WRITTEN to a `fig_` var can hand a panel a raw figure.
+        if "=" not in stripped.split("#")[0]:
             continue
         rhs = stripped.split("=", 1)[1].strip()
         if rhs.isidentifier():
@@ -449,7 +453,9 @@ def test_the_iv_figure_prints_every_assumption_fr_11_requires(wide, asof):
     from options_surface_lab.option_surface_plot import iv_smile_figure
     from options_surface_lab.option_surface_utils import MARK_FIELD_DEFAULT, RISK_FREE_RATE
 
-    text = " ".join(a.text for a in iv_smile_figure(wide, asof).layout.annotations).lower()
+    from options_surface_lab.option_surface_plot import figure_caption
+
+    text = " ".join(figure_caption(iv_smile_figure(wide, asof))).lower()
     for needed in (
         "european",                      # exercise style
         "american exercise ignored",     # ...and that we know it is an approximation
@@ -541,21 +547,19 @@ def test_no_spot_means_no_smile_rather_than_strikes_on_a_k_over_s_axis(wide, aso
     assert any(len(t.x) for t in iv_smile_figure(blind, asof, x_mode="strike").data)
 
 
-def test_every_caption_fits_inside_the_margin_reserved_for_it(wide, asof):
-    """An annotation pushed above the paper does not warn — it simply stops drawing.
+def test_no_figure_puts_text_in_the_band_above_its_plot(wide, asof):
+    """The rule that replaced the caption-fit arithmetic (T-47).
 
-    Found on the built page (T-17): the IV figure's assumptions line sat at y = 1.12 while
-    `as_panel_figure` had replaced its margin with the 30px tile default, so FR-11's rate,
-    day-count and exercise style silently vanished from the deliverable while every test
-    stayed green. The arithmetic is small enough to just do: an annotation at `y` needs
-    `(y - 1) x plot-area height` of top margin above the plot — **plus the height of the text
-    itself**, because `theme.caption` anchors at the bottom of its box, so the glyphs hang
-    *above* the y it names.
+    Captions used to be Plotly annotations in `paper` coordinates, sitting above the plot in
+    a band shared with the title and a legend that GROWS as a figure narrows. Policing that
+    band took arithmetic — an annotation at `y` needs `(y - 1) x plot-area` of top margin
+    *plus* a line for the text box — and the arithmetic was wrong twice: once omitting the
+    line-height term (which duly passed a caption that was clipped in the shipped page), and
+    once assuming a legend row count that a seventh legend entry then changed.
 
-    The first version of this test omitted that line-height term and duly passed
-    `spread_heatmap`, whose caption was clipped in the shipped page by exactly the mechanism
-    the test was written to catch (adversarial review, 2026-09-04). A guard that models the
-    anchor but not the box is worse than none: it certifies the defect.
+    Captions are HTML now, so the band holds the title alone and the whole class of defect is
+    gone. This is the guard that keeps it gone: **no figure may put text above its plot at
+    all.** A rule with no arithmetic in it cannot have the arithmetic wrong.
     """
     from options_surface_lab import theme as T
     from options_surface_lab.option_surface_plot import (
@@ -566,6 +570,11 @@ def test_every_caption_fits_inside_the_margin_reserved_for_it(wide, asof):
         spread_heatmap,
     )
 
+    from options_surface_lab.option_surface_plot import (
+        figure_caption,
+        static_surface_figure,
+    )
+
     panelised = [
         ("compare", as_panel_figure(settle_vs_trade_figure(wide, asof))),
         ("spread", as_panel_figure(spread_heatmap(wide, asof, cp="C"))),
@@ -573,21 +582,20 @@ def test_every_caption_fits_inside_the_margin_reserved_for_it(wide, asof):
         ("print occupancy", as_panel_figure(coverage_heatmap(wide, asof, cp="C", field="TRDPRC_1"))),
         ("iv smile", as_panel_figure(iv_smile_figure(wide, asof), margin=T.SMILE_MARGIN)),
         ("hero", app.price_surface_figure(wide, asof, cp="C")),
+        ("published hero", static_surface_figure(wide, ticker="UUUU")),
+        ("underlying", app.candlestick_figure(app.synthesize_demo_payload()["stock"], "UUUU")),
     ]
     for name, fig in panelised:
         above = [a for a in fig.layout.annotations if (a.y or 0) > 1.0 and a.yref == "paper"]
-        if not above:
-            continue
-        plot_area = fig.layout.height - fig.layout.margin.t - fig.layout.margin.b
-        # yanchor="bottom" (theme.caption): the text box sits above its anchor, so reserve a
-        # line for it. 1.4x the font size is a normal line box and errs toward safety.
-        line = T.SIZE_CAPTION * 1.4
-        needed = max(a.y - 1.0 for a in above) * plot_area + line
-        assert fig.layout.margin.t >= needed, (
-            f"{name}: caption at y={max(a.y for a in above)} needs {needed:.0f}px of top "
-            f"margin ({needed - line:.0f} for the offset + {line:.0f} for the text) but only "
-            f"{fig.layout.margin.t}px is reserved — it will be clipped"
+        assert not above, (
+            f"{name}: {len(above)} annotation(s) above the plot — that band is shared with "
+            f"the title and a legend that grows as the figure narrows, so text put there "
+            f"collides or clips at some width. Captions belong in the panel's HTML: pass "
+            f"them to `with_caption` and let `figure_caption` render them."
         )
+        # ...and every figure that says something about itself must still say it
+        if name not in {"compare", "spread"}:
+            assert figure_caption(fig) or name == "published hero", name
 
 
 def test_everything_the_iv_panel_says_about_a_date_travels_with_the_slider(wide):
@@ -603,8 +611,9 @@ def test_everything_the_iv_panel_says_about_a_date_travels_with_the_slider(wide)
     changed": it is that every per-date channel is present and self-consistent on every step.
     """
     from options_surface_lab.option_surface_plot import (
-        IV_COUNT_ANNOTATION,
+        IV_COUNT_LINE,
         asof_frames,
+        figure_caption,
         iv_smile_figure,
         panel_expiries,
         static_surface_figure,
@@ -646,11 +655,11 @@ def test_everything_the_iv_panel_says_about_a_date_travels_with_the_slider(wide)
         )
 
     assert len(notes) > 1, "one caption for every date means it is not per-date at all"
-    ann = iv_smile_figure(wide, labels[0]).layout.annotations
-    assert "listed strikes" in ann[IV_COUNT_ANNOTATION].text
-    assert "listed strikes" not in ann[0].text, (
-        "annotation 0 carries the assumptions and must stay date-independent — the listener "
-        "rewrites annotation IV_COUNT_ANNOTATION by index and would blow the rate away"
+    lines = figure_caption(iv_smile_figure(wide, labels[0]))
+    assert "listed strikes" in lines[IV_COUNT_LINE]
+    assert "listed strikes" not in lines[0], (
+        "caption line 0 carries the assumptions and must stay date-independent — the listener "
+        "rewrites line IV_COUNT_LINE by index and would blow the rate away"
     )
 
 
@@ -735,4 +744,250 @@ def test_a_date_with_no_spot_loses_the_whole_smile_not_just_its_ruler(wide):
     assert all(len(row) == 0 for row in by_mode["moneyness"]["x"]), (
         "K/S has no ruler at all without a spot to rebase on (FR-10)"
     )
-    assert not iv_smile_figure(blind, asof).layout.annotations[0].text.startswith("0")
+    from options_surface_lab.option_surface_plot import figure_caption
+
+    assert not figure_caption(iv_smile_figure(blind, asof))[0].startswith("0")
+
+
+# ------------------------------------------------------- the spot plane (FR-12, T-18)
+
+
+def _plane(fig):
+    from options_surface_lab.option_surface_plot import SPOT_PLANE_NAME
+
+    planes = [t for t in fig.data if t.name == SPOT_PLANE_NAME]
+    assert len(planes) == 1, f"expected exactly one spot plane, found {len(planes)}"
+    return planes[0]
+
+
+def test_the_spot_plane_stands_at_the_as_of_date_s_spot(wide, asof):
+    """FR-12 acceptance: "the plane sits at the correct spot for the selected date".
+
+    Spot moves every day of the window, so a plane built from anything panel-wide — a mean, a
+    first value, the last close — would be wrong on 52 of 53 dates while looking perfectly
+    plausible on all of them. Checked against the date's own close.
+    """
+    plane = _plane(app.price_surface_figure(wide, asof, cp="C"))
+    sl = wide[(wide["date"] == pd.Timestamp(asof)) & (wide["cp"] == "C")]
+    spot = float(sl["spot"].dropna().median())
+
+    assert list(plane.x) == pytest.approx([spot, spot]), "the plane is not at K = S"
+    assert len(set(plane.x)) == 1, "a plane at K = S has ONE strike coordinate"
+
+
+def test_the_spot_plane_spans_the_data_and_never_widens_an_axis(wide, asof):
+    """A reference that moves the axes has changed the figure it was meant to annotate.
+
+    Plotly autoranges from every trace, the plane included, so a wall dropped to z = 0 on a
+    panel whose cheapest quote is $0.20 would stretch the price axis and shuffle every point
+    to make room for a decoration. It spans exactly the slice's own DTE and price box.
+    """
+    plane = _plane(app.price_surface_figure(wide, asof, cp="C"))
+    sl = wide[(wide["date"] == pd.Timestamp(asof)) & (wide["cp"] == "C")]
+    prices = pd.concat([sl["MARK"], sl["TRDPRC_1"]]).dropna()
+
+    assert list(plane.y) == pytest.approx([sl["dte"].min(), sl["dte"].max()])
+    flat = [v for row in plane.z for v in row]
+    assert min(flat) >= prices.min() - 1e-9 and max(flat) <= prices.max() + 1e-9, (
+        "the plane reaches outside the price range it stands in"
+    )
+    # upright, not lying flat: z has to vary across the plane or there is no wall
+    assert min(flat) < max(flat), "the plane is a horizontal sheet, not a vertical one"
+
+
+def test_the_spot_plane_lands_on_exactly_1_00_under_the_moneyness_ruler(wide, asof):
+    """FR-12 composes with FR-10 for free — and that is the point of drawing it.
+
+    K/S puts the money at 1.00 by construction, so the plane and the axis agree without
+    anything being recomputed: switching the ruler must move the wall onto the tick the axis
+    already calls at-the-money, not leave it standing at a dollar strike.
+    """
+    plane = _plane(app.price_surface_figure(wide, asof, cp="C", x_mode="moneyness"))
+    assert list(plane.x) == pytest.approx([1.0, 1.0])
+
+    k = _plane(app.price_surface_figure(wide, asof, cp="C"))
+    assert list(k.z[0]) == pytest.approx(list(plane.z[0])), "the ruler changed the prices"
+    assert list(k.y) == pytest.approx(list(plane.y)), "the ruler changed the DTE span"
+
+
+def test_the_spot_plane_can_be_hidden_and_takes_nothing_with_it(wide, asof):
+    """FR-12 acceptance: "can be hidden". The switch must remove the plane and only the plane."""
+    from options_surface_lab.option_surface_plot import SPOT_PLANE_NAME
+
+    on = app.price_surface_figure(wide, asof, cp="C")
+    off = app.price_surface_figure(wide, asof, cp="C", show_spot_plane=False)
+
+    assert SPOT_PLANE_NAME not in [t.name for t in off.data], "the plane cannot be hidden"
+    assert [t.name for t in on.data if t.name != SPOT_PLANE_NAME] == [t.name for t in off.data]
+
+
+def test_a_date_with_no_spot_gets_no_plane_rather_than_a_borrowed_one(wide, asof):
+    """AD-9: the plane is the one object here that asserts a fact about the underlying.
+
+    With no close for the date there is no K = S to draw. A plane standing at a neighbouring
+    day's spot would be indistinguishable on screen from a correct one — the reader has no
+    way to check it — so the honest output is no plane at all, exactly as FR-10 draws no K/S
+    ruler on the same date.
+    """
+    from options_surface_lab.option_surface_plot import SPOT_PLANE_NAME
+
+    blind = wide[wide["date"] == pd.Timestamp(asof)].copy()
+    blind["spot"] = float("nan")
+    blind["moneyness"] = float("nan")
+    fig = app.price_surface_figure(blind, asof, cp="C")
+
+    assert SPOT_PLANE_NAME not in [t.name for t in fig.data], "a plane was drawn with no spot"
+    assert len(fig.data) >= 1, "losing the plane must not empty the figure"
+
+
+def _lit_z_range(fig, indices):
+    """[min, max] of z over a set of traces, flattening a surface's 2-D z."""
+    lo, hi = [], []
+    for i in indices:
+        t = fig.data[i]
+        vals = (
+            [v for row in t.z for v in row]
+            if t.type == "surface"
+            else [v for v in t.z if v == v]
+        )
+        if vals:
+            lo.append(min(vals))
+            hi.append(max(vals))
+    return (min(lo), max(hi)) if lo else None
+
+
+def test_the_published_hero_lights_exactly_one_plane_on_every_eligible_date(wide):
+    """AD-5: no backend, so FR-12 rides the same slider everything else does.
+
+    The expectation is DERIVED FROM THE PANEL, not read back off the figure: a date is
+    eligible for a plane when it has a spot and a box for the wall to span. The first version
+    of this test asserted only ``<= 1`` lit plane per step, which a page carrying no planes at
+    all satisfies perfectly — an adversarial review injected seven distinct defects into this
+    figure, including deleting every plane, and the whole suite stayed green (T-46).
+    """
+    from options_surface_lab.option_surface_plot import (
+        OPENING_RIGHT,
+        SPOT_PLANE_NAME,
+        _plane_extents,
+        _slice_wide,
+        asof_frames,
+        static_surface_figure,
+    )
+
+    fig = static_surface_figure(wide, ticker="UUUU")
+    planes = [i for i, t in enumerate(fig.data) if t.name == SPOT_PLANE_NAME]
+    assert planes, "the published hero shipped without FR-12's plane"
+
+    # The caption is HTML now, so the as-of listener applies it from here rather than a
+    # slider step writing an annotation (T-47). Same assertion, one indirection further out.
+    frames = asof_frames(wide)
+
+    eligible = 0
+    for step in fig.layout.sliders[0].steps:
+        sl = _slice_wide(wide, step.label, OPENING_RIGHT)
+        want = bool(len(sl["spot"].dropna()) and _plane_extents(sl))
+        eligible += want
+
+        vis = step.args[0]["visible"]
+        lit = [i for i in planes if vis[i] is True]
+        assert len(lit) == int(want), (
+            f"{step.label}: {len(lit)} planes lit, expected {int(want)}"
+        )
+        assert not [i for i in planes if vis[i] == "legendonly"], (
+            f"{step.label}: the plane opens parked on the legend — a reference nobody "
+            "switches on is a reference nobody sees"
+        )
+        # The caption is an assertion about what is on screen, so it moves with the date.
+        assert ("the plane is spot" in frames[step.label]["hero_caption"]) == want, (
+            f"{step.label}: the caption and the figure disagree about whether a plane is drawn"
+        )
+
+    assert eligible, "no date in the panel can carry a plane — the fixture is wrong"
+
+    # and it has to follow the axis toggle like every other trace (FR-10)
+    in_k, in_ks = (b.args[0]["x"] for b in fig.layout.updatemenus[0].buttons)
+    for i in planes:
+        assert in_ks[i] == pytest.approx([1.0, 1.0]), "a plane that is not at 1.00 in K/S"
+        assert len(set(in_k[i])) == 1 and in_k[i][0] > 0, "a plane with no strike to stand at"
+
+
+def test_the_published_plane_never_stretches_the_axis_of_the_cloud_that_is_lit(wide):
+    """The defect this change shipped, and the reason the app-side test could not see it
+    (T-46).
+
+    Plotly computes a 3D scene's bounds from traces whose ``visible`` is exactly ``True`` and
+    ignores the ones parked on the legend. The published hero opens with puts parked — so
+    when the plane was sized over BOTH rights it became the only lit trace asking for the
+    puts' price range, and it stretched the price axis on 34 of 53 dates, up to 6.8x,
+    flattening the call surface onto the floor of the box.
+
+    The app-side test cannot catch that: there, the plane's extents come from the same slice
+    the test compares them against, so the assertion is true by construction. This one
+    compares the plane against **the other traces the step actually lights**, which is the
+    only comparison plotly itself makes.
+    """
+    from options_surface_lab.option_surface_plot import (
+        SPOT_PLANE_NAME,
+        static_surface_figure,
+    )
+
+    fig = static_surface_figure(wide, ticker="UUUU")
+    planes = {i for i, t in enumerate(fig.data) if t.name == SPOT_PLANE_NAME}
+    checked = 0
+
+    for step in fig.layout.sliders[0].steps:
+        vis = step.args[0]["visible"]
+        lit = [i for i, v in enumerate(vis) if v is True]
+        wall = [i for i in lit if i in planes]
+        cloud = [i for i in lit if i not in planes]
+        if not wall or not cloud:
+            continue
+        plane_lo, plane_hi = _lit_z_range(fig, wall)
+        cloud_lo, cloud_hi = _lit_z_range(fig, cloud)
+        assert plane_hi <= cloud_hi + 1e-9 and plane_lo >= cloud_lo - 1e-9, (
+            f"{step.label}: the plane spans [{plane_lo:.3f}, {plane_hi:.3f}] while the lit "
+            f"cloud spans [{cloud_lo:.3f}, {cloud_hi:.3f}] — plotly will autorange the price "
+            "axis to the plane and squash the data it was drawn to annotate"
+        )
+        checked += 1
+
+    assert checked > 40, f"only {checked} steps carried both a plane and a cloud"
+
+
+def test_a_date_with_nothing_to_span_gets_no_plane_at_all(wide):
+    """AD-9. A wall needs a box, and the last week of a weeklies panel does not have one.
+
+    On the final dates a single expiry is alive, so the DTE span collapses to a point and the
+    surface's four corners are collinear — a zero-area mesh that draws **nothing** while its
+    legend entry stays lit, which is the figure claiming an object it is not showing.
+    """
+    from options_surface_lab.option_surface_plot import (
+        SPOT_PLANE_NAME,
+        _plane_extents,
+        figure_caption,
+        price_surface_figure,
+    )
+
+    flat = wide[wide["date"] == wide["date"].max()].copy()
+    flat["dte"] = 3.0  # one expiry alive: exactly what the real panel's last five days are
+    assert _plane_extents(flat) is None, "a zero-height box is not a plane"
+
+    fig = price_surface_figure(flat, flat["date"].max(), cp="C")
+    assert SPOT_PLANE_NAME not in [t.name for t in fig.data], (
+        "a plane with no DTE to span still claimed a legend entry"
+    )
+    assert "the plane is spot" not in " ".join(figure_caption(fig)), (
+        "the caption names a plane the figure did not draw"
+    )
+
+
+def test_the_caption_only_claims_a_plane_when_one_is_drawn(wide, asof):
+    """A caption is an assertion about what is on screen (T-44's lesson, one size smaller)."""
+    from options_surface_lab.option_surface_plot import figure_caption
+
+    on = app.price_surface_figure(wide, asof, cp="C")
+    off = app.price_surface_figure(wide, asof, cp="C", show_spot_plane=False)
+    assert "the plane is spot" in " ".join(figure_caption(on))
+    assert "the plane is spot" not in " ".join(figure_caption(off)), (
+        "the switch turned the plane off and the caption went on naming it"
+    )

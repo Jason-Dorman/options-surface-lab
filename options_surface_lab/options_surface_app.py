@@ -43,6 +43,7 @@ from options_surface_lab.option_surface_plot import (
     as_panel_figure,
     candlestick_figure,
     coverage_heatmap,
+    figure_caption,
     iv_smile_figure,
     price_surface_figure,
     settle_vs_trade_figure,
@@ -373,6 +374,14 @@ class State(rx.State):
     show_trade: bool = True
     show_mark: bool = True
     show_sheet: bool = True
+    show_spot_plane: bool = True   # FR-12: the K = S wall
+
+    # Panel captions, by panel number (index 0 unused). The page cannot read them off the
+    # figures the way `build_preview.py` does: inside a Reflex component a figure is a State
+    # *reference*, not the object, so `figure_caption(State.fig_iv)` has nothing to read.
+    # They are lifted here whenever the figures are rebuilt, from the same accessor the
+    # published page uses, so the two renderings still cannot disagree (T-47).
+    captions: list[list[str]] = [[] for _ in range(8)]
 
     fig_stock: go.Figure = go.Figure()
     fig_surface: go.Figure = go.Figure()
@@ -481,6 +490,11 @@ class State(rx.State):
         self.show_sheet = value
         self._rebuild_option_figs()
 
+    def toggle_spot_plane(self, value: bool):
+        """FR-12. The published page does this on the legend; here it is a switch."""
+        self.show_spot_plane = value
+        self._rebuild_option_figs()
+
     def _rebuild_option_figs(self):
         wide = self._wide
         if wide is None or wide.empty or not self.asof:
@@ -499,6 +513,7 @@ class State(rx.State):
             self.fig_iv = go.Figure().update_layout(
                 **T.figure_layout(height=T.PANEL_FIGURE_HEIGHT)
             )
+            self._lift_captions()
             return
 
         asof = self.asof
@@ -533,6 +548,7 @@ class State(rx.State):
             show_trade=self.show_trade,
             show_mark=self.show_mark,
             show_interpolated=self.show_sheet,
+            show_spot_plane=self.show_spot_plane,
             ticker=self.ticker,
             x_mode=self.x_mode,
         )
@@ -552,6 +568,23 @@ class State(rx.State):
             iv_smile_figure(wide, asof, ticker=self.ticker, x_mode=self.x_mode),
             margin=T.SMILE_MARGIN,
         )
+        self._lift_captions()
+
+    def _lift_captions(self):
+        """Panel captions, in panel order, from the figures themselves (T-47)."""
+        self.captions = [
+            figure_caption(f) if f is not None else []
+            for f in (
+                None,               # index 0: panels are 1-based
+                self.fig_surface,   # [1] price surface
+                self.fig_stock,     # [2] underlying
+                self.fig_iv,        # [3] implied vol
+                self.fig_compare,   # [4] mark vs print
+                self.fig_spread,    # [5] spread
+                self.fig_heat_mark,  # [6] mark occupancy
+                self.fig_heat_trade,  # [7] print occupancy
+            )
+        ]
 
 
 # Panel figure heights, in CSS units. Derived from the theme so the dev app and the
@@ -585,48 +618,62 @@ def _readout(label: str, value) -> rx.Component:
 
 
 def _panel(
-    n: int, name: str, note: str, fig, height: str, width: int = T.W_HALF
+    n: int, name: str, note: str, fig, height: str, width: int = T.W_HALF,
+    hero: bool = False,
 ) -> rx.Component:
-    """A numbered panel: header rule carrying `[n] NAME`, then the figure.
+    """A numbered panel: header rule carrying `[n] NAME`, the caption, then the figure.
 
-    `width` is in grid columns out of `theme.GRID_COLUMNS`. Mirrors `build_preview._panel`
-    deliberately -- the checkpoint demo and the published page are the same product, so they
-    wear the same chrome (DESIGN-BRIEF section 5).
+    Mirrors `build_preview._panel` deliberately -- the checkpoint demo and the published page
+    are the same product, so they wear the same chrome (DESIGN-BRIEF section 5). Since T-47
+    they also share the same STYLESHEET: `theme.PAGE_CSS` is injected into this page and the
+    panels carry `osl-*` class names rather than inline styles, so a responsive rule cannot
+    be right in one rendering and missing in the other. That split is exactly how the
+    published page once shipped with the hero one column wide while `reflex run` looked
+    perfect (DESIGN-BRIEF section 5, the deploy-only defect).
+
+    The caption is HTML here too, read from the figure itself, so it wraps instead of
+    colliding with the figure's own chrome.
     """
     return rx.box(
-        rx.hstack(
-            rx.text(
-                f"[{n}]",
-                color=T.ACCENT,
-                font_family=T.FONT_MONO,
-                size="1",
-                weight="bold",
+        # Plain elements carrying the shared classes, mirroring `build_preview._panel` node
+        # for node. Radix components with inline styles looked identical at one width and
+        # missed every responsive rule the stylesheet added -- including the one that stops a
+        # header wrapping and leaving its row ragged.
+        rx.el.div(
+            rx.el.div(
+                rx.el.span(f"[{n}]", class_name="osl-panel-n"),
+                rx.el.span(name, class_name="osl-panel-name"),
             ),
-            rx.text(
-                name,
-                color=T.TEXT,
-                font_family=T.FONT_DISPLAY,
-                size="1",
-                style={"letter_spacing": "1.4px", "text_transform": "uppercase"},
-            ),
-            rx.spacer(),
-            rx.text(note, color=T.TEXT_MUTED, font_family=T.FONT_MONO, size="1"),
-            spacing="2",
-            align="baseline",
-            **T.PANEL_HEADER_STYLE,
+            rx.el.div(note, class_name="osl-panel-note"),
+            class_name="osl-panel-head",
         ),
         rx.box(
-            rx.plotly(data=fig, style={"width": "100%", "height": height}),
-            padding=T.PANEL_PAD,
+            rx.foreach(
+                State.captions[n],
+                lambda line: rx.el.span(line, class_name="osl-caption-line"),
+            ),
+            class_name="osl-caption",
         ),
-        style={"grid_column": f"span {width}"},
-        min_width="0",
-        **T.PANEL_STYLE,
+        rx.box(
+            rx.box(
+                rx.plotly(data=fig, style={"width": "100%", "height": height}),
+                class_name="osl-figure-hero" if hero else "osl-figure",
+            ),
+            class_name="osl-panel-body",
+        ),
+        class_name=f"osl-panel osl-w{width}" + (" osl-hero" if hero else ""),
     )
 
 
 def index() -> rx.Component:
     return rx.box(
+        # ONE stylesheet for both renderings (T-47). The panel grid, its three responsive
+        # bands, the caption and the figure width floor all live in `theme.PAGE_CSS`; this
+        # page and `build_preview.py` render the same class names against it. Before this,
+        # the Reflex app styled panels with inline `grid-column` and had no breakpoints at
+        # all, so it stayed a 10-column grid at every width while the published page
+        # collapsed -- two products wearing one design.
+        rx.html(f"<style>{T.PAGE_CSS}</style>"),
         # ---- command bar -------------------------------------------------------------
         rx.hstack(
             rx.heading(
@@ -718,6 +765,9 @@ def index() -> rx.Component:
             rx.text("TRDPRC_1", color=T.TRADE, size="1"),
             rx.switch(checked=State.show_sheet, on_change=State.toggle_sheet),
             rx.text("Interpolated sheet", color=T.TEXT_MUTED, size="1"),
+            # FR-12. Muted like the sheet, and for the same reason: neither is data.
+            rx.switch(checked=State.show_spot_plane, on_change=State.toggle_spot_plane),
+            rx.text("Spot plane (K = S)", color=T.TEXT_MUTED, size="1"),
             spacing="3",
             align="center",
             wrap="wrap",
@@ -728,14 +778,14 @@ def index() -> rx.Component:
             margin_bottom="10px",
         ),
         # ---- the panel grid ----------------------------------------------------------
-        rx.grid(
+        rx.box(
             # Row 1: the surface, with the underlying beside it. Spot is what makes "near
             # the money" mean anything, and the dense part of the cloud is exactly that
             # band -- so the two belong side by side. Equal heights keep the row square.
             _panel(
                 1, "Price surface - 3D",
                 "drag to rotate - legend toggles series",
-                State.fig_surface, HERO_H, width=T.W_HERO,
+                State.fig_surface, HERO_H, width=T.W_HERO, hero=True,
             ),
             _panel(2, "Underlying", "spot context - close = TRDPRC_1",
                    State.fig_stock, HERO_H, width=T.W_SIDECAR),
@@ -756,8 +806,7 @@ def index() -> rx.Component:
                    State.fig_heat_mark, TILE_H),
             _panel(7, "Print occupancy", "lit = someone traded",
                    State.fig_heat_trade, TILE_H),
-            columns=str(T.GRID_COLUMNS),
-            spacing="3",
+            class_name="osl-grid",
             width="100%",
         ),
         on_mount=State.load_data,

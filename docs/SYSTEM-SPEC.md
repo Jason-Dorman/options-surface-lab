@@ -321,29 +321,39 @@ classDiagram
         +str data_note
         +int option_count
         +int n_quotes
-        +int n_settle_only
+        +int n_mark_only
         +int n_both
-        +str pct_settle_no_trade
+        +str pct_mark_no_trade
+        +str mark_no_print
         +str median_gap
+        +str median_spread
+        +bool is_loading
         +str asof
         +list~str~ asof_options
         +str cp
+        +str x_mode
+        +str x_mode_label
         +bool show_trade
-        +bool show_settle
+        +bool show_mark
         +bool show_sheet
+        +bool show_spot_plane
         +Figure fig_stock
         +Figure fig_surface
         +Figure fig_compare
-        +Figure fig_heat_settle
+        +Figure fig_heat_mark
+        +Figure fig_spread
         +Figure fig_heat_trade
+        +Figure fig_iv
         -DataFrame _wide
         -DataFrame _stock
         +load_data()
         +set_asof(value)
         +set_cp(value)
+        +set_x_mode(value)
         +toggle_trade(value)
-        +toggle_settle(value)
+        +toggle_mark(value)
         +toggle_sheet(value)
+        +toggle_spot_plane(value)
         -_rebuild_option_figs()
     }
 ```
@@ -390,12 +400,18 @@ sequenceDiagram
 
 The exported site cannot run the sequence above past "open page". Design response:
 
-1. **Import-time baking.** At module import, the pickle is loaded, the pipeline runs, and
-   the default figures/metrics are computed and assigned as `State` **defaults**. `reflex
-   export` serializes those defaults into the static build, so the published page is fully
-   populated with real data before (and without) any backend. `on_mount` load becomes
-   idempotent local-dev refresh.
-2. **Client-side controls.** Series visibility (SETTLE / TRDPRC_1 / sheet / spot plane) is
+1. ~~**Import-time baking** into `State` defaults, serialized by `reflex export`.~~
+   **Superseded 2026-09-01 (T-41/T-14, AD-4).** `reflex export` is not used at all: the
+   published artifact is one self-contained `index.html` that `build_preview.py` renders from
+   the committed pickle at *build* time, with no Reflex runtime and therefore no `State` to
+   bake. Everything below still holds — it was always about what survives without a backend.
+1b. **Captions are HTML, not annotations** (T-47). Every builder attaches its caption
+   lines with `with_caption`; both pages read them back with `figure_caption` and render them
+   under the panel header, where text wraps. Nothing is drawn in the band above a plot, so
+   nothing there can collide with a legend that grows as the figure narrows. The as-of
+   listener rewrites the per-date lines (`osl-cap-{n}`, `data-osl-cap-line`) the same way it
+   rewrites the readouts, since a Plotly slider step cannot reach an HTML element.
+2. **Client-side controls.** Series visibility (MARK / TRDPRC_1 / sheet / spot plane) is
    handled by Plotly **legend toggling** inside each figure. As-of date is a **slider** over
    every trading day (T-15; the curated date list is the trim lever, not the default) and C/P
    rides the legend, because two visibility menus would overwrite one another. FR-10's K vs
@@ -410,8 +426,9 @@ The exported site cannot run the sequence above past "open page". Design respons
    inline listener applies them to the scatter, the spread grid, both occupancy grids and the
    readout strip on `plotly_sliderchange`. The underlying candlestick is the deliberate
    exception — it is 12 weeks of context, not an as-of cut. The listener addresses panels by
-   the stable ids `osl-fig-1..6` and restyles `settle_vs_trade_figure` **by trace index**, so
-   that figure emits `[Calls, Puts, y = x, bars]` on every date, empty traces included.
+   the stable ids `osl-fig-1..7` and restyles `settle_vs_trade_figure` **by trace index**, so
+   that figure emits `[Calls, Puts, y = x, bars]` on every date, empty traces included. The IV
+   smile (panel [3]) is restyled the same way, one trace per panel-wide expiry (T-17/T-43).
 
 ## 9. Figure inventory
 
@@ -581,9 +598,34 @@ assertions on hand-built panels. See PRD OQ-6.
   Tests: BS-price a known (σ, K, T), invert, recover σ; the pricer against Hull's published
   worked example; put-call parity on the forward direction; every refusal path individually;
   and that the plotted point count equals the number of strikes that inverted.
-- **FR-12 spot plane (in `plot`):** constant-x `go.Surface` at `x = spot(asof)` spanning the
-  slice's DTE and price ranges, low opacity, its own legend entry so it toggles like the
-  sheet.
+- **FR-12 spot plane (in `plot`)** — **shipped 2026-09-04 (T-18, corrected by T-46).**
+  `_spot_plane_trace`: a constant-x `go.Surface` at `x = spot(asof)` spanning the DTE and
+  price ranges of **the rows that are actually drawn**, `SPOT_PLANE_OPACITY`, a flat colour
+  scale with no colorbar, `hoverinfo="skip"`, and its own legend entry so it toggles like the
+  sheet. The Reflex app adds a `show_spot_plane` switch; the published page has only the
+  legend.
+
+  * **Size it over what is LIT, not over what exists.** Plotly computes a 3D scene's bounds
+    from traces whose `visible` is exactly `True` and ignores ones parked on the legend. The
+    published hero opens with puts parked, so a plane sized over both rights became the only
+    lit trace asking for the puts' price range — it stretched the price axis on 34 of 53
+    dates, up to 6.8x, and flattened the call surface onto the floor of the box. It is now
+    sized over `OPENING_RIGHT`, the same constant `_vis_for` uses to decide what opens lit,
+    so the two cannot drift apart. The invariant is *never widens*, not *always spans*.
+  * **A degenerate box draws no plane.** `_plane_extents` returns `None` when the DTE or the
+    price span collapses to a point: the last five days of a weeklies window have a single
+    expiry alive, which makes the surface's four corners collinear — a zero-area mesh that
+    renders **nothing** while its legend entry stays lit (AD-9).
+
+  * **Per date, not per right.** Spot is a property of the as-of date, so one plane serves
+    both rights. On the published page `static_surface_figure` emits one plane per date and
+    the slider's visibility array lights exactly one — the mechanism already there, rather
+    than a second control that would have to read the slider's state (AD-5).
+  * **`_plane_x(spot, x_mode)` is the whole of FR-10's involvement.** `K = S` is the spot in
+    dollars and exactly 1.00 in moneyness, so the axis menu's payload carries one number per
+    ruler for the plane and nothing has to be recomputed.
+  * **No spot → no plane**, exactly as no spot → no K/S ruler. A plane borrowed from a
+    neighbouring session is indistinguishable on screen from a correct one (AD-9).
 
 ## 13. Error handling and edge cases
 

@@ -275,7 +275,8 @@ def test_the_published_page_carries_the_derived_iv_panel():
     assert "SMILES" in listener, "nothing restyles the smile when the slider moves"
     assert "osl-fig-3" in listener, "the listener never reaches the IV panel"
     assert "showlegend" in listener, "the legend must follow the date, not the build"
-    assert "annotations[" in listener, "the caption must follow the date (T-44)"
+    assert "setCaptionLine" in listener, "the caption must follow the date (T-44, T-47)"
+    assert 'id="osl-cap-3"' in html, "the IV panel's caption must be addressable HTML"
 
     payload = re.search(
         r'<script id="osl-frames" type="application/json">(.*?)</script>', html, re.S
@@ -323,3 +324,34 @@ def test_the_ci_guard_greps_phrases_the_iv_caption_actually_emits():
         assert phrase in workflow, (
             f"{phrase!r} is asserted of the page but the CI guard does not check it"
         )
+
+
+def test_the_published_page_carries_the_spot_plane():
+    """FR-12 on the deliverable (T-18).
+
+    Checked on the built artifact for the reason every other page test is: the Reflex app and
+    the published page are two renderings of one design, only one of them is graded, and this
+    project's worst defects have all been deploy-only.
+
+    Both strings are plain ASCII on purpose. The trace name deliberately drops the "·" the
+    other series carry, because plotly's encoder escapes it into a backslash-u sequence and
+    a guard spanning one silently never matches the page it guards (T-45, and FR-10's
+    "K / S" before it).
+    """
+    from options_surface_lab.option_surface_plot import SPOT_PLANE_NAME
+
+    page = Path(__file__).resolve().parents[1] / "options_surface_preview.html"
+    if not page.exists():
+        pytest.skip("preview not built in this working tree")
+    html = page.read_text(encoding="utf-8", errors="ignore")
+
+    assert SPOT_PLANE_NAME.isascii(), (
+        f"{SPOT_PLANE_NAME!r} carries a character plotly's encoder will escape, so neither "
+        "this test nor a CI grep can find it in the built page"
+    )
+    assert SPOT_PLANE_NAME in html, "the published hero shipped without FR-12's plane"
+    # the legend is how it is hidden on a page with no backend, so it has to be named there
+    assert html.count(SPOT_PLANE_NAME) > 1, "one plane per date, each with a legend entry"
+    assert "the plane is spot (K = S)" in html, (
+        "nothing on the page says what the wall through the cloud is"
+    )

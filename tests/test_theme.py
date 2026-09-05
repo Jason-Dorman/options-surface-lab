@@ -17,6 +17,7 @@ import pytest
 from options_surface_lab import theme as T
 from options_surface_lab.option_surface_plot import (
     SERIES_STYLE,
+    SPOT_PLANE_NAME,
     coverage_heatmap,
     price_surface_figure,
     settle_vs_trade_figure,
@@ -176,52 +177,126 @@ def test_the_chrome_colour_is_never_a_data_colour():
 
 
 def test_the_interpolated_sheet_stays_subordinate(wide, asof):
-    """AD-9 / FR-8: the sheet is an assumption and must never read as data."""
+    """AD-9 / FR-8: the sheet is an assumption and must never read as data.
+
+    Selected by name rather than by trace type: FR-12's spot plane is a `go.Surface` too, and
+    "every surface on this figure is the sheet" stopped being true the day it landed.
+    """
     assert T.SHEET_OPACITY < 0.5
     fig = price_surface_figure(wide, asof, cp="C", show_interpolated=True)
-    sheets = [t for t in fig.data if t.type == "surface"]
+    sheets = [t for t in fig.data if t.type == "surface" and t.name != SPOT_PLANE_NAME]
     if sheets:  # a date too thin to triangulate contributes none — that is allowed
         assert all(s.opacity < 0.5 for s in sheets)
         assert all("nterpolat" in (s.name or "") for s in sheets), "the sheet must say so"
 
 
+def test_the_spot_plane_is_neither_a_series_nor_the_chrome(wide, asof):
+    """FR-12: "obviously not data". The plane is a ruler standing in the scene.
+
+    Two ways it could stop reading that way, both one careless token apart: wearing a series
+    hue (a reader would look for the points that belong to it) or wearing the amber that every
+    heading on the page is set in (it would read as chrome bolted onto the chart). It also has
+    to sit *behind* the argument — fainter than the interpolated sheet, because the sheet lies
+    over the cloud in one layer while the plane stands side-on through the middle of it.
+    """
+    assert T.SPOT_PLANE not in {T.MARK, T.MARK_PUT, T.TRADE, T.TRADE_PUT, T.NEUTRAL}, (
+        "the spot plane is wearing a data series' colour"
+    )
+    assert T.SPOT_PLANE != T.ACCENT, "the spot plane is wearing the heading colour"
+    assert T.SPOT_PLANE_OPACITY <= T.SHEET_OPACITY, (
+        "the plane cuts through the whole cloud — at the sheet's opacity it fogs every "
+        "point behind it"
+    )
+
+    plane = next(t for t in price_surface_figure(wide, asof, cp="C").data
+                 if t.name == SPOT_PLANE_NAME)
+    # On the TRACE, not only on the tokens. A mutation test found that an opaque plane passed
+    # every assertion here, because the opacity check above compares two theme constants and
+    # nothing tied them to what the figure actually renders (T-46).
+    assert plane.opacity == T.SPOT_PLANE_OPACITY < T.SHEET_OPACITY, (
+        f"the rendered plane is at opacity {plane.opacity}, not the token's "
+        f"{T.SPOT_PLANE_OPACITY}"
+    )
+    assert plane.showscale is False, "a colorbar would claim the plane measures something"
+    assert plane.hoverinfo == "skip", "a wall through the cloud must not steal a point's hover"
+    assert {c[1] for c in plane.colorscale} == {T.SPOT_PLANE}, (
+        "the plane's colour ramps, so it looks like it encodes a magnitude"
+    )
+
+
 # ------------------------------------------------------------------- the terminal grid
 
 
-def test_a_caption_never_shares_the_band_with_a_top_legend(wide, asof):
-    """A horizontal legend at y=1.0 is about 0.05 of the plot area tall.
+# Trace types whose `showlegend` defaults to False, so an unset attribute means "no entry".
+# Everything else defaults to True. Plotly's own rule; spelled out because the hero mixes
+# scatter3d (entry by default) with surface (no entry unless asked), and the difference is
+# what makes the legend seven deep rather than nine.
+_NO_LEGEND_BY_DEFAULT = {"surface"}
 
-    A caption placed at 1.02 or 1.045 therefore lands *inside* it and the two print over each
-    other — which is what the hero surface shipped with: the "drag the slider..." line ran
-    straight through the legend swatches. Captions on a figure with a top legend must clear
-    it, and the clearance lives in one token so both surfaces move together.
+
+def _legend_entries(fig) -> int:
+    """How many rows the legend will actually draw for the figure's OPENING state.
+
+    Counts the traces a reader sees listed: the ones that are visible or parked on the legend
+    (a `visible=False` trace has no entry), whose `showlegend` is on — explicitly, or by the
+    trace type's default.
     """
-    assert T.CAPTION_Y_OVER_LEGEND - T.LEGEND_Y >= 0.08, (
-        "the clearance is smaller than a legend row is tall"
-    )
+    n = 0
+    for t in fig.data:
+        if t.visible is False:
+            continue
+        show = t.showlegend
+        if show is None:
+            show = t.type not in _NO_LEGEND_BY_DEFAULT
+        if show:
+            n += 1
+    return n
+
+
+def test_nothing_lives_in_the_band_above_a_plot_any_more(wide, asof):
+    """A horizontal legend grows UPWARD as a figure narrows, and it grows into the band the
+    caption used to sit in.
+
+    That arrangement produced the same defect five times on this project at five different
+    widths — caption through legend, caption clipped off the canvas, caption off the edge of a
+    tile, caption over a legend that had wrapped to two rows, caption escaping the figure
+    below 1440px. Policing it needed arithmetic over token positions, legend row counts and
+    text-box heights, and the arithmetic was wrong twice.
+
+    Captions are HTML now (T-47), so the rule is simply that the band is EMPTY. There is
+    nothing left to collide with a legend, at any width, and no sum to get wrong.
+    """
+    from options_surface_lab.option_surface_plot import figure_caption
 
     for name, fig in (
         ("static hero", static_surface_figure(wide, ticker="UUUU")),
         ("app hero", price_surface_figure(wide, asof, cp="C", ticker="UUUU")),
     ):
-        legend = fig.layout.legend
-        if legend.y is None or legend.y < 1:
-            continue  # no top legend, nothing to clear
-        captions = [a for a in fig.layout.annotations if a.yref == "paper"]
-        assert captions, f"{name}: expected a how-to-read caption"
-        for ann in captions:
-            assert ann.y >= T.CAPTION_Y_OVER_LEGEND, (
-                f"{name}: caption at y={ann.y} sits in the legend's band (y={legend.y})"
-            )
+        assert not fig.layout.annotations, (
+            f"{name}: {len(fig.layout.annotations)} annotation(s) drawn inside the figure — "
+            "a wrapping legend grows into that band, which is the arrangement this replaced"
+        )
+        assert figure_caption(fig), f"{name}: lost its how-to-read caption entirely"
 
 
 def test_the_top_margin_has_room_for_the_whole_stack():
-    """Title, caption and legend all live in the top margin; too little and they collide."""
-    for name, margin in (
-        ("hero", T.HERO_MARGIN),
-        ("hero with slider", T.HERO_MARGIN_WITH_SLIDER),
+    """Title and legend live in the top margin; too little and they collide.
+
+    Two tenants now, not three — the caption left this band in T-47.
+    """
+    title_band = T.SIZE_TITLE * 1.75          # a display-face line plus its leading
+    for name, margin, rows in (
+        # The dev hero shows one right at a time, so its legend is a single row. The
+        # published one carries seven entries and wraps to three at FIGURE_MIN_WIDTH — the
+        # narrowest it is ever rendered, since the panel scrolls rather than squeezing it.
+        ("hero", T.HERO_MARGIN, 1),
+        ("hero with slider", T.HERO_MARGIN_WITH_SLIDER, 3),
     ):
-        assert margin["t"] >= 100, f"{name}: {margin['t']}px cannot hold title + caption + legend"
+        needed = title_band + rows * (T.SIZE_LEGEND * 2.0)
+        assert margin["t"] >= needed, (
+            f"{name}: {margin['t']}px cannot hold a title and a {rows}-row legend "
+            f"({needed:.0f}px)"
+        )
     assert T.HERO_MARGIN_WITH_SLIDER["b"] >= 80, "the as-of slider needs its own bottom room"
 
 
@@ -273,8 +348,11 @@ def test_a_tiled_figure_gives_its_title_to_the_panel_header(wide, asof):
     fig = as_panel_figure(coverage_heatmap(wide, asof, cp="C", field="MARK"))
     assert fig.layout.title.text is None
     assert fig.layout.height == T.PANEL_FIGURE_HEIGHT
-    # the caption survives — it explains how to read the figure, it is not a label
-    assert fig.layout.annotations, "the how-to-read caption must not be stripped with the title"
+    # The caption survives the panelising — it explains how to read the figure, it is not a
+    # label. It lives in `layout.meta` now and the panel renders it as HTML (T-47).
+    from options_surface_lab.option_surface_plot import figure_caption
+
+    assert figure_caption(fig), "the how-to-read caption must not be lost with the title"
 
 
 # --------------------------------------------- legibility of the four data series
@@ -436,8 +514,9 @@ def test_the_axis_menu_sits_inside_the_plot_not_in_the_crowded_band_above(wide):
     fig = static_surface_figure(wide, ticker="UUUU")
     menu = fig.layout.updatemenus[0]
     assert menu.y < fig.layout.legend.y, "the menu is back on top of the legend"
-    for ann in [a for a in fig.layout.annotations if a.yref == "paper"]:
-        assert ann.y > menu.y, f"caption at y={ann.y} has dropped onto the menu at {menu.y}"
+    assert not fig.layout.annotations, (
+        "the figure draws text again — captions belong in the panel's HTML (T-47)"
+    )
 
 
 @pytest.mark.parametrize("label,fg,bg", CONTRAST_PAIRS, ids=[p[0] for p in CONTRAST_PAIRS])

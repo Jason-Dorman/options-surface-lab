@@ -80,6 +80,34 @@ def _sheet_x(grid: dict, x_mode: str, spot: float | None):
     return grid["x"] / spot
 
 
+def with_caption(fig: go.Figure, *lines: str) -> go.Figure:
+    """Attach a figure's "how to read this" line(s) — as DATA, not as a drawn annotation.
+
+    The caption is rendered by whichever page holds the figure, in that page's own HTML, and
+    both renderings read it from here so they cannot drift (T-47). It travels in
+    `layout.meta`, which survives `to_html`/JSON, so the published page finds it in the same
+    place the Reflex app does.
+
+    **Why it is not an annotation any more.** A Plotly annotation is one unwrappable line
+    pinned to a fraction of a box whose pixel width changes with the viewport, sharing the
+    band above the plot with a legend that grows as the figure narrows. That arrangement has
+    produced the same defect at five different widths on this project — caption through
+    legend, caption clipped off the canvas, caption off the right edge of a tile, caption over
+    a wrapped legend, caption escaping the figure below 1440px. HTML text wraps; SVG text
+    does not.
+
+    Callers pass one line per caption row; `figure_caption` reads them back.
+    """
+    fig.layout.meta = dict(fig.layout.meta or {}, caption=[ln for ln in lines if ln])
+    return fig
+
+
+def figure_caption(fig: go.Figure) -> list:
+    """The caption lines a page must render under this figure's header. Never None."""
+    meta = fig.layout.meta or {}
+    return list(meta.get("caption") or [])
+
+
 def _empty_figure(message: str, height: int | None = None) -> go.Figure:
     """A themed 'nothing to draw' panel. Never raise at a hole (AD-9, SYSTEM-SPEC §11).
 
@@ -118,12 +146,11 @@ def candlestick_figure(df_stock: pd.DataFrame, ticker: str) -> go.Figure:
             yaxis=T.axis("Price ($)"),
             margin=dict(l=48, r=24, t=56, b=40),
             height=420,
-            annotations=[
-                T.caption("Close field is TRDPRC_1 (last trade) — not an option settle")
-            ],
         )
     )
-    return fig
+    return with_caption(
+        fig, "Close field is TRDPRC_1 (last trade) — not an option settle"
+    )
 
 
 def as_panel_figure(
@@ -225,6 +252,120 @@ def _sheet_trace(
     )
 
 
+# The right the published hero opens on. `_vis_for` parks the other one on the legend, and
+# FR-12's plane is sized over THIS right's cloud — the two must agree, because plotly's 3D
+# bounds ignore a `legendonly` trace, so a plane sized over the parked right sets the price
+# axis for a cloud nobody can see. Shipping them apart cost 34 of 53 dates a stretched axis
+# (T-46); naming the coupling is what stops it drifting again.
+OPENING_RIGHT = "C"
+PARKED_RIGHT = "P"
+
+# The plane's slot in a date's trace index. Deliberately neither right: one wall serves both.
+PLANE_KEY = ("plane", "spot")
+
+# FR-12's plane, named once so the legend, the tests and the page all mean the same object.
+# Plain ASCII, and no "·" separator like the other trace names carry: plotly's JSON encoder
+# escapes that character into a backslash-u sequence, so a name spanning one cannot be
+# grepped out of the built page by a test or by the CI publish guard. Same escape that
+# bit FR-10's "K / S" (T-45).
+SPOT_PLANE_NAME = "Spot  K = S"
+
+# Both heroes carry the same line, so it lives in one place: the dev app and the published
+# page are two renderings of one figure and a caption that drifted between them would mean
+# the graded artifact says something the demo does not. Each clause names an object a reader
+# would otherwise take for data — the sheet is an assumption, the plane is a ruler (AD-9).
+# Everything else the panel header already says.
+#
+# The plane clause is CONDITIONAL, because the caption is an assertion about what is on
+# screen: the dev app's switch can turn the plane off, and a date with no spot (or a single
+# expiry alive) never draws one. A caption naming an object that is not there is the same
+# defect as a count frozen on the build date, just smaller.
+HERO_CAPTION = "The translucent sheet is interpolated — not a market"
+HERO_CAPTION_PLANE = "  ·  the plane is spot (K = S)"
+
+
+def _hero_caption(has_plane: bool) -> str:
+    return HERO_CAPTION + (HERO_CAPTION_PLANE if has_plane else "")
+
+
+def _plane_x(spot: float | None, x_mode: str) -> list | None:
+    """The plane's two X coordinates under FR-10's rulers — or ``None`` when there is no spot.
+
+    `K = S` is the spot itself on a dollar axis and exactly 1.00 on a moneyness one, which is
+    why the plane costs FR-10 nothing: the ruler moves, the plane moves with it, and in K/S it
+    lands on the number the axis already calls the money.
+
+    A date with no underlying close has no `K = S` to draw. Borrowing a neighbouring day's
+    spot would make the plane the one object on the figure asserting something the panel does
+    not know — no spot, no plane (AD-9).
+    """
+    if not spot or spot != spot:  # None, 0.0 or NaN
+        return None
+    return [1.0, 1.0] if x_mode == "moneyness" else [float(spot), float(spot)]
+
+
+def _plane_extents(frame: pd.DataFrame):
+    """The (DTE, price) box the plane spans — exactly this frame's own, never wider.
+
+    Sizing the wall to the data rather than to a round number keeps it from moving an axis: a
+    plane dropped to z = 0 on a panel whose cheapest quote is $0.20 would stretch the price
+    range to make room for a decoration, and every point would shuffle up to accommodate it.
+
+    **Pass only the rows that are actually DRAWN.** Plotly computes a 3D scene's bounds from
+    traces whose ``visible`` is exactly ``True`` and ignores ones parked on the legend — so a
+    plane sized over a cloud the reader cannot see is a decoration silently setting the axis
+    for the cloud they can. That shipped: the published hero sized its plane over both rights
+    while opening with puts ``legendonly``, and the deep-ITM puts stretched the price axis on
+    34 of 53 dates, up to 6.8x, flattening the call surface onto the floor of the box (T-46).
+
+    A degenerate box returns ``None``. Two of these are real dates in this panel, not
+    hypotheticals: the last five days of a weeklies window have a single expiry alive, so the
+    DTE span collapses and the four corners become collinear — a zero-area surface that draws
+    **nothing** while its legend entry stays lit, which is a claim the figure does not honour.
+    A wall with nothing to span is no wall (AD-9).
+    """
+    if frame is None or frame.empty:
+        return None
+    y = frame["dte"].dropna()
+    z = pd.concat([frame["MARK"], frame["TRDPRC_1"]]).dropna()
+    if y.empty or z.empty:
+        return None
+    y0, y1, z0, z1 = float(y.min()), float(y.max()), float(z.min()), float(z.max())
+    if y0 == y1 or z0 == z1:
+        return None
+    return (y0, y1), (z0, z1)
+
+
+def _spot_plane_trace(spot: float, extents, x_mode: str = "strike", **overrides) -> go.Surface:
+    """A translucent wall at `K = S` (FR-12, SPEC §12).
+
+    A ``go.Surface`` whose X is one repeated number: its four corners are (S, dte_lo/hi,
+    price_lo/hi), so the sheet degenerates into a vertical rectangle standing in the strike
+    axis. Two columns of a surface is all a plane is.
+
+    It is chrome for the data, not data: a flat colour scale with no colorbar, because the
+    plane carries no magnitude — it is a position — and ``hoverinfo="skip"`` so a wall drawn
+    through the middle of the cloud never intercepts a point's hover. Its own legend entry
+    makes it toggleable exactly like the sheet, which is FR-12's other half.
+    """
+    (y0, y1), (z0, z1) = extents
+    return go.Surface(
+        x=_plane_x(spot, x_mode),
+        y=[y0, y1],
+        # z[i][j] is the height at (x[j], y[i]) — so varying z along j and holding x constant
+        # sweeps the rectangle upright rather than laying it flat.
+        z=[[z0, z1], [z0, z1]],
+        name=SPOT_PLANE_NAME,
+        colorscale=T.SPOT_PLANE_SCALE,
+        opacity=T.SPOT_PLANE_OPACITY,
+        showscale=False,
+        showlegend=True,
+        hoverinfo="skip",
+        contours=dict(x=dict(show=False), y=dict(show=False), z=dict(show=False)),
+        **overrides,
+    )
+
+
 def _surface_scene(x_mode: str = "strike") -> dict:
     # near-dated in front: reverse DTE so 0 sits toward the viewer
     return T.scene(
@@ -241,6 +382,7 @@ def price_surface_figure(
     show_trade: bool = True,
     show_mark: bool = True,
     show_interpolated: bool = True,
+    show_spot_plane: bool = True,
     ticker: str = "UUUU",
     x_mode: str = "strike",
 ) -> go.Figure:
@@ -274,6 +416,17 @@ def price_surface_figure(
         t = sl.dropna(subset=["TRDPRC_1"])
         fig.add_trace(_trade_trace(t, style_cp, "TRDPRC_1", x_mode=x_mode))
 
+    # FR-12, last so it hangs in front of the cloud in the legend's reading order. Both
+    # rights share one plane — spot is a property of the date, not of a series — and it is
+    # sized over `sl`, the slice this figure actually draws, so it can never set the scene's
+    # bounds for a cloud that is not there (see `_plane_extents`).
+    has_plane = False
+    if show_spot_plane and spot_val:
+        extents = _plane_extents(sl)
+        if extents:
+            fig.add_trace(_spot_plane_trace(spot_val, extents, x_mode=x_mode))
+            has_plane = True
+
     fig.update_layout(
         **T.figure_layout(
             title=T.title(f"{ticker}  {cp_label}  ·  {asof_txt}{spot_txt}"),
@@ -283,15 +436,9 @@ def price_surface_figure(
             # panel slot. A figure taller than its panel overflows into the row below.
             height=T.HERO_FIGURE_HEIGHT,
             margin=T.HERO_MARGIN,
-            annotations=[
-                T.caption(
-                    "The translucent sheet is interpolated — not a market",
-                    y=T.CAPTION_Y_OVER_LEGEND,
-                )
-            ],
         )
     )
-    return fig
+    return with_caption(fig, _hero_caption(has_plane))
 
 
 
@@ -305,9 +452,9 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
 
     * **Date — a slider.** Every trading day in the panel gets a step. A dropdown was tried
       first and is unusable at this length.
-    * **Calls / puts and series — the legend.** Each date contributes up to six traces
-      (mark / sheet / print, x calls / puts). Puts start as ``legendonly`` so the opening view
-      is calls, and one click adds them.
+    * **Calls / puts and series — the legend.** Each date contributes up to seven traces
+      (mark / sheet / print, x calls / puts, plus FR-12's one spot plane, which is shared).
+      Puts start as ``legendonly`` so the opening view is calls, and one click adds them.
 
     * **Strike or moneyness — a button pair** (FR-10 / T-16). The axis toggle *is* a second
       menu, and it composes with the slider for a reason the date/right pair could not: the
@@ -349,12 +496,20 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
     xs = {mode: [] for mode in X_MODES}
 
     def _record_x(source, spot=None):
-        """Remember this trace's x under both rulers. Called once per `add_trace`, in order."""
+        """Remember this trace's x under both rulers. Called once per `add_trace`, in order.
+
+        A frame is read column-wise, a sheet's grid is rescaled, and a callable is simply
+        asked for its own x per mode — FR-12's plane is two copies of one number rather than
+        a column of anything, so it has nothing for the other two branches to read.
+        """
         for mode in X_MODES:
-            xs[mode].append(
-                _arr(_sheet_x(source, mode, spot) if isinstance(source, dict)
-                     else _x_values(source, mode))
-            )
+            if callable(source):
+                values = source(mode)
+            elif isinstance(source, dict):
+                values = _sheet_x(source, mode, spot)
+            else:
+                values = _x_values(source, mode)
+            xs[mode].append(_arr(values))
 
     for asof in dates:
         idx = {}
@@ -399,6 +554,27 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
                 )
                 _record_x(tr)
                 idx[(cp, "trade")] = len(fig.data) - 1
+
+        # FR-12, one plane per date because the money moves — one wall per date, of which
+        # exactly one is ever visible. It hangs off the date rather than off a right (both
+        # rights share one spot), which is why its key is neither right, and it opens
+        # **visible**: a reference a reader has to switch on is one they never look for.
+        #
+        # Sized over `OPENING_RIGHT` alone, NOT over both rights. The puts open parked on the
+        # legend and plotly's 3D bounds skip a parked trace, so a plane spanning the put
+        # cloud would be the only lit trace asking for that height — which is exactly how it
+        # shipped, stretching the price axis on 34 of 53 dates and flattening the calls
+        # (T-46). The invariant is "never widens", not "always spans": once a reader adds the
+        # puts, a wall shorter than their cloud is honest, a stretched axis is not.
+        plane_spot = spots.get(asof)
+        extents = _plane_extents(_slice_wide(wide, asof, OPENING_RIGHT))
+        if plane_spot and extents:
+            fig.add_trace(
+                _spot_plane_trace(plane_spot, extents, visible=False, legendgroup="spot")
+            )
+            _record_x(lambda mode, s=plane_spot: _plane_x(s, mode))
+            idx[PLANE_KEY] = len(fig.data) - 1
+
         if idx:
             per_date.append((asof, idx))
 
@@ -406,10 +582,15 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
         return price_surface_figure(wide, dates[0], ticker=ticker)
 
     def _vis_for(idx):
-        """Calls visible, puts parked on the legend so the opening view is not a mess."""
+        """Calls visible, puts parked on the legend so the opening view is not a mess.
+
+        Only the parked right is parked: the spot plane belongs to the date rather than to a
+        right (FR-12), so it opens with `OPENING_RIGHT` — and it is sized over that right's
+        cloud for the same reason, since what opens lit is what sets the scene's bounds.
+        """
         vis = [False] * len(fig.data)
         for (cp, _kind), i in idx.items():
-            vis[i] = True if cp == "C" else "legendonly"
+            vis[i] = "legendonly" if cp == PARKED_RIGHT else True
         return vis
 
     def _title(asof):
@@ -417,6 +598,14 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
         return f"{ticker}  ·  {pd.Timestamp(asof).date()}" + (
             f"  ·  spot ${spot:.2f}" if spot else ""
         )
+
+    # The caption names the plane, and five dates in this panel draw none (a single expiry
+    # alive leaves nothing for a wall to span). A caption is an assertion about what is on
+    # screen, so it moves with the date like everything else the panel says — the lesson
+    # T-44 paid for on the IV count. It is HTML now, so the as-of LISTENER applies it from
+    # `asof_frames`, rather than a slider step writing an annotation (T-47).
+    def _caption_of(idx):
+        return _hero_caption(PLANE_KEY in idx)
 
     # Open on the busiest day, matching the app and the headline numbers. Counting trace
     # *kinds* would tie at six for most dates and silently land on the earliest one.
@@ -455,18 +644,12 @@ def static_surface_figure(wide: pd.DataFrame, dates=None, ticker: str = "UUUU") 
             updatemenus=[T.menu(buttons=axis_buttons, active=0)],
             height=T.HERO_FIGURE_HEIGHT,
             margin=T.HERO_MARGIN_WITH_SLIDER,
-            annotations=[
-                # Short on purpose: the panel header already says "drag the slider · legend
-                # toggles puts", and the long version ran the width of the plot and straight
-                # into the legend. What is left is the one thing no other chrome says (AD-9).
-                T.caption(
-                    "The translucent sheet is interpolated — not a market",
-                    y=T.CAPTION_Y_OVER_LEGEND,
-                )
-            ],
         )
     )
-    return fig
+    # Short on purpose: the panel header already says "drag the slider · legend toggles
+    # puts". What is left is the one thing no other chrome says (AD-9). The as-of listener
+    # rewrites it per date, because five dates in this panel draw no plane at all.
+    return with_caption(fig, _caption_of(per_date[default][1]))
 
 
 def diagonal_range(both: pd.DataFrame) -> tuple[float, float]:
@@ -491,7 +674,12 @@ def settle_vs_trade_figure(wide: pd.DataFrame, asof=None, ticker: str = "UUUU") 
     fig = make_subplots(
         rows=1,
         cols=2,
-        subplot_titles=(f"mark ({MARK_LABEL}) vs TRDPRC_1", "Who actually printed?"),
+        # No subplot titles. `update_layout(annotations=[...])` BROADCASTS a one-element
+        # list across every existing annotation, so the caption below overwrote both titles
+        # and then drew itself twice, in the titles' font, exactly on top of itself — at
+        # every width, on the shipped page, since T-13. Found by the T-47 width audit. The
+        # panel header names the figure and each subplot carries its own axis titles, so the
+        # honest fix is to stop asking for titles rather than to fight the broadcast.
         horizontal_spacing=0.12,
         vertical_spacing=0.08,
     )
@@ -593,18 +781,13 @@ def settle_vs_trade_figure(wide: pd.DataFrame, asof=None, ticker: str = "UUUU") 
                 yanchor="top", y=-0.18, x=0.0, xanchor="left",
                 bgcolor=T.TRANSPARENT, bordercolor=T.BORDER,
             ),
-            annotations=[
-                T.caption(
-                    "Off-diagonal = mark ≠ print &nbsp;·&nbsp; cyan = calls, violet = puts "
-                    "&nbsp;·&nbsp; bars: listed series that day"
-                )
-            ],
         )
     )
-    # subplot titles are annotations too, and update_layout above replaced the list —
-    # restyle whatever survived so the two subplot headers take the display face
-    fig.update_annotations(font=dict(size=13, family=T.FONT_DISPLAY, color=T.TEXT))
-    return fig
+    return with_caption(
+        fig,
+        "Off-diagonal = mark ≠ print  ·  cyan = calls, violet = puts "
+        " ·  bars: listed series that day",
+    )
 
 
 def spread_heatmap(wide: pd.DataFrame, asof, cp: str = "C") -> go.Figure:
@@ -653,21 +836,13 @@ def spread_heatmap(wide: pd.DataFrame, asof, cp: str = "C") -> go.Figure:
             yaxis=T.axis("Expiry"),
             height=380,
             margin=dict(l=70, r=20, t=54, b=70),
-            annotations=[
-                # Default caption band, not 1.10. The raised position cleared this figure's
-                # own title, but every call site panelises it — and `as_panel_figure` drops
-                # the title and cuts the top margin to the tile default, which put the
-                # caption above the paper where it rendered as a row of sheared glyph tops.
-                # Shipped that way; found by adversarial review 2026-09-04.
-                T.caption(
-                    "Green = tight, tradeable · Red = the midpoint is a guess between "
-                    "two far-apart quotes",
-                    x=0.02,
-                )
-            ],
         )
     )
-    return fig
+    return with_caption(
+        fig,
+        "Green = tight, tradeable · Red = the midpoint is a guess between "
+        "two far-apart quotes",
+    )
 
 
 def coverage_heatmap(wide: pd.DataFrame, asof, cp: str = "C", field: str = "TRDPRC_1") -> go.Figure:
@@ -714,12 +889,11 @@ def coverage_heatmap(wide: pd.DataFrame, asof, cp: str = "C", field: str = "TRDP
             yaxis=T.axis("Expiry"),
             height=380,
             margin=dict(l=72, r=16, t=56, b=56),
-            annotations=[
-                T.caption("Lit cell = a number exists &nbsp;·&nbsp; Dark cell = no quote that day")
-            ],
         )
     )
-    return fig
+    return with_caption(
+        fig, "Lit cell = a number exists  ·  Dark cell = no quote that day"
+    )
 
 
 def panel_expiries(wide: pd.DataFrame) -> list:
@@ -862,31 +1036,21 @@ def iv_smile_figure(
             ),
             height=height,
             margin=T.SMILE_MARGIN,
-            annotations=[
-                # ORDER IS A CONTRACT, like the trace order: [0] is date-independent, [1]
-                # carries per-date counts and the as-of listener rewrites it by index
-                # (IV_COUNT_ANNOTATION). See the T-44 note on `_smile`.
-                #
-                # Both lines are kept short enough to fit a 5-column tile. The first build
-                # ran the assumptions off the right edge, which loses exactly the words FR-11
-                # requires to be on the page — the panel header carries the rate too, but the
-                # figure has to stand on its own because that is what survives onto the
-                # static page.
-                T.caption(
-                    f"DERIVED &nbsp;·&nbsp; European Black-Scholes on {MARK_LABEL} "
-                    f"&nbsp;·&nbsp; r = {rate:.2%} &nbsp;·&nbsp; no dividends &nbsp;·&nbsp; "
-                    "act/365 &nbsp;·&nbsp; American exercise ignored",
-                    y=T.CAPTION_Y_OVER_LEGEND,
-                ),
-                T.caption(
-                    f"Not a tradable price &nbsp;·&nbsp; {n_drawn} of {n_strikes} listed "
-                    "strikes carry a vol &nbsp;·&nbsp; a break = one the solver refused",
-                    y=T.CAPTION_Y,
-                ),
-            ],
         )
     )
-    return fig
+    # LINE ORDER IS A CONTRACT, like the trace order: [0] is date-independent, [1] carries
+    # per-date counts and the as-of listener rewrites it by index (IV_COUNT_LINE). See the
+    # T-44 note on `_smile`. As HTML both lines now wrap instead of running off a tile —
+    # which is what they did on a 5-column panel, losing exactly the words FR-11 requires
+    # to be on the page.
+    return with_caption(
+        fig,
+        f"DERIVED  ·  European Black-Scholes on {MARK_LABEL} "
+        f" ·  r = {rate:.2%}  ·  no dividends  ·  "
+        "act/365  ·  American exercise ignored",
+        f"Not a tradable price  ·  {n_drawn} of {n_strikes} listed "
+        "strikes carry a vol  ·  a break = one the solver refused",
+    )
 
 
 # --------------------------------------------------------------- as-of frames (AD-5, T-42)
@@ -919,9 +1083,9 @@ def _grid(fig):
     }
 
 
-# Which annotation on the IV figure carries per-date numbers. Lifted per date and rewritten
-# by the listener; see `iv_surface_figure`.
-IV_COUNT_ANNOTATION = 1
+# Which CAPTION LINE of the IV figure carries per-date numbers. Lifted per date and
+# rewritten by the listener; see `iv_smile_figure`.
+IV_COUNT_LINE = 1
 
 
 def _smile(fig):
@@ -934,14 +1098,12 @@ def _smile(fig):
     """
     if not fig.data or fig.data[0].type != "scatter":
         return None
-    notes = fig.layout.annotations
+    lines = figure_caption(fig)
     return {
         "x": [_arr(t.x) for t in fig.data],
         "y": [_arr(t.y) for t in fig.data],
         "show": [bool(t.showlegend) for t in fig.data],
-        "note": (
-            notes[IV_COUNT_ANNOTATION].text if len(notes) > IV_COUNT_ANNOTATION else None
-        ),
+        "note": lines[IV_COUNT_LINE] if len(lines) > IV_COUNT_LINE else None,
     }
 
 
@@ -998,6 +1160,12 @@ def asof_frames(wide: pd.DataFrame, cp: str = "C", dates=None) -> dict:
             "iv": {
                 mode: _smile(iv_smile_figure(wide, asof, x_mode=mode)) for mode in X_MODES
             },
+            # The hero's caption is HTML now, so the listener applies it rather than a
+            # slider step (T-47). Derived from the same slice and the same helper the figure
+            # uses, so the wall and the sentence about it cannot disagree.
+            "hero_caption": _hero_caption(
+                _plane_extents(_slice_wide(wide, asof, OPENING_RIGHT)) is not None
+            ),
             "spread": _grid(spread_heatmap(wide, asof, cp=cp)),
             "mark": _grid(coverage_heatmap(wide, asof, cp=cp, field="MARK")),
             "trade": _grid(coverage_heatmap(wide, asof, cp=cp, field="TRDPRC_1")),
