@@ -258,7 +258,7 @@ def test_pivot_empty_input_returns_empty():
 
 
 def test_pivot_keeps_rows_when_spot_is_unknown():
-    """Fixed 2026-08-30 (checkpoint_audit §1): an unknown spot must not delete the quote.
+    """Fixed 2026-08-30 (T-35): an unknown spot must not delete the quote.
 
     pivot_table drops any row with NaN in its index, so pivoting on `spot` silently deleted
     observations. AD-9: missing data renders as a hole, never as a vanished row.

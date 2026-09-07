@@ -81,7 +81,7 @@ jobs:
 
       # The build must fail loudly rather than publish a page built on the fallback panel.
       # A synthetic deploy would look plausible and be wrong — it invents settles that do
-      # not exist in the real data (see checkpoint_audit.md §3).
+      # not exist in the real data (notebook 01 §10b).
       - name: Refuse to publish synthetic data or an empty page
         run: |
           set -euo pipefail

@@ -164,8 +164,8 @@ stay put when it moves.
    month codes M–X are generated correctly for all twelve months, and the expired-contract
    suffix matches the documented grammar. Both rights were requested. Note the README's
    Appendix A example (`UUUUA1502601250.U^A26`) carries one digit too many and does not
-   parse; the nine-digit form does, and matches the RICs the API accepted — raised in
-   [checkpoint_audit.md](checkpoint_audit.md), README is instructor-owned so it stands.
+   parse; the nine-digit form does, and matches the RICs the API accepted — raised with the
+   instructor at the Class-2 checkpoint; README is instructor-owned so it stands.
 3. **That pull had no SETTLE at all** — 148 RICs, TRDPRC_1 only, calls only, 9 weeklies
    2026-06-12…08-21. `fields` *did* request SETTLE; it came back all-NaN and acquisition's
    `dropna(how="all", axis=1)` dropped it, collapsing the column MultiIndex to one level.

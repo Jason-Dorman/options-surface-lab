@@ -469,16 +469,46 @@ def test_the_iv_figure_prints_every_assumption_fr_11_requires(wide, asof):
         assert needed in text, f"the IV figure never says {needed!r}"
 
 
-def test_a_refused_strike_breaks_the_line_instead_of_being_bridged(wide, asof):
+def _strike_counts(frame):
+    """(listed, inverted) distinct `(expiry, strike)` pairs — the smile's own unit."""
+    return (
+        frame.groupby(["expiry", "strike"]).ngroups,
+        frame.dropna(subset=["iv"]).groupby(["expiry", "strike"]).ngroups,
+    )
+
+
+def test_a_refused_strike_breaks_the_line_instead_of_being_bridged(wide):
     """AD-9 on a line chart, which is the one thing a line can get wrong that a scatter cannot.
 
     A smile drawn only over the strikes that inverted would join its neighbours with a
     straight segment across the gap — drawing a vol for a strike where the solver refused.
     The curve is therefore built over the strikes *listed* that day, with `None` at every
     refusal and `connectgaps` off, so a hole renders as a visible break.
+
+    **The date is chosen for having a refusal, not inherited from the module's `asof`.**
+    `asof` is the panel's LAST date, and the synthetic window is anchored to `today()`
+    (PRD OQ-6), so which date that is depends on when the suite runs. On a run whose last
+    trading day falls early in a week — before an expiry lands and before much time value has
+    decayed — nothing is refused: 28 of the 60 dates in this fixture refuse nothing at all.
+    On such a day the old assertion `drawn < listed` fails against correct code — which is
+    what happened in CI on 2026-09-07, a Monday: `assert 90 < 90`. It had simply never been
+    run on one of those 28 dates before. The assertion was about the FIXTURE, not the figure.
+    **A test whose subject is chosen by the calendar reports on the calendar** — so it now
+    finds a date with a refusal and fails loudly only if the fixture has none anywhere.
     """
     from options_surface_lab.option_surface_plot import iv_smile_figure
     from options_surface_lab.option_surface_utils import attach_implied_vol
+
+    panel = attach_implied_vol(wide)
+    with_holes = [
+        day for day, frame in panel.groupby(panel["date"].dt.normalize())
+        if _strike_counts(frame)[1] < _strike_counts(frame)[0]
+    ]
+    assert with_holes, (
+        "no date in this panel refuses a single strike, so this test has no subject at all "
+        "— the fixture or the solver has changed"
+    )
+    asof = with_holes[0].strftime("%Y-%m-%d")
 
     fig = iv_smile_figure(wide, asof)
     for trace in fig.data:
@@ -489,11 +519,12 @@ def test_a_refused_strike_breaks_the_line_instead_of_being_bridged(wide, asof):
     # every plotted point is a strike that actually inverted, and every listed strike appears
     drawn = sum(1 for t in fig.data for v in t.y if v is not None)
     listed = sum(len(t.x) for t in fig.data)
-    solved_strikes = sl.dropna(subset=["iv"]).groupby(["expiry", "strike"]).ngroups
-    all_strikes = sl.groupby(["expiry", "strike"]).ngroups
+    all_strikes, solved_strikes = _strike_counts(sl)
     assert drawn == solved_strikes, "plotted points must be exactly the strikes that inverted"
     assert listed == all_strikes, "the x axis must span every listed strike, holes included"
-    assert drawn < listed, "this panel always refuses some strikes — they must show as breaks"
+    assert drawn < listed, (
+        f"{asof} was chosen because it refuses a strike, so the curve must carry a break"
+    )
 
 
 def test_the_smile_axis_follows_the_same_ruler_as_the_hero(wide, asof):

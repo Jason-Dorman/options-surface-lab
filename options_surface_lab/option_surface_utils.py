@@ -8,7 +8,7 @@ unavailable.
 The mark/print pairing is `MARK` vs `TRDPRC_1`. `MARK` is a *slot*: US listed
 equity options have no settlement price (none is published by the exchanges,
 OPRA or the OCC), so it is filled by `MARK_FIELD_DEFAULT` — the quoted mid.
-See docs/checkpoint_audit.md §3.
+See notebooks/01_data_exploration.ipynb §10b.
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ CP_TO_MONTH_CODES = {
 }
 
 # The source field that fills the MARK slot. There is no settlement price for US listed
-# equity options (checkpoint_audit.md §3), so this is the quoted mid — the "mechanical"
+# equity options (notebook 01 §10b), so this is the quoted mid — the "mechanical"
 # industry derivation. THEO_VALUE is the "theoretical" alternative, deliberately not the
 # default: it duplicates what our interpolated sheet already does (AD-9).
 MARK_FIELD_DEFAULT = "MID_PRICE"
@@ -307,7 +307,7 @@ def pivot_trade_settle(tidy: pd.DataFrame, mark_field: str = MARK_FIELD_DEFAULT)
 
     ``MARK`` is the *mark slot*, not a field name. US listed equity options have no official
     settlement price — none is published by the exchanges, OPRA or the OCC — so every mark is
-    derived (checkpoint_audit.md §3). ``mark_field`` names which source field fills the slot;
+    derived (notebook 01 §10b). ``mark_field`` names which source field fills the slot;
     ``SETTLE`` is still accepted so the synthetic panel and futures-style inputs keep working.
 
     ``CLOSE`` maps to ``TRDPRC_1``, not to the mark: measured 2026-08-30, LSEG's close for
@@ -323,7 +323,7 @@ def pivot_trade_settle(tidy: pd.DataFrame, mark_field: str = MARK_FIELD_DEFAULT)
     # stock frame does not cover an option date, and pivot_table silently drops any row with
     # NaN in its index — deleting the observation instead of showing it as a hole. That
     # violates SPEC 7.2's one-row-per-(date, ric) promise and AD-9. Re-attach the descriptors
-    # by merge afterwards. (checkpoint_audit.md §1)
+    # by merge afterwards. (T-35)
     values = (
         keep.pivot_table(index=["date", "ric"], columns="field", values="value", aggfunc="last")
         .reset_index()

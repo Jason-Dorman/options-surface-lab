@@ -65,7 +65,6 @@ options_surface_lab/                  # repo root = Reflex project root
 │   ├── ENGINEERING-PRINCIPLES.md
 │   ├── BACKLOG.md                    # task-level build board
 │   ├── RUNBOOK.md                    # operational procedures
-│   └── DEMO-SCRIPT.md                # checkpoint plan
 ├── options_surface_lab/              # Python package (Reflex app module)
 │   ├── __init__.py
 │   ├── options_surface_lab.py        # thin Reflex entry: re-exports `app`
@@ -196,7 +195,7 @@ Design facts worth knowing:
   these contracts equals the last trade in 356 of 356 overlapping observations.
 - **`pivot_trade_settle()` pivots on `(date, ric)` only** and re-attaches descriptive columns
   by merge. Pivoting on `spot` made `pivot_table` delete rows whose spot was unknown —
-  a hole becoming a vanished row, against AD-9 (checkpoint_audit §1, fixed 2026-08-30).
+  a hole becoming a vanished row, against AD-9 (fixed 2026-08-30, T-35).
 - **Field reality (measured 2026-08-30, scope: expired UUUU, 12-week window, 294 series).**
   These contracts return 22 fields and `SETTLE` is not among them; it is a futures settlement field (`CLc1` returns it in the
   same session). Requesting it yields an empty column when paired and `LDError` when asked
@@ -281,7 +280,7 @@ One row per **(date, ric)**; the interface consumed by every figure and by 1.2.
 |---|---|
 | `date, ric, root, cp, expiry, strike, dte, spot, moneyness` | Carried from tidy |
 | `TRDPRC_1` | Last trade that day (NaN = no print). `CLOSE`, if ever present, is folded in here |
-| `MARK` | The mark **slot**, filled by `MARK_FIELD_DEFAULT` = `MID_PRICE` (T-32). There is no exchange settle for these contracts — §10b / checkpoint_audit §3 |
+| `MARK` | The mark **slot**, filled by `MARK_FIELD_DEFAULT` = `MID_PRICE` (T-32). There is no exchange settle for these contracts — §10b / notebook 01 §10b |
 | `BID`, `ASK` | The two sides, when quoted (one-sided days keep the side they have) |
 | `has_trade`, `has_mark` | Non-null flags |
 | `abs_diff` | `abs(MARK − TRDPRC_1)` |

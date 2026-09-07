@@ -22,7 +22,7 @@ from options_surface_lab.option_surface_utils import (
 )
 
 # Labels name the field the mark actually comes from. There is no SETTLE for US
-# listed equity options (checkpoint_audit.md §3) — saying so on the axis is the point.
+# listed equity options (notebook 01 §10b) — saying so on the axis is the point.
 MARK_LABEL = MARK_FIELD_DEFAULT
 
 # FR-5's marker-identity invariant, in one place: the mark and the print differ in colour
@@ -960,7 +960,7 @@ def iv_smile_figure(
 
     * Not observed. Every point is a model output three assumptions deep — European exercise
       on American contracts, no dividends, and a mark that is itself a derived midpoint
-      (there is no settlement price for these contracts, checkpoint_audit §3).
+      (there is no settlement price for these contracts, notebook 01 §10b).
     * Not tradable. Panel [4] is the companion that says how far apart the two sides of the
       market were when this "price" was struck.
 

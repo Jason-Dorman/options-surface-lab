@@ -19,7 +19,12 @@ and cite their IDs (FR-x, G-x, AD-x, NFR-x) when explaining decisions.
 | 3 | [docs/SYSTEM-SPEC.md](docs/SYSTEM-SPEC.md) | Schemas, algorithms, edge-case behavior, runtime modes |
 | 4 | [docs/ENGINEERING-PRINCIPLES.md](docs/ENGINEERING-PRINCIPLES.md) | Code quality: SOLID, cohesion/coupling, complexity < 10, tests before refactoring |
 | 4 | [docs/DESIGN-BRIEF.md](docs/DESIGN-BRIEF.md) | The graphical identity (FR-8): palette, typography, the rules the restyle may not break. PO-directed — read it before changing any value in `theme.py`. |
-| 5 | [docs/BACKLOG.md](docs/BACKLOG.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md) · [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) · [docs/checkpoint_audit.md](docs/checkpoint_audit.md) | Operational: the task board (work top-down, T-x IDs) · procedures (env, LSEG pull, run, deploy) · checkpoint demo plan · open questions for the instructor |
+| 5 | [docs/BACKLOG.md](docs/BACKLOG.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md) | Operational: the task board (work top-down, T-x IDs) · procedures (env, LSEG pull, run, deploy) |
+
+*`DEMO-SCRIPT.md` and `checkpoint_audit.md` were deleted 2026-09-06 (PO): both were written
+for the Class-2 checkpoint, which has passed. The evidence they carried survives where it was
+gathered — the no-settle argument in `notebooks/01_data_exploration.ipynb` §10a/§10b, the
+pivot/spot fix in T-35 and its test, the synthetic-panel determinism question in PRD OQ-6.*
 
 If any two of these — or a document and the code — materially contradict, **stop and ask the
 PO**. Do not silently pick a winner. Trivial mechanical errors (typos, dead links) may be
@@ -305,6 +310,17 @@ came out of it: **anything that changes what the page SAYS needs a rebuild in th
 commit** (the same lockstep the docs have), and **a test that asserts against the built page
 reduces to a bool first** — `stale = MARKER in html; assert not stale, "…"` — so the failure
 names the fix instead of printing the artifact.
+
+**A test whose subject depends on the calendar reports on the calendar** (2026-09-07, PRD
+OQ-6, found by CI). `synthesize_demo_payload` anchors its window to `today()`, so the module
+fixture's LAST date moves with the run — and 28 of its 60 dates refuse no strike at all.
+`test_a_refused_strike_breaks_the_line_instead_of_being_bridged` asserted the last date has a
+hole; on a Monday, when the window ends before an expiry lands, it failed with
+`assert 90 < 90` — a false failure against correct code, on a date CI had simply never landed
+on before. The assertion was about the fixture, not the figure. It now *finds* a date that
+refuses a strike, and fails only if the fixture has none anywhere. The fixture itself
+is still calendar-dependent — OQ-6's `end_date` parameter is the root fix and needs PO
+sign-off.
 
 **Next up:** M4 — T-19/T-20/T-21/T-22. **219 tests green, no xfail.** Update this paragraph
 as things land (lockstep rule).

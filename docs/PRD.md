@@ -62,7 +62,7 @@ package with a real committed LSEG panel, a test suite, and a live deployment.
 | [theme.py](../options_surface_lab/theme.py) | Design tokens — the only file holding a colour or a font name — plus the shared figure builders (`figure_layout`, `title`, `caption`, `axis`, `scene`, `legend`, `slider`, `menu`). Direction recorded in [DESIGN-BRIEF.md](DESIGN-BRIEF.md). |
 | [build_preview.py](../build_preview.py) | **The deliverable** (AD-4/T-41): builds the single self-contained `index.html` that Pages serves. CI runs it on every push. |
 | `option_pipeline_data.synthetic.pkl` | **Orphaned** — nothing loads it, and it fails to unpickle under the installed pandas. The no-cache fallback is generated in-process by `synthesize_demo_payload()`. |
-| `option_pipeline_data.trdprc-only.pkl` · `.trade-only-puts.pkl` | The two superseded pulls, gitignored and kept locally as evidence for [checkpoint_audit.md](checkpoint_audit.md) §3. **Not** usable caches. |
+| `option_pipeline_data.trdprc-only.pkl` · `.trade-only-puts.pkl` | The two superseded pulls, gitignored and kept locally as evidence for the mark decision (T-32/T-34, notebook 01 §10a-b). **Not** usable caches. |
 | `option_pipeline_data.pkl` | The real committed LSEG cache (FR-2). **Landed 2026-08-31 (T-7):** 296 series (148 calls + 148 puts) × 53 trading days, fields `TRDPRC_1, MID_PRICE, BID, ASK, OPINT_1`. Treated as a frozen artifact — never regenerated without PO approval. |
 | [docs/ENGINEERING-PRINCIPLES.md](ENGINEERING-PRINCIPLES.md) | Engineering standards this project follows. |
 
@@ -212,7 +212,8 @@ For the selected as-of date, display prominently:
 > deliberately rejected because it duplicates what our interpolated sheet already does (AD-9).
 > The README's own commentary prompt asks which field to treat as the mark, and its Do-not
 > list does not restrict `BID`/`ASK`/`MID_PRICE`. Evidence and the full argument:
-> [checkpoint_audit.md](checkpoint_audit.md) §3. **Reverting is one constant
+> `notebooks/01_data_exploration.ipynb` §10a (the alternatives, and why each fails) and §10b
+> (why no settle exists to find). **Reverting is one constant
 > (`MARK_FIELD_DEFAULT`) if the instructor wants something else.**
 *Accepted when:* both numbers are visible without interaction on page load, update with the
 as-of date (locally), and match a hand-check against the pickle for one date.
@@ -478,13 +479,25 @@ site with the rubric complete outranks it on the deadline.)
   NaN index keys), contradicting SPEC §7.2's "one row per (date, ric)". Only reachable when the
   stock frame does not cover the option dates. Recorded as an `xfail` in
   `tests/test_transforms.py`; fix (pivot on `date`/`ric` and merge the descriptors back) or
-  accept-and-document? — PO call. Plain-English write-up for the instructor:
-  [checkpoint_audit.md](checkpoint_audit.md) §1.
+  accept-and-document? — PO call. **Fixed 2026-08-30 by T-35**; the xfail is gone and the test
+  asserts the row survives.
 - **OQ-6:** `synthesize_demo_payload` anchors its window to `dt.date.today()`, so SPEC §11's
   "same seed → identical panel; tests may assert on exact derived values" holds only within a
-  single day. Current tests assert structure, not exact values. Add an `end_date` parameter for
-  true determinism (signature change → PO sign-off), or soften the SPEC sentence? — PO call.
-  Plain-English write-up for the instructor: [checkpoint_audit.md](checkpoint_audit.md) §2.
+  single day. Add an `end_date` parameter for true determinism (signature change → PO
+  sign-off), or soften the SPEC sentence? — PO call.
+  **No longer hypothetical: this failed CI on 2026-09-07.** The line above used to read
+  "current tests assert structure, not exact values", and that was not true —
+  `test_a_refused_strike_breaks_the_line_instead_of_being_bridged` asserted that the panel's
+  LAST date refuses at least one strike. Which date that is depends on when the suite runs,
+  and 28 of the fixture's 60 dates refuse nothing (a run whose last trading day falls early in
+  a week, before an expiry lands). On such a date that assertion fails against correct code — on 2026-09-07,
+  a Monday, with `assert 90 < 90`; CI had simply never landed on one of those 28 dates before.
+  It was an assertion about the fixture, not about the figure. The test now
+  selects a date that refuses something instead of inheriting one — which fixes that test but
+  not the fixture: any future test that reads a *value* off this panel inherits the same
+  calendar dependence. **Recommendation: take the `end_date` parameter.** Defaulting it to
+  `dt.date.today()` keeps every existing call site working, so the sign-off is on a
+  signature, not on behaviour.
 
 ## 12. Definition of done (submission checklist)
 

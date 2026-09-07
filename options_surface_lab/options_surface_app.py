@@ -314,7 +314,7 @@ def fetch_from_lseg(
     df_options = pd.concat([f for f in (df_calls, df_puts) if not f.empty], axis=1)         if not (df_calls.empty and df_puts.empty) else pd.DataFrame()
 
     # T-27/T-34 are answered: there is NO settlement price for US listed equity options —
-    # none is published by the exchanges, OPRA or the OCC (checkpoint_audit.md §3). So we no
+    # none is published by the exchanges, OPRA or the OCC (notebook 01 §10b). So we no
     # longer request SETTLE or probe for it; MARK_FIELD_DEFAULT is the derived mark we use.
     # `probe_mark_fields()` remains available to re-demonstrate the absence on demand.
     diag["mark_field_used"] = MARK_FIELD_DEFAULT
