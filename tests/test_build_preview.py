@@ -410,19 +410,30 @@ def test_the_published_page_carries_the_commentary():
     html = page.read_text(encoding="utf-8", errors="ignore")
 
     assert COMMENTARY_PAGE_MARKER in html, "the commentary block is missing from the page"
-    for question in commentary.QUESTIONS:
-        assert question in html, f"the page never asks {question!r}"
+    unasked = [i for i, q in enumerate(commentary.QUESTIONS, 1) if q not in html]
+    assert not unasked, f"the page never asks question(s) {unasked}"
 
     # Whether the sentences EXIST is `test_the_three_sentences_are_written`'s job, and it is
     # red until they do. This one only has to catch a page built before the last edit, so it
     # asks its question of a written module and stays quiet on an unwritten one — one red
     # test naming one gap is a clearer signal than two.
+    #
+    # Both checks below reduce to a bool BEFORE asserting. `assert sentence in html` reads
+    # better but makes pytest introspect a 2.6 MB document into the log on failure -- which
+    # is what a stale page did to the Actions run on 2026-09-06, burying a one-line cause in
+    # tens of thousands of lines. A guard nobody can read is most of the way to no guard.
     if all(sentence.strip() for sentence in commentary.SENTENCES):
-        assert commentary.UNWRITTEN not in html, (
-            "the sentences are written but the page still shows the placeholder - rebuild it"
+        stale = commentary.UNWRITTEN in html
+        assert not stale, (
+            "the sentences are written but the page still shows the placeholder: "
+            "options_surface_preview.html is older than commentary.py. Run "
+            "`python build_preview.py` and commit the rebuilt page."
         )
-        for sentence in commentary.SENTENCES:
-            assert sentence.strip() in html, "a written sentence never reached the page"
+        missing = [i for i, s in enumerate(commentary.SENTENCES, 1) if s.strip() not in html]
+        assert not missing, (
+            f"sentence(s) {missing} are written but never reached the page - rebuild it with "
+            "`python build_preview.py`"
+        )
     # Full width and under the hero row: the brief asks for the sentences "under the plot",
     # and the plot is panel [1], which the sidecar shares a row with. Ordering is read off the
     # markup, not off the bare class name -- the stylesheet defines `.osl-commentary` in the

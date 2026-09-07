@@ -75,11 +75,11 @@ package with a real committed LSEG panel, a test suite, and a live deployment.
 - **G-3** ✅ *Resolved 2026-09-01 (T-11)* — the "Mark, no print" readout shows the count **and**
   the percent, in both the Reflex app and the published page. It reads from the MARK slot, so
   it re-computes if the mark field ever changes.
-- **G-4** ◐ *Scaffolded 2026-09-06 (T-12)* — the commentary panel is on both renderings,
-  directly under the hero row, reading `options_surface_lab/commentary.py`. **The three
-  sentences themselves are unwritten**; until the PO types them the page prints
-  `[unwritten]` in red, `tests/test_build_preview.py` fails, and the Pages workflow refuses
-  to deploy. Closes when the prose lands — nothing else has to change.
+- **G-4** ✅ *Resolved 2026-09-06 (T-12)* — the commentary panel sits under the hero row in
+  both renderings, and the PO's three sentences are written
+  (`options_surface_lab/commentary.py`). The guards that policed its absence stay: an
+  unwritten slot would still print `[unwritten]` in red, fail `pytest`, and be refused by the
+  Pages workflow.
 - **G-5** ✅ *Resolved 2026-09-02* — FR-8 landed (T-13). Deep-navy terminal identity in
   `theme.py`, direction recorded in [DESIGN-BRIEF.md](DESIGN-BRIEF.md); no colour or font
   literal survives outside that module, enforced by `tests/test_theme.py`.
@@ -224,15 +224,20 @@ $0.50 strike grid for a name like UUUU; which field is the mark next week and wh
 evidence someone traded.
 *Accepted when:* the three sentences are on the page, specific to the actual data shown
 (reference real regions/behavior, not generic filler).
-**◐ Scaffolded 2026-09-06 (T-12), content outstanding.** An unnumbered full-width panel
+**✅ Met 2026-09-06 (T-12).** An unnumbered full-width panel
 ("Reading the surface") sits directly beneath the hero row in both the published page and the
 Reflex app, printing each of the brief's three questions above its answer so a reader who has
 never seen the assignment knows what is being answered. The text lives in
 `options_surface_lab/commentary.py` and nowhere else; both renderings import it. The
-specificity criterion cannot be tested, but the *presence* one now is, three times over: a
-failing test, a red `[unwritten]` placeholder on the page, and a CI guard that refuses to
-publish it. Supporting numbers for each question are in that module's comments and in
-notebook 01.
+specificity criterion cannot be tested, but the *presence* one is, three times over: a test,
+a red `[unwritten]` placeholder on the page, and a CI guard that refuses to publish it.
+The sentences are the PO's own, written 2026-09-06.
+
+*Learned in the same session:* the module and the page are two artifacts, and CI grades the
+second. Writing the sentences without re-running `python build_preview.py` left the committed
+page still saying `[unwritten]`, which failed the Actions run — correctly, but the assertion
+introspected a 2.6 MB document into the log. The page tests now reduce to a bool before
+asserting, so a stale page reports in one line and names the command that fixes it.
 
 **FR-8 — My graphical identity** *(fixes G-5, G-7's refactor risk)*
 Replace the starter cyan-magenta GitHub-dark look with a palette and typography I choose and
@@ -486,6 +491,6 @@ site with the rubric complete outranks it on the deadline.)
 - [ ] All P0 acceptance criteria met (FR-1 … FR-9)
 - [x] All P1 acceptance criteria met (FR-10 … FR-12) — FR-10 *(T-16)*, FR-11 *(T-17/T-45)*, FR-12 *(T-18)*, all 2026-09-04
 - [x] Tests green on a clean clone with no LSEG credentials *(CI, every push — NFR-4)*
-- [◐] Pages URL renders in incognito: figures, toggles, numbers ✅ *(PO-verified 2026-09-03)* — commentary panel scaffolded 2026-09-06, **the three sentences are still unwritten (G-4 / T-12)**
+- [◐] Pages URL renders in incognito: figures, toggles, numbers ✅ *(PO-verified 2026-09-03)* — the three sentences landed 2026-09-06 (G-4 / T-12); **re-verify the deployed page once that build publishes**
 - [ ] Canvas submission posted with the repo + site link
 - [ ] I can explain every line in the repo (guardrail #6)

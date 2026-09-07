@@ -198,9 +198,17 @@ push to main
   → pytest in a clean container, no credentials      (proves NFR-4)
   → python build_preview.py → _site/index.html
   → guards: refuse a synthetic build; refuse < 7 figures;
-            refuse an IV panel with no assumptions caption
+            refuse an IV panel with no assumptions caption;
+            refuse an unwritten FR-7 sentence
   → deploy-pages
 ```
+
+- **`options_surface_preview.html` is a committed artifact — rebuild it in the same commit as
+  anything that changes what the page says.** The tests read that file, so a source change
+  without a rebuild fails CI on the *old* page. This bit on 2026-09-06: FR-7's three sentences
+  were written into `commentary.py` and committed, the page was not rebuilt, and the Actions
+  run failed on a page still reading `[unwritten]`. `python build_preview.py`, then commit
+  both.
 
 - **`reflex export` is not used.** Its bundle bakes `ws://localhost:8000/_event` and needs a
   live Python backend; on Pages hydration fails and the page renders blank. Measured

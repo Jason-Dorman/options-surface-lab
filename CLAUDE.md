@@ -291,15 +291,23 @@ different things. It is unnumbered because the indices name *figures* and are al
 published page's listener addressing scheme (`osl-fig-{n}`); renumbering five panels to slot
 prose into the sequence would churn the page's only wiring for a decoration.
 
-**The three sentences themselves are still unwritten — only the PO may write them.** Until
-they are, `tests/test_build_preview.py::test_the_three_sentences_are_written` **fails on
-purpose** (214 tests, 1 red), the page prints `[unwritten]` in red, and the Pages workflow
-refuses to deploy. That is deliberate: FR-7 is the only graded element with no figure behind
-it, so its absence is invisible on a page that otherwise renders perfectly. All three guards
-go green the moment `SENTENCES` is filled in; nothing else has to change.
+**The PO wrote the three sentences the same day**, closing G-4 and the last P0 gap. The
+guards that policed their absence stay: an empty slot prints `[unwritten]` in red, fails
+`test_the_three_sentences_are_written`, and is refused by the Pages workflow — FR-7 is the
+only graded element with no figure behind it, so nothing about the render fails when it is
+missing.
 
-**Next up:** the PO writes the three sentences (FR-7 / G-4, the last P0 gap), then M4:
-T-19/T-20/T-21/T-22. Update this paragraph as things land (lockstep rule).
+**The module and the page are two artifacts, and CI grades the second.** The prose was
+committed without re-running `python build_preview.py`, so the committed page still said
+`[unwritten]` and the Actions run failed — correctly, but pytest introspected the 2.6 MB
+document into the log and buried a one-line cause in tens of thousands of lines. Two rules
+came out of it: **anything that changes what the page SAYS needs a rebuild in the same
+commit** (the same lockstep the docs have), and **a test that asserts against the built page
+reduces to a bool first** — `stale = MARKER in html; assert not stale, "…"` — so the failure
+names the fix instead of printing the artifact.
+
+**Next up:** M4 — T-19/T-20/T-21/T-22. **219 tests green, no xfail.** Update this paragraph
+as things land (lockstep rule).
 
 **Secrets:** `lseg-data.config.json` (repo root) holds the LSEG app-key. It is gitignored —
 never commit it, never print its contents, never copy it into anything that ships.
