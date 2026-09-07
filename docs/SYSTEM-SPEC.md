@@ -72,7 +72,8 @@ options_surface_lab/                  # repo root = Reflex project root
 │   ├── options_surface_app.py        # State + page composition   (*app.py)
 │   ├── option_surface_utils.py       # pure data transforms       (*utils.py)
 │   ├── option_surface_plot.py        # figure builders            (*plot.py, renamed per G-8)
-│   └── theme.py                      # design tokens (FR-8)
+│   ├── theme.py                      # design tokens (FR-8)
+│   └── commentary.py                 # the PO's three sentences   (FR-7)
 ├── tests/
 │   ├── test_ric_parsing.py
 │   ├── test_transforms.py
@@ -126,6 +127,7 @@ flowchart TD
 | `option_surface_utils.py` | numpy, pandas, scipy | reflex, plotly, theme | Data acquisition, parsing, reshaping, stats |
 | `option_surface_plot.py` | plotly, utils, theme | reflex | Turning frames into figures |
 | `theme.py` | (stdlib only) | everything else | Design tokens: palette, fonts, layout defaults |
+| `commentary.py` | (nothing) | everything | FR-7's three sentences — prose, authored by the PO |
 | `options_surface_app.py` | reflex, utils, plot, theme | — | State, events, page composition |
 | `build_preview.py` | utils, plot | reflex | Static HTML assembly |
 

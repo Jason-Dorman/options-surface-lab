@@ -355,3 +355,117 @@ def test_the_published_page_carries_the_spot_plane():
     assert "the plane is spot (K = S)" in html, (
         "nothing on the page says what the wall through the cloud is"
     )
+
+
+# --------------------------------------------------------------------------------- FR-7
+#
+# The three sentences are the only graded element on the page with no figure behind them, so
+# nothing about the render fails when they are missing — the page just quietly says less. The
+# guards are therefore structural, and there are three: this module, the CI publish guard, and
+# a loud red placeholder on the page itself.
+#
+# Both strings are plain ASCII and describe the SCAFFOLD, never the prose. A guard that
+# quoted a sentence would be orphaned the first time its author changed a word — which is
+# exactly how the IV caption's guard broke (T-45).
+COMMENTARY_PAGE_MARKER = "osl-commentary"
+
+
+def test_the_three_sentences_are_written():
+    """FR-7's content, which no session may author (PRD guardrail #6, CLAUDE.md).
+
+    Red until the PO writes them, deliberately: this is the last P0 gap, and a test is the
+    only thing on this project that reliably says "not done" out loud. It goes green the
+    moment `commentary.SENTENCES` is filled in — nothing else has to change.
+    """
+    from options_surface_lab import commentary
+
+    assert len(commentary.QUESTIONS) == 3, "the brief asks exactly three questions"
+    assert len(commentary.SENTENCES) == len(commentary.QUESTIONS), (
+        "one sentence per question, in order — a short tuple silently drops a question"
+    )
+    unwritten = [i + 1 for i, s in enumerate(commentary.SENTENCES) if not s.strip()]
+    assert not unwritten, (
+        f"FR-7 sentence(s) {unwritten} are unwritten. Write them in "
+        f"options_surface_lab/commentary.py - the PO authors these personally; a session "
+        f"may scaffold the placement but never the prose."
+    )
+    # "specific to the actual data shown ... not generic filler" (PRD FR-7 acceptance). A
+    # length floor cannot judge that, but it does catch a slot filled in to silence the test.
+    for i, sentence in enumerate(commentary.SENTENCES, start=1):
+        assert len(sentence.strip()) >= 40, f"sentence {i} is too short to answer its question"
+
+
+def test_the_published_page_carries_the_commentary():
+    """FR-7 on the deliverable (T-12).
+
+    Checked on the built artifact for the reason every other page test here is: the Reflex app
+    and the published page are two renderings of one design, only one of them is graded, and
+    this project's worst defects have all been deploy-only.
+    """
+    from options_surface_lab import commentary
+
+    page = Path(__file__).resolve().parents[1] / "options_surface_preview.html"
+    if not page.exists():
+        pytest.skip("preview not built in this working tree")
+    html = page.read_text(encoding="utf-8", errors="ignore")
+
+    assert COMMENTARY_PAGE_MARKER in html, "the commentary block is missing from the page"
+    for question in commentary.QUESTIONS:
+        assert question in html, f"the page never asks {question!r}"
+
+    # Whether the sentences EXIST is `test_the_three_sentences_are_written`'s job, and it is
+    # red until they do. This one only has to catch a page built before the last edit, so it
+    # asks its question of a written module and stays quiet on an unwritten one — one red
+    # test naming one gap is a clearer signal than two.
+    if all(sentence.strip() for sentence in commentary.SENTENCES):
+        assert commentary.UNWRITTEN not in html, (
+            "the sentences are written but the page still shows the placeholder - rebuild it"
+        )
+        for sentence in commentary.SENTENCES:
+            assert sentence.strip() in html, "a written sentence never reached the page"
+    # Full width and under the hero row: the brief asks for the sentences "under the plot",
+    # and the plot is panel [1], which the sidecar shares a row with. Ordering is read off the
+    # markup, not off the bare class name -- the stylesheet defines `.osl-commentary` in the
+    # <head>, which sits before every panel and would make this assertion vacuously true.
+    block = html.index(f'class="{COMMENTARY_PAGE_MARKER}"')
+    assert block > html.index('id="osl-fig-2"'), (
+        "the commentary must sit below the hero row, not above it"
+    )
+    assert block < html.index('id="osl-fig-3"'), (
+        "the commentary drifted below the supporting panels - it belongs under the plot"
+    )
+    assert f'osl-w{T.W_FULL}' in html[html.index("<body>"):block], (
+        "the commentary panel has no full-width class, so CSS fails open and it renders one "
+        "column wide (DESIGN-BRIEF section 5, the deploy-only defect)"
+    )
+
+
+def test_both_renderings_read_the_same_commentary_module():
+    """One source, two renderings — the rule the panel captions have followed since T-47.
+
+    Restating the sentences in either renderer is how the dev app and the graded page would
+    come to say different things, which is this project's most-repeated defect class.
+    """
+    root = Path(__file__).resolve().parents[1]
+    for module in ("build_preview.py", "options_surface_lab/options_surface_app.py"):
+        src = (root / module).read_text(encoding="utf-8")
+        assert "commentary" in src.split("def ")[0], (
+            f"{module} does not import the commentary module — it must not restate FR-7's "
+            "text of its own"
+        )
+
+
+def test_the_ci_guard_refuses_to_publish_an_unwritten_page():
+    """Pin the publish guard to what the builder emits, as SYNTHETIC_MARKER already is.
+
+    The guard is a plain grep, so it can be orphaned by an edit it never sees. Both strings
+    are structural rather than prose for that reason, and ASCII so nothing escapes them.
+    """
+    from options_surface_lab import commentary
+
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    for phrase in (COMMENTARY_PAGE_MARKER, commentary.UNWRITTEN):
+        assert phrase.isascii(), f"{phrase!r} cannot survive a grep over the built page"
+        assert phrase in workflow, (
+            f"{phrase!r} is asserted of the page but the CI guard does not check it"
+        )

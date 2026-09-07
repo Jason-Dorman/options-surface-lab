@@ -282,9 +282,24 @@ titles. Three things worth carrying:
   in the other. `PANEL_STYLE` / `PANEL_HEADER_STYLE` deleted. Verified in a real Chromium:
   **0 defects across all 14 widths**, and Reflex switching 10 → 2 → 1 columns.
 
-**Next up:** **T-12** (the three PO-authored sentences, FR-7) — the last P0 gap, and the only
-rubric item with nothing on the page at all. Then M4: T-19/T-20/T-21/T-22. **213 tests
-green, no xfail.** Update this paragraph as things land (lockstep rule).
+T-12's scaffold landed 2026-09-06 (FR-7). An unnumbered full-width panel, "Reading the
+surface", sits directly under the hero row in **both** renderings and prints each of the
+brief's three questions above its answer. The text lives in
+`options_surface_lab/commentary.py` — prose, no imports, no logic — which both
+`build_preview.py` and the app import, so the graded page and the dev app cannot say
+different things. It is unnumbered because the indices name *figures* and are also the
+published page's listener addressing scheme (`osl-fig-{n}`); renumbering five panels to slot
+prose into the sequence would churn the page's only wiring for a decoration.
+
+**The three sentences themselves are still unwritten — only the PO may write them.** Until
+they are, `tests/test_build_preview.py::test_the_three_sentences_are_written` **fails on
+purpose** (214 tests, 1 red), the page prints `[unwritten]` in red, and the Pages workflow
+refuses to deploy. That is deliberate: FR-7 is the only graded element with no figure behind
+it, so its absence is invisible on a page that otherwise renders perfectly. All three guards
+go green the moment `SENTENCES` is filled in; nothing else has to change.
+
+**Next up:** the PO writes the three sentences (FR-7 / G-4, the last P0 gap), then M4:
+T-19/T-20/T-21/T-22. Update this paragraph as things land (lockstep rule).
 
 **Secrets:** `lseg-data.config.json` (repo root) holds the LSEG app-key. It is gitignored —
 never commit it, never print its contents, never copy it into anything that ships.

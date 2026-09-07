@@ -18,7 +18,7 @@ SYNTHETIC_MARKER = "synthetic panel"
 
 import pandas as pd
 
-from options_surface_lab import theme as T
+from options_surface_lab import commentary, theme as T
 from options_surface_lab.option_surface_plot import (
     X_AXIS_TITLE,
     X_MODES,
@@ -151,6 +151,12 @@ def main() -> Path:
                fig_surface, width=T.W_HERO, hero=True),
         _panel(2, f"{ticker} underlying", "spot context · 12 weeks · close = TRDPRC_1",
                fig_cs, width=T.W_SIDECAR),
+        # FR-7. Directly under the hero row, because the brief asks for three sentences
+        # "under the plot" and the plot is panel [1]. Full width and unnumbered: the indices
+        # name FIGURES, and they are also the listener's addressing scheme (`osl-fig-{n}`),
+        # so renumbering five panels to slot prose into the sequence would churn the page's
+        # only wiring for a decoration.
+        _commentary_panel(),
         # Header kept to one line: the name and note wrapped on the first build, which made
         # this panel 17px taller than the one beside it — visible on a hairline grid, since
         # panels deliberately do not stretch to their row. The rate lives in the figure's
@@ -243,6 +249,39 @@ def _panel(n: int, name: str, note: str, fig, width: int = None, hero: bool = Fa
         f'<div class="osl-panel-body"><div class="{fig_class}">{body}</div></div>'
         "</div>"
     )
+
+
+def _commentary_panel() -> str:
+    """FR-7's three sentences, in a panel of the same chrome as every other (T-12).
+
+    The text is `options_surface_lab/commentary.py` and nothing else — the PO writes it there,
+    the Reflex app reads the same module, so the graded page and the dev app cannot disagree.
+
+    A sentence is emitted as HTML rather than escaped: `<b>21.5%</b>` is how its author lifts
+    a number out of one. That is safe here in a way it would not be with user input — this is
+    a build-time constant in a file only the PO edits.
+    """
+    blocks = "".join(
+        '<div class="osl-commentary-item">'
+        f'<div class="osl-commentary-q">{question}</div>'
+        f'<div class="osl-note">{text if written else _unwritten(text)}</div>'
+        "</div>"
+        for question, text, written in commentary.answers()
+    )
+    return (
+        f'<div class="osl-panel osl-w{T.W_FULL}">'
+        '<div class="osl-panel-head">'
+        f'<div><span class="osl-panel-name">{commentary.PANEL_NAME}</span></div>'
+        f'<div class="osl-panel-note">{commentary.PANEL_NOTE}</div>'
+        "</div>"
+        f'<div class="osl-commentary">{blocks}</div>'
+        "</div>"
+    )
+
+
+def _unwritten(text: str) -> str:
+    """An empty slot renders loudly, and greppably — the CI guard refuses to publish it."""
+    return f'<span class="osl-commentary-todo">{text}</span>'
 
 
 FIG_ID_PREFIX = "osl-fig-"

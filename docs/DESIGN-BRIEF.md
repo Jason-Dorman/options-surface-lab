@@ -152,7 +152,10 @@ does. This adds a second CDN to the published page alongside Plotly's; see §7.
 │  │[Strike (K) ▾]  3D point cloud, 600px │ │         600px to match          │
 │  └────────────────────────────────────────┘ │                                 │
 │  ──────────── as-of slider ────────────    │                                 │
-├───────────────────────────┬────────────────┴─────────────────────────────────┤
+├──────────────────────────────────────────────────────────────────────────────┤
+│ READING THE SURFACE                      author's commentary · 10 cols       │
+│   three sentences side by side — no [n]: the numbers name figures            │
+├───────────────────────────┬──────────────────────────────────────────────────┤
 │ [3] IMPLIED VOL · DERIVED 5 │ [4] MARK VS PRINT                            5 │
 │   smile, one curve/expiry   │                                                │
 ├───────────────────────────┴──────────────────────────────────────────────────┤
@@ -196,6 +199,15 @@ defines.
   the sidecar on 2026-09-02 — the candlestick was too narrow to read, and the surface gives up
   very little going from 7 to 6.) The sidecar reads `HERO_FIGURE_HEIGHT`, so the row ends
   level instead of ragged.
+- **The three sentences sit directly under the hero row** (FR-7, T-12), full width and
+  **unnumbered**. The brief asks for them "under the plot", and the plot is panel [1] — which
+  shares its row with the sidecar, so "under" is the next full-width slot. They carry no index
+  for two reasons: the numbers name *figures*, and those same indices are the published page's
+  listener addressing scheme (`osl-fig-{n}`), so slotting prose into the sequence would
+  renumber five panels and churn the page's only wiring for a decoration. Inside, the block is
+  a three-column auto-fit grid rather than one long line — a 12.5px sentence across ten columns
+  is a ~1300px measure. It needs no `FIGURE_MIN_WIDTH` floor, because prose reflows where a
+  figure's chrome collides.
 - **Panels are never stretched to their row** (`align-items: start`), and `HERO_FIGURE_HEIGHT`
   is 600, not 760. At 760 the 3D scene gained only empty background, while the sidecar
   candlestick — which needs far less height — was stretched to match and left a visibly dead
@@ -347,6 +359,7 @@ judgement calls; they are executable now.
 
 | Date | Change |
 |---|---|
+| 2026-09-06 | **FR-7's commentary panel (T-12).** An unnumbered full-width prose panel under the hero row, in both renderings, each of the brief's questions printed above its answer. No new palette entry: it reuses the `.osl-note` prose style scaffolded when the grid was built, with the question styled as a readout label and `<b>` inside a sentence taking the amber — emphasis in prose is chrome, not a data channel (§6 rule 2). One genuinely new state: an **unwritten** sentence renders in `NEGATIVE`, loudly, because this is the only graded element on the page with no figure behind it and its absence would otherwise look like a design choice. |
 | 2026-09-04 | **The page holds its shape at every width (T-47).** A 14-viewport audit found 131 layout defects, one of them at every width. Three changes, all PO-chosen: **captions are HTML** in the panel, not annotations in the plot, so they wrap instead of colliding or clipping — that band is now empty by rule, and `CAPTION_Y*` / `LEGEND_ROW` / `LEGEND_BOX_PAD` / `LEGEND_ENTRIES_PER_ROW` / `theme.caption()` are deleted along with the arithmetic that policed them; a **width floor** (`FIGURE_MIN_WIDTH`, `HERO_MIN_WIDTH`) below which a panel scrolls rather than squeezing a figure into a shape its own chrome cannot fit; and a **third grid band** at `BREAK_TWO_COL` (1400px) so a 1366px laptop stops crowding the 6+4 split. The Reflex app now renders this stylesheet and these class names instead of restating the chrome as inline props — it had no breakpoints at all — so `PANEL_STYLE` and `PANEL_HEADER_STYLE` are gone. Audit after: 0 defects across 14 widths. |
 | 2026-09-04 | **FR-12's spot plane (T-18).** One new palette entry, `SPOT_PLANE` — slate, deliberately outside both the data and the chrome families, because the plane is a *ruler* and has to read as neither (§3, rule 6). It is also the hero's **seventh** legend entry: the legend wrapped to two rows and the caption at `CAPTION_Y_OVER_LEGEND` printed over its panel — the 2026-09-02 defect below arriving by a route a single token could not see. The clearance a caption needs depends on how many entries the legend has, so it is now `LEGEND_ROW` + `LEGEND_BOX_PAD` arithmetic with a token per row count (`CAPTION_Y_OVER_LEGEND_2`), and the test does the sum — deriving the row count from the figure's own entries via `LEGEND_ENTRIES_PER_ROW` rather than from a number a human typed, since the entry count is exactly what changed (T-46). |
 | 2026-09-02 | Adopted. First pass shipped ice-blue chrome and a single-column layout; the PO corrected both — "Bloomberg" meant the **page layout**, and the font colours needed to change. Amber type and the panel grid replaced them; puts moved off amber onto the blue-shift rule (§3). Navy ground unchanged throughout. |

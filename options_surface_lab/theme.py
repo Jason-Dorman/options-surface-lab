@@ -615,9 +615,31 @@ PAGE_CSS = f"""
   .osl-figure {{ min-width:{FIGURE_MIN_WIDTH}px; }}
   .osl-figure-hero {{ min-width:{HERO_MIN_WIDTH}px; }}
 
-  /* ---- prose blocks sit in the grid like any other panel ---- */
+  /* ---- FR-7's commentary: prose in a panel, one column per question (T-12) ----
+     Three columns on a wide screen, one on a phone. A 12.5px sentence run across all ten
+     columns is a ~1300px measure, which is unreadable in a way a figure is not — and unlike
+     `.osl-figure` this block needs no width floor, because prose reflows instead of
+     colliding with its own chrome. */
+  .osl-commentary {{
+    padding:{PANEL_PAD};
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:14px;
+  }}
+  /* A grid item that will not blow its track out: `min-width:0` for the same reason
+     `.osl-panel` carries it — a long unbroken token otherwise widens the column. */
+  .osl-commentary-item {{ min-width:0; }}
+  /* The assignment's question, above the answer, so a reader who has never seen the brief
+     knows what is being answered. Same treatment as a readout's label. */
+  .osl-commentary-q {{
+    font-family:{FONT_MONO}; font-size:10px; letter-spacing:1.2px; text-transform:uppercase;
+    color:{TEXT_MUTED}; margin-bottom:5px;
+  }}
+  /* The sentence itself. `<b>` is how its author lifts a number out of it — amber as
+     emphasis in prose, which is chrome, not a data channel (DESIGN-BRIEF section 6 rule 2). */
   .osl-note {{ color:{TEXT}; font-size:12.5px; line-height:1.55; }}
   .osl-note b {{ color:{ACCENT}; font-weight:600; }}
+  /* An unwritten sentence is LOUD. This is the one requirement on the page with no figure
+     to prove it is there, so its absence must not look like a design choice. */
+  .osl-commentary-todo {{ color:{NEGATIVE}; font-family:{FONT_MONO}; font-weight:700; }}
 
   .osl-warn {{
     background:{_rgba(NEGATIVE, 0.14)}; border:1px solid {NEGATIVE}; color:{NEGATIVE};

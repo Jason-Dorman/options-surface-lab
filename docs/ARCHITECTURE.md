@@ -160,11 +160,21 @@ hardcoded hex values.
 **`options_surface_lab/theme.py`** — design tokens
 Semantic palette, font stacks, layout metrics, and the shared `figure_layout()` / `title()` /
 `caption()` / `axis()` / `scene()` / `legend()` / `slider()` / `menu()` builders (`menu()` is
-FR-10's axis control, added 2026-09-04 with T-16). Also carries the two
-non-Plotly surfaces: `PANEL_STYLE` / `PANEL_HEADER_STYLE` for Reflex props and `PAGE_CSS`
-(the terminal grid) for the static page. Imports nothing
+FR-10's axis control, added 2026-09-04 with T-16). Also carries `PAGE_CSS`, the one
+stylesheet BOTH renderings render — the Reflex page injects it and uses the same `osl-*`
+class names as the static builder, so a responsive rule cannot be right in one product and
+missing in the other. *(This entry named `PANEL_STYLE` / `PANEL_HEADER_STYLE` until
+2026-09-06; T-47 deleted them on 2026-09-04 and the line was left behind.)* Imports nothing
 project-local. Landed 2026-09-02 (T-13); direction in [DESIGN-BRIEF.md](DESIGN-BRIEF.md).
 The restyle happens here and only here — `tests/test_theme.py` enforces that mechanically.
+
+**`options_surface_lab/commentary.py`** — FR-7's prose
+The three sentences the assignment asks for under the plot, and the questions they answer.
+Imports nothing and is imported by both renderings, so the published page and the dev app
+cannot disagree about what the page says — the rule the panel captions follow (T-47), applied
+to the one piece of content a session may not author (T-12).
+*Does not belong here:* anything computed. A number in a sentence is typed by its author,
+because a number the page derives is a *readout* and belongs in the strip.
 
 **`build_preview.py`** (repo root) — **the deliverable**
 Assembles the figures, the terminal chrome and the as-of payload into the single
@@ -385,6 +395,7 @@ architecture change (§5, §6 first).
 |---|---|---|
 | Change colors / fonts / look | `theme.py` only | figure builders, app |
 | Change the page arrangement | `theme.PAGE_CSS` + the width/height tokens + the two `_panel()` composers (app, builder) | figure builders |
+| Change the three sentences under the plot (FR-7) | `options_surface_lab/commentary.py` — **PO only** | both renderers: neither may restate the text |
 | Add a figure to a panel | the builder, then `as_panel_figure()` at **both** call sites (app + `build_preview`) | the height tokens — a figure taller than its panel overflows it |
 | Add or modify a figure | `option_surface_plot.py` (+ page slot in app) | utils internals |
 | Add a derived column / stat / model (e.g. IV) | `option_surface_utils.py` + tests | plot, app |

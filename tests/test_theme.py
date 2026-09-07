@@ -465,6 +465,8 @@ CONTRAST_PAIRS = [
     ("TEXT_MUTED on SURFACE_ALT", T.TEXT_MUTED, T.SURFACE_ALT),  # axis ticks, panel headers
     ("TEXT on SURFACE_ALT", T.TEXT, T.SURFACE_ALT),
     ("ACCENT on SURFACE", T.ACCENT, T.SURFACE),
+    ("TEXT on SURFACE", T.TEXT, T.SURFACE),          # FR-7's commentary sentences
+    ("NEGATIVE on SURFACE", T.NEGATIVE, T.SURFACE),  # ... and its unwritten placeholder
     ("ACCENT on BG", T.ACCENT, T.BG),
     ("MARK on SURFACE_ALT", T.MARK, T.SURFACE_ALT),
     ("TRADE on SURFACE_ALT", T.TRADE, T.SURFACE_ALT),

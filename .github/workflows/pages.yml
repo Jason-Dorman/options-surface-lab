@@ -104,6 +104,17 @@ jobs:
           for phrase in "American exercise ignored" "no dividends" "European Black-Scholes" "Not a tradable price"; do
             grep -q "$phrase" "$page" || { echo "::error::the IV panel shipped without its assumptions caption ($phrase)"; exit 1; }
           done
+          # FR-7's three sentences are the one graded element with no figure behind them,
+          # so their absence is invisible on a page that otherwise renders perfectly. The
+          # block must be there, and no slot may still be empty. Both strings are plain
+          # ASCII and structural rather than prose, so a copy edit to the sentences
+          # themselves cannot orphan the guard (see IV_PAGE_MARKERS above for how that
+          # happened once). tests/test_build_preview.py pins both to the page.
+          grep -q "osl-commentary" "$page" || { echo "::error::FR-7's commentary block is missing from the page"; exit 1; }
+          if grep -qF "[unwritten]" "$page"; then
+            echo "::error::an FR-7 sentence is still unwritten — see options_surface_lab/commentary.py"
+            exit 1
+          fi
           # The as-of slider drives the whole page (AD-5). Without the frames payload and its
           # listener the hero moves and every other panel stays on its build-time date, which
           # renders perfectly and shows two different as-of dates at once — invisible to the

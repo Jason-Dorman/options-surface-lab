@@ -41,9 +41,16 @@ Run everything **from the repo root**.
 
 ```bash
 python build_preview.py    # static HTML preview → options_surface_preview.html (verified)
-python -m pytest tests/ -q # test suite - 90 tests, all green
+python -m pytest tests/ -q # test suite
 reflex run                 # local dev server — see §4 for first-run expectations
 ```
+
+**Editing the three sentences (FR-7).** They live in `options_surface_lab/commentary.py` and
+nowhere else — fill in `SENTENCES`, then `python build_preview.py` to see them on the page.
+Both the published page and `reflex run` read that module, so there is nothing to keep in
+sync. Leave one empty and the page prints `[unwritten]` in red, `pytest` fails, and the
+Pages workflow refuses to deploy — on purpose: it is the one graded element with no figure
+to prove it is there.
 
 No real cache present → the app/preview run on the **synthetic panel** and say so in their
 banner. That is expected until T-7.

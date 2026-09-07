@@ -36,7 +36,7 @@ from options_surface_lab.option_surface_utils import (
     summarize_sparsity,
     synthesize_demo_payload,
 )
-from options_surface_lab import theme as T
+from options_surface_lab import commentary, theme as T
 from options_surface_lab.option_surface_plot import (
     X_MODE_LABEL,
     X_MODES,
@@ -665,6 +665,42 @@ def _panel(
     )
 
 
+def _commentary_panel() -> rx.Component:
+    """FR-7's three sentences (T-12). Mirrors `build_preview._commentary_panel` node for node.
+
+    The text comes from `commentary.py`, which both renderings import, so the dev app and the
+    graded page cannot end up saying different things — the rule the panel captions have
+    followed since T-47. It is plain content, not State: nothing about it moves with the
+    as-of date, so there is nothing for a handler to recompute.
+
+    `rx.html` rather than a text node because a sentence may carry `<b>` around a number;
+    this is a build-time constant from a file only the PO edits, not user input.
+    """
+    return rx.box(
+        rx.el.div(
+            rx.el.div(rx.el.span(commentary.PANEL_NAME, class_name="osl-panel-name")),
+            rx.el.div(commentary.PANEL_NOTE, class_name="osl-panel-note"),
+            class_name="osl-panel-head",
+        ),
+        rx.box(
+            *[
+                rx.box(
+                    rx.el.div(question, class_name="osl-commentary-q"),
+                    rx.html(
+                        text if written
+                        else f'<span class="osl-commentary-todo">{text}</span>',
+                        class_name="osl-note",
+                    ),
+                    class_name="osl-commentary-item",
+                )
+                for question, text, written in commentary.answers()
+            ],
+            class_name="osl-commentary",
+        ),
+        class_name=f"osl-panel osl-w{T.W_FULL}",
+    )
+
+
 def index() -> rx.Component:
     return rx.box(
         # ONE stylesheet for both renderings (T-47). The panel grid, its three responsive
@@ -789,6 +825,9 @@ def index() -> rx.Component:
             ),
             _panel(2, "Underlying", "spot context - close = TRDPRC_1",
                    State.fig_stock, HERO_H, width=T.W_SIDECAR),
+            # FR-7: the three sentences sit directly under the hero row, because the brief
+            # asks for them "under the plot". Unnumbered -- the indices name figures.
+            _commentary_panel(),
             # Row 2: the same cloud read through a model, beside the evidence that the
             # mark is not the print. The smile sits directly under the surface it comes
             # from (PO, 2026-09-04) -- it is a transform of that price, not new data.
