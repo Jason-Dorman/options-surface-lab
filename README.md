@@ -1,161 +1,82 @@
-# MENG FinTech · Algorithmic Trading II
+# Options Surface Lab
 
-# Assignment 1.1 — Option Surface Lab
+**MENG FinTech · Algorithmic Trading II — the semester's site.** One static site on GitHub
+Pages that gains a page per assignment, built from Python and committed market data, with no
+server behind it.
 
-| Field | Value |
-|---|---|
-| Assigned | Class 1 |
-| Checkpoint | Start of Class 2 — 3-minute live demo. Show progress, ask questions. The site does not have to be published yet. |
-| Due | Friday, Sep 04 at midnight |
-| Collaboration | Discussion encouraged. Code must be yours (AI-assisted is yours). |
-| AI use | Fully permitted and expected. You own every line you submit. |
-| Submission | Push to your GitHub repo; the site must render. Submit the link on Canvas. |
+**Live:** https://jason-dorman.github.io/options-surface-lab/
 
-This is the first layer of an app that will keep growing all semester. Every homework adds something to the same Reflex site.
+*This file is the front door: what the project is, what is on the site, how to run it, and
+where the real documents are. It is a living summary and never the authority — the documents
+under [docs/](docs/) are. Keep it current (the lockstep rule in [CLAUDE.md](CLAUDE.md)).*
 
-The job this week is options data — including **expired** contracts — plus the Reflex workflow you will use for the rest of the course.
+## What is on the site
 
-> **What you are actually going to discover:** options data is sparse. Many 
-> of the contracts you want have no price on the day you want it for the 
-> strike you want. That is the nature of the instrument. Simulating a realistic 
-> fill on an option that barely trades requires the volatility surface, 
-> which is next week. For example, what was the price of the near-the-money 
-> contract on *morning*, not the close?
-> This week you only need to *see* the holes. For the next assignment we 
-> will fold in the volatility surface and calculate reasonable simulated fills.
-
-## Learning objectives
-
-- Pull and cache historical prices for expired option contracts.
-- Treat options data as sparse and misleading, not as a filled sheet.
-- Build an interactive Reflex app with charts and widget switches.
-- See, concretely, where the data runs out.
-
-## What to turn in
-
-A Reflex page (AI is allowed and expected) that:
-
-1. Loads the cached LSEG frame. Do not re-pull unless the pickle is missing.
-2. Parses each RIC into `{underlying, expiry, put/call, strike}` and a tidy long table: one row per contract per date. `parse_option_ric()` already knows the scheme in Appendix A.
-3. Shows a 3D figure of puts or calls for one as-of date.
-4. Plots **both** `SETTLE` and `TRDPRC_1` so a stranger can see they are not the same series.
-5. Prints two numbers on the page:
-   - percent of listed series that day with a settle and **no** trade
-   - median `|SETTLE − TRDPRC_1|` on series that have both
-6. Changes the color scheme and format into a graphical identity that you 
-   like and are happy with. Be as creative as you want.
-
-Write three sentences under the plot:
-
-- Where is the cloud of price data dense, and where is it empty?
-- Why is interpolating across empty cells dangerous on a $0.50 strike grid for a name like UUUU?
-- Which field will you treat as the mark next week, and which field will you treat as evidence that someone traded?
-
-and think to yourself:
-- On a strike that has a settle and no print, what price would you actually 
-  get filled at? (You do not know. That is the answer. You can take a shot 
-  at this but it won't be graded until Homework 1.2 is turned in)
-
-The site must render from your GitHub repo. Checkpoint is a live demo, not a 
-finished publish. Just get as far as you can becuase its a great chance to 
-ask questions. Distance students: send a teams message to the instructors 
-and we'll schedule your three minutes!
-
-## The two prices you are not allowed to confuse
-
-- `TRDPRC_1` — last **trade** on that RIC that day. Missing on most listed strikes. When it exists it is one print, not a mark.
-- `SETTLE` — exchange **settlement / official mark**. Exists on far more series than trades. Used for margining and for “the close.” On a name that barely trades it is still a model-ish number.
-
-If you feed `TRDPRC_1` into a surface and then read prices off the holes, you are pricing off prints that did not happen.
-
-## What the 3D plot is doing
-
-- **X** strike, **Y** days to expiry, **Z** option price in dollars.
-- Cyan: `SETTLE`.
-- Magenta diamonds: `TRDPRC_1`.
-- Translucent sheet: linear interpolation of the settles. That sheet is **not** the market. Toggle it off.
-
-The occupancy heatmaps underneath are the honest picture. Dark cells never had a number.
-
-## Files in this lab
-
-When you build this, make sure it has the following file structure. * can be 
-whatever you want it to be; e.g., "homework1", or nothing, but there must be a 
-`*app.py`, a `*data.pkl` for your data, `*utils.py` for your workhorse 
-functions, and a `*plot.py` for your plotting code.
-
-| File        | What it is                                                                                                      |
-|-------------|-----------------------------------------------------------------------------------------------------------------|
-| `*app.py`   | Reflex page. Keep `option_surface_utils.py` and `option_surface_plots.py` next to it.                           |
-| `*data.pkl` | Your LSEG cache. Used if present. If missing, the app synthesizes a sparse UUUU-like panel so you can still plot. |
-| `*utils.py` | Helper functions                                                                                                |
-| `*plot.py`  | Contains all your plots
-You can also output a `preview.html` file if Reflex is being annoying and 
-you find it helpful.
-
-Starter script builds RICs synthetically. It does **not** query the 
-derivatives chain. That endpoint does not reliably return expired contracts. 
-Do not spend time on it unless you enjoy frustration.
-
-## Helpful guidance
-
-### Parse the RICs
-
-The options frame comes back with RIC strings as column names. Turn each one into `(underlying, expiry, type, strike)` and melt to long format.
-
-The starter builds identifiers instead of walking a chain, because the chain endpoint fails on expired contracts.
-
-```
-{ROOT}{M}{DD}{YY}{SSSSS}.U^{M}{YY}
-```
-
-| Element | Meaning |
-|---|---|
-| `ROOT` | Underlying root, uppercase (e.g. `UUUU`) |
-| `M` | Month letter: `A–L` = Jan–Dec **calls**; `M–X` = Jan–Dec **puts** |
-| `DD` | Two-digit expiration day |
-| `YY` | Two-digit year |
-| `SSSSS` | Strike × 100, zero-padded to five digits (`$12.50` → `01250`) |
-| `.U` | Exchange / venue qualifier |
-| `^{M}{YY}` | Expired-contract suffix; repeats the month letter and year |
-
-Example: `UUUUA1502601250.U^A26` is the UUUU 15-Jan-2026 **call** struck at $12.50.
-
-Synthetic construction means many of the RICs you generate never existed. Request in batches, tolerate failures, fall back to single RICs when a batch throws. The starter already does this.
-
-### Two things to be aware of
-
-- The starter generates a candidate for every Friday in the window. If your name only lists monthlies, most of those come back empty. That is expected.
-- If the underlying split inside your window, the synthetic RICs will not find the adjusted contracts. Check. If it split, pick something else.
-
-If the pull is uncomfortably slow, the starter is taking the high and low across the **entire** window and generating every strike in between for every expiry. Banding strikes per expiry cuts the request count a lot. Optional, but it will save you time.
-
-## Stretch (not required)
-
-- Slice by moneyness (`K / S`) instead of raw strike so two dates are comparable.
-- Invert Black–Scholes on the settles to get a crude IV surface. Use a constant rate. Write down what you assumed. Next week: that IV still is not the price you can trade.
-- Overlay the underlying close on the as-of date as a vertical plane at `K = S`.
-
-## Do not
-
-- Do not treat a linearly interpolated sheet as bid or ask.
-- Do not drop rows with missing `TRDPRC_1` and then claim the remaining cloud is “the” surface.
-- Do not use `CLOSE` and `SETTLE` as synonyms without checking the field list. This pull requested `TRDPRC_1` and `SETTLE` only.
-- Do not spend time on the LSEG derivatives-chain endpoint for expired contracts. It has already been tried.
-
-## Appendix A — OPRA month codes
-
-| Month | Call | Put |
+| Page | Assignment | State |
 |---|---|---|
-| Jan | A | M |
-| Feb | B | N |
-| Mar | C | O |
-| Apr | D | P |
-| May | E | Q |
-| Jun | F | R |
-| Jul | G | S |
-| Aug | H | T |
-| Sep | I | U |
-| Oct | J | V |
-| Nov | K | W |
-| Dec | L | X |
+| `/` — **the options surface** | [Assignment 1.1](docs/archive/ASSIGNMENT-1.md): expired-options sparsity on UUUU, the mark (`MID_PRICE`) against the print (`TRDPRC_1`) | **Live.** Seven panels: a 3D price surface with an as-of slider over 53 trading days that drives the whole page, the underlying, an implied-vol smile, mark-vs-print, spread, and two occupancy grids. Headline: **1,601 of 7,458 listed contract-days (21.5%) carry a mark with no trade.** |
+| `/covered-call/` — **covered call backtest** | [Assignment 2](docs/ASSIGNMENT-2-COVERED-CALL.md): long 100 shares, short 1 weekly call; blotter, ledger, Reg T account, NAV path, mid-vs-print R², write-up | **In build — due Sunday 2026-09-20.** Underlying QQQ; the first live entry is booked Monday 2026-09-14. Board: [BACKLOG-2](docs/BACKLOG-2.md). |
+
+## How it works
+
+Market data is pulled from LSEG **once**, at development time, and committed as a cache
+(`option_pipeline_data.pkl`). Everything downstream is pure Python: pandas transforms → Plotly
+figures → one self-contained HTML page, rendered **at build time** by `build_preview.py` in
+CI and published to Pages. The browser never reads the cache and there is no backend, so every
+published interaction is Plotly-native — slider, legend, axis menu — plus one small inline
+listener that lets the hero's slider drive the other panels.
+
+Two things about the tree as it stands (2026-09-12):
+
+- A Reflex app (`options_surface_lab/options_surface_app.py`, `reflex run`) still exists as a
+  local viewer. **Its retirement is approved** — it was a second renderer of a page the static
+  builder already produces — and lands with [BACKLOG M5](docs/BACKLOG.md) (ARCHITECTURE
+  AD-10). Until then it runs, but nothing on the published site depends on it.
+- `build_preview.py` writes one page. Making it a multi-page generator (AD-11) is the same
+  milestone, and is what `/covered-call/` waits on.
+
+## Run it
+
+Python is the conda env **`algo`** (3.12). Commands are Git Bash syntax, from the repo root.
+
+```bash
+source /c/Users/rjd61/anaconda3/etc/profile.d/conda.sh && conda activate algo
+
+python build_preview.py     # THE DELIVERABLE — writes options_surface_preview.html (~32 s)
+python -m pytest tests/ -q  # 219 tests, all green, no xfail
+reflex run                  # local Reflex viewer (being retired — AD-10)
+```
+
+Everything runs **offline** off the committed cache; with no cache present, a seeded synthetic
+panel stands in and the page says so. Pulling data is a one-time, credential-dependent,
+human-run step — [RUNBOOK §3](docs/RUNBOOK.md). **Never re-pull when the cache exists**, and
+never commit `lseg-data.config.json` (the app-key; gitignored).
+
+## Where things are
+
+| Path | What |
+|---|---|
+| `options_surface_lab/option_surface_utils.py` | The transform core — RIC grammar, flatten / attach / pivot, sparsity stats, Black-Scholes inversion. Pure functions, no UI imports. |
+| `options_surface_lab/option_surface_plot.py` | One builder per figure, plus the published page's per-date payload. |
+| `options_surface_lab/theme.py` | Every colour, font and layout token; the one stylesheet. No visual literal lives anywhere else (tested). |
+| `options_surface_lab/commentary.py` | The PO's three sentences (FR-7) — prose only. |
+| `build_preview.py` | The static page builder. CI runs it. |
+| `option_pipeline_data.pkl` | The committed LSEG cache: 296 series × 53 days. A frozen artifact. |
+| `tests/` | 219 tests; the pure functions first, then everything a defect could reach the page through. |
+| `notebooks/` | Exploration and evidence, numbered by assignment. Consume the package; never a dependency. |
+| `.github/workflows/pages.yml` | pytest in a clean container with no credentials → build → guards → Pages. |
+
+## The documents
+
+Read in this order; the higher one wins on a conflict.
+
+| | Document | Holds |
+|---|---|---|
+| 1 | [docs/ASSIGNMENT-2-COVERED-CALL.md](docs/ASSIGNMENT-2-COVERED-CALL.md) · [docs/archive/](docs/archive/) | The instructor's briefs — rubric, deadlines, domain rules. Never edited. Finished assignments' briefs live in the archive. |
+| 2 | [docs/PRD.md](docs/PRD.md) | Requirements (FR-x), priorities, acceptance criteria, gaps, milestones, open questions — Part A is 1.1, Part B is the covered call |
+| 3 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/SYSTEM-SPEC.md](docs/SYSTEM-SPEC.md) · [docs/SPEC-COVERED-CALL.md](docs/SPEC-COVERED-CALL.md) | Layers, decisions (AD-x), the "where does my change go" table · schemas, algorithms, edge cases (1.1) · the book: tape, loop, fills, Reg T, invariants (covered call) |
+| 4 | [docs/ENGINEERING-PRINCIPLES.md](docs/ENGINEERING-PRINCIPLES.md) · [docs/DESIGN-BRIEF.md](docs/DESIGN-BRIEF.md) | Code standards · the graphical identity and the rules it may not break |
+| 5 | [docs/BACKLOG.md](docs/BACKLOG.md) · [docs/BACKLOG-2.md](docs/BACKLOG-2.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md) | The task boards — 1.1 + restructure · covered call (one T-x sequence) · procedures |
+| — | [CLAUDE.md](CLAUDE.md) | Working agreement for AI-assisted sessions: constraints, the PO's role, what has been learned |
+
+AI-assisted throughout; every line is owned and explainable by the PO (PRD guardrail #6).

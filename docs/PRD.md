@@ -1,4 +1,7 @@
-# PRD — Options Surface Lab (Assignment 1.1)
+# PRD — Options Surface Lab
+
+**Part A (§1–§12) — Assignment 1.1, the options surface · Part B (§13–§20) — Assignment 2,
+the covered-call backtest** (added 2026-09-12). Requirement IDs are one sequence across both.
 
 | Field | Value |
 |---|---|
@@ -7,7 +10,7 @@
 | Status | Draft v1 — 2026-08-29 |
 | Checkpoint | Start of Class 2 — 3-minute live demo (site need not be published) |
 | Due | Friday, Sep 04 2026, midnight — GitHub repo + rendering site, link on Canvas |
-| Companion docs | [ENGINEERING-PRINCIPLES.md](ENGINEERING-PRINCIPLES.md), assignment brief in root [README.md](../README.md) |
+| Companion docs | [ENGINEERING-PRINCIPLES.md](ENGINEERING-PRINCIPLES.md); the briefs — [archive/ASSIGNMENT-1.md](archive/ASSIGNMENT-1.md) (Part A's, archived 2026-09-12) and [ASSIGNMENT-2-COVERED-CALL.md](ASSIGNMENT-2-COVERED-CALL.md) (next) — moved here from the repo root on 2026-09-12 |
 
 This is a **build guide**, not a formal product doc. It is written to steer AI-assisted
 development sessions: every requirement has an ID, a priority, and acceptance criteria.
@@ -17,16 +20,23 @@ Reference requirements by ID (e.g. "implement FR-6") when prompting.
 
 ## 1. Product vision (semester frame)
 
-One Reflex site that grows all semester. Each homework adds a layer to the same app:
+One site that grows all semester — static on Pages, one page per homework. *(Was "one
+Reflex site". The site has been static since AD-4; AD-10, approved 2026-09-12, retires the
+Reflex page that had survived as a second renderer.)* Each homework adds a page:
 
 - **1.1 (this PRD):** historical expired-options data, sparsity made visible, `MID_PRICE` (the closing NBBO midpoint) vs `TRDPRC_1` (the last print) — the pairing the revised README names directly.
 - **1.2 (next):** volatility surface + simulated fills on strikes that never printed.
+- **Covered call backtest (the brief that arrived, 2026-09-11):**
+  [ASSIGNMENT-2-COVERED-CALL.md](ASSIGNMENT-2-COVERED-CALL.md) — blotter, ledger, Reg T
+  account, NAV path, mid-vs-print R², write-up. Lands at `/covered-call/` on the same site
+  (AD-11). Requirements in Part B (§13–§20); board in [BACKLOG-2.md](BACKLOG-2.md).
 - **Later:** unknown, but the pattern is set — each assignment becomes a page or section.
 
 Architectural implications for *this* week:
 
-- Multi-page-ready: `rx.App` + `add_page` per assignment; 1.1 lives at `/` for now and can
-  move to its own route later without rework.
+- Multi-page-ready: ~~`rx.App` + `add_page` per assignment~~ a page registry in the static
+  generator (AD-11, approved 2026-09-12); 1.1 stays at `/` so the submitted URL keeps
+  working, and each later assignment gets its own route.
 - One shared **theme module** (palette, fonts, layout tokens) that every future page and
   figure imports. No hardcoded hex codes scattered through figures (they are today — fix).
 - `*utils.py` stays generic data-transform code; nothing UI-aware leaks into it, so 1.2 can
@@ -269,6 +279,9 @@ series — and the Canvas submission is in.
 **◐ 2026-09-03 — incognito verified by the PO.** All six figures present; the as-of slider
 moves and now drives the whole page (T-42), the legend toggles calls/puts and each series.
 The one clause still open is the Canvas submission.
+The repo-README clause was met 2026-09-12 (T-61): the root `README.md` is now the
+project's living front door — what it is, the live URL, how to run, where the documents
+are — and the 1.1 brief moved, unedited, to `docs/ASSIGNMENT-1.md`.
 
 > The old acceptance criterion said "assets loading under the `/<repo>/` base path". That is
 > not merely stale but **unmeetable**: the page is one self-contained file with no relatively
@@ -409,6 +422,10 @@ wall against the traces each step lights: 19 checks green, worst plane/cloud rat
   Pages bundle kept sane by curating pre-baked date variants; plotly.js may load from CDN.
 - **NFR-4 No-credential operation:** everything (app, preview, tests, export) must run on a
   machine without LSEG credentials, off the committed pickle or the synthetic fallback.
+- **NFR-5 Framework-free core** *(approved 2026-09-12, AD-10; the guard lands with T-50):* every page is a function of
+  `(data, params)` — figure builders, page builders and HW2's backtest engine are pure
+  callables, and no module in the package imports a web framework. Guarded by a test
+  (T-50). This is what keeps a future live app a thin layer rather than a rewrite.
 
 ## 8. Milestones
 
@@ -418,6 +435,8 @@ wall against the traces each step lights: 19 checks green, worst plane/cloud rat
 | M2 | Rubric complete | ~Sep 02 | FR-4–FR-8 done; site content final. |
 | M3 | Stretch built | ~Sep 03 | FR-10, FR-11, FR-12. |
 | M4 | Shipped | Sep 04, before midnight | FR-9: Pages live, Canvas submitted. |
+| M5 | Restructured for the semester | Before HW2 starts — approved 2026-09-12 (T-54) | AD-10 / AD-11: retire the Reflex page, acquisition as a CLI, the `(data, params)` rule + guard, the static builder as a multi-page generator with HW1 at `/`. Sequenced *before* HW2 by the PO (2026-09-12): multi-page is a prerequisite anyway, and refactoring a page with 219 tests is safer than refactoring under a half-built second page. |
+| M6 | HW2 — covered call backtest | Due as posted in Canvas | Brief: [ASSIGNMENT-2-COVERED-CALL.md](ASSIGNMENT-2-COVERED-CALL.md). Requirements in Part B (§13–§20); board in [BACKLOG-2.md](BACKLOG-2.md). |
 
 Task-level sequencing for these milestones lives in [BACKLOG.md](BACKLOG.md) (T-x IDs).
 
@@ -507,3 +526,243 @@ site with the rubric complete outranks it on the deadline.)
 - [◐] Pages URL renders in incognito: figures, toggles, numbers ✅ *(PO-verified 2026-09-03)* — the three sentences landed 2026-09-06 (G-4 / T-12); **re-verify the deployed page once that build publishes**
 - [ ] Canvas submission posted with the repo + site link
 - [ ] I can explain every line in the repo (guardrail #6)
+
+---
+
+# Part B — Assignment 2: Covered call backtest
+
+*Added 2026-09-12. Brief: [ASSIGNMENT-2-COVERED-CALL.md](ASSIGNMENT-2-COVERED-CALL.md).
+Behaviour: [SPEC-COVERED-CALL.md](SPEC-COVERED-CALL.md). Board: [BACKLOG-2.md](BACKLOG-2.md).
+IDs continue Part A's sequences (FR-13…, OQ-9…); new families: DR-x domain rules, SD-x
+strategy decisions, S-x stated simplifications, I-x invariants.*
+
+## 13. Vision and scope
+
+| Field | Value |
+|---|---|
+| Due | **Sunday 2026-09-20, 11:59 pm EST** (OQ-9, closed 2026-09-12). **And the first entry — 100 shares bought, the Friday call written — is booked live on Monday 2026-09-14** (PO; FR-21). Eight days from the governance landing. |
+| Graded | **100% the published site** — the Pages URL |
+| Rubric | Algorithmic entry + strike rule, wait through expiry **20** · clean blotter + ledger implementing those rules, simulated limit fills **25** · Reg T NAV / IM / MM / available funds / cash used like an account **20** · mid vs `TRDPRC_1` scatter + R² **15** · analysis **20** |
+
+**What we build:** one page, `/covered-call/`, that is *the book* of a covered-call strategy
+— long 100 shares, short 1 weekly call — on one underlying over ~10 weeks of hourly tape:
+blotter, ledger, Reg T account, NAV path with margin lines, the mid-vs-print evidence with
+R², and the write-up. The baseline is the brief's own loop (Monday combo, Friday resolve);
+complexity is P1 and comes after.
+
+**What the instructor says matters, in order:** logical consistency (no crazy or impossible
+trades, reasonable fills, the strategy does what it says), clarity of presentation, the
+requirements. Part B therefore ranks **correctness invariants (NFR-6) above the page, and the
+page above stretch** — a beautiful book with one impossible trade fails the first criterion.
+
+**The brief's thesis** — *"the small decisions are the assignment"* — is why §15 exists:
+every choice that shapes the book is named, given options and a recommendation, decided by
+the PO, and printed on the page (FR-14).
+
+**Reused from Part A, untouched:** the RIC grammar and builders (FR-3, T-31's suffix rule),
+cache-first and offline-everywhere (AD-1, NFR-4), fail-soft acquisition (AD-2), the pure core
+(AD-3, NFR-5), the theme (AD-6), honest holes (AD-9), the static generator (AD-11), and the
+Black-Scholes inverter for the P1 delta rule (FR-11).
+
+**Out of scope:** portfolio margin; live data on Pages; the brief's optional vol-curve
+fair-price fill unless every P0 line is green early; more than one name; any position size
+but 100 / 1.
+
+## 14. Domain rules — the book must never violate these
+
+From the brief, verbatim in spirit; each has a test (§17).
+
+1. **DR-1 — No bid/ask at the bar → no fill. Skip the week. Never invent a print.** *"The
+   worst mistake an algo trader can make."*
+2. **DR-2 — Fill at mid = (BID + ASK) / 2 at the order's timestamp**, limit at mid; the
+   stock leg fills at the bar's print.
+3. **DR-3 — Cash moves only when the blotter says so:** buy stock, collect premium, expire
+   at 0, assignment at strike. Nothing else touches cash.
+4. **DR-4 — Reg T, not portfolio margin:** IM = 50% of stock LMV, MM = 25%; the covered
+   call adds $0 to either. NAV = cash + stock MV + option MV, the short call negative.
+5. **DR-5 — The exit is to wait:** OTM expires, ITM is assigned at the strike and you are
+   flat next week. No other exit in P0.
+6. **DR-6 — Same bar size for stock and options.** Hourly.
+7. **DR-7 — Expiries come from the stock tape's last session per week**, never from a
+   calendar that does not know the holidays.
+8. **DR-8 — A blotter is a list of trades:** entries and exits only; no working orders, no
+   signals. Friday OTM is `EXPIRE`; Friday ITM is `ASSIGN` on the call and a stock `SELL` at
+   the strike.
+9. **DR-9 — Pages runs no LSEG.** The tape is pulled once, cached, committed; the page is
+   baked from the cache. A live pull on the published site is a defect.
+10. **DR-10 — Guess-and-check RICs fail soft** — an empty series, never a crash.
+
+## 15. Strategy decisions
+
+The PO's (SD-x): options, a recommendation, and a status. Fixed-by-the-brief or stated
+simplifications (S-x) follow; those need no decision, only printing.
+
+| ID | Decision | Options | Recommendation | Status |
+|---|---|---|---|---|
+| **SD-1** | Underlying | AAPL (the brief's proven RICs) · SPY / QQQ (ETFs, no earnings gap) · MSFT / NVDA | *Was AAPL, for the de-risked pull.* | **✅ QQQ — PO, 2026-09-12.** RIC `QQQ.O`, root `QQQ`. Consequences: no earnings gap; QQQ lists **daily** expiries, so only the Friday contracts are requested and booked; $1 strikes near the money (T-62 confirms); 100 shares ≈ 100 × spot, so SD-3's round figure is set from Monday's print; the quarterly distribution's ex-date (late September in a normal year) sits near the live book and is named (S-6). The brief's proven RICs are AAPL, so **T-62 must prove the QQQ root and format** before the pull. |
+| **SD-2** | Window | **Most recent 10 full weeks** ending on the latest Friday whose contracts resolve under the expired RIC form. **Part A's window** (Jun–Aug) for narrative symmetry. | **Most recent, ending 2026-09-11** (`2026-07-06 → 2026-09-11`), so the historical book hands off to the live book that opens 2026-09-14 (FR-21) with no gap. The 09-11 contracts expired yesterday — T-62 checks they already resolve under the expired form; if not, end 09-04 and say so. The end must be an expiry session (SPEC §3.2). If hourly history is shallower than 10 weeks, the window shrinks and the page says so. | ☐ PO — **before Monday** |
+| **SD-3** | Starting cash | **Fully funded:** a round figure just above 100 × the first entry print (≈ 100 × QQQ's spot, rounded up to the next $5,000). **Margin-funded:** ~60% of that, so the account carries a debit and the "available funds" line is live. | **Fully funded.** Logical consistency is 45 points; a debit balance brings margin interest and a decision the brief did not ask for. The Reg T lines are still computed and plotted, the `NEG_AVAILABLE` check is implemented and simply never fires — and the write-up can say what would change at 60%. Margin-funded is a P1 variant if wanted. | ☐ PO |
+| **SD-4** | Entry bar *(decides the clock time of Monday's live entry)* | **First hourly bar** of the week's first session (the open — wide spreads, worst mids). **Last hourly bar** (the closing hour — tightest spreads, most reliable prints, both legs quoted). | **Last bar of the first session.** The brief allows "Monday open or close"; the close is the bar where a mid is most defensible, which is the whole fill assumption. Holiday Mondays are handled by DR-7, not by this choice. | ☐ PO |
+| **SD-5** | Strike rule | **Nearest OTM** (ATM if spot sits on a strike) — the brief's baseline, full credit. **Delta-target** (e.g. 30Δ via the 1.1 inverter) — fewer assignments, less premium, needs an IV per strike per entry. **Fixed % OTM.** | **Nearest OTM for P0**, exactly as the brief writes it; if the chosen strike has no valid quote the week is **skipped**, not walked to the next strike (DR-1 — walking would be a different rule). **Delta-30 as the P1 comparison** (FR-20): we already own the inverter, and "too close and you lose the upside" is the tension the brief wants discussed. | ☐ PO |
+| **SD-6** | ITM test at expiry | **Strict** — ITM iff settlement print > K; equal is OTM (OCC auto-exercise is $0.01 in the money). **Inclusive** — ≥ K. | **Strict.** It matches exercise mechanics and it is the rule the code can state in one clause. | ☐ PO |
+
+| ID | Fixed by the brief / stated simplification | Where it shows |
+|---|---|---|
+| S-1 | 100 shares, 1 contract, always | Page: strategy panel |
+| S-2 | Exit is to wait — no buy-backs, no rolls in P0 | Page; FR-20 may add one variant |
+| S-3 | Expiry = the week's last session per the stock tape (DR-7) | SPEC §3.2 |
+| S-4 | No commissions or fees | Page |
+| S-5 | No margin interest (moot under SD-3 fully funded; stated either way) | Page |
+| S-6 | No early assignment; dividends ignored — ex-dividend and earnings dates inside the window are **named** in the write-up | Page + write-up |
+| S-7 | Marks: stock at the bar's print, option at the bar's mid, carried forward when absent and flagged, intrinsic on the expiry bar | SPEC §9 |
+| S-8 | Timestamps in exchange time; LSEG's bar convention as discovered by T-62 (OQ-11) | SPEC §3.1 |
+| S-9 | Skipped weeks are logged on the page, not booked in the blotter (DR-8) | SPEC §8.2 |
+
+## 16. Functional requirements
+
+Priorities as Part A: **P0** is the rubric, **P1** after every P0 passes.
+
+### P0
+
+**FR-13 — The hourly tape, cached.** Stock and near-the-money weekly calls for the window at
+the same bar size, `BID / ASK / TRDPRC_1` (+ OHLC / volume where a trade printed), pulled once
+by a human with credentials and committed as `covered_call_tape.parquet`; the calendar
+(weeks, expiries) derived from the stock bars; the chain per week on the discovered strike
+step; loader cache-first and offline, `OSL_OFFLINE` honoured, fetch refuses to overwrite.
+Never touches `option_pipeline_data.pkl`.
+*Accepted when:* `load_tape()` returns the SPEC §3.1 schema with no credentials present;
+`diagnostics` names the fields, the bar convention and the strike step; a synthetic week with
+a Friday holiday yields a Thursday expiry; the pull refuses an existing cache.
+
+**FR-14 — An algorithmic entry and strike rule, printed.** `Params` (SPEC §2) fully
+determines the book; `select_strike` is a pure function; the page renders the parameters and
+the rule in words, and a test pins that sentence to `params` so the page cannot describe a
+rule the engine did not run.
+*Accepted when:* same tape + same `Params` → byte-identical blotter (I-12); the strategy panel
+prints every field of `Params` and every S-x; the sentence test exists and is mutation-checked.
+
+**FR-15 — The engine and the book.** `run_backtest(tape, params) -> Book`: the weekly loop
+(SPEC §4), fills (§6), settlement (§7), the blotter with the brief's columns and the rule id
+in every note (§8), the skip log (§8.2), the per-bar ledger (§9). Pure (NFR-5).
+*Accepted when:* invariants I-1 … I-10 pass on the synthetic tape **and** on the committed
+one; one week is hand-checked against raw quotes in a test docstring; the blotter has at
+least one `BUY`, one `SELL` call, and one of `EXPIRE` / `ASSIGN` on the real tape.
+
+**FR-16 — The Reg T account, used like an account.** Per bar: NAV, LMV, option MV (negative),
+IM = 50% LMV, MM = 25% LMV, available = NAV − IM, excess = NAV − MM; zero when flat; the
+`NEG_AVAILABLE` flag at any entry where available < 0, printed beside the trade. Plotted:
+NAV, IM, MM on one chart with mouseover values.
+*Accepted when:* I-2 and I-11 pass; the chart's hover shows the three values per bar; the page
+states, in words, what a negative available-funds entry would mean — the brief's *"say so"*.
+
+**FR-17 — Mid vs `TRDPRC_1`, with R².** For near-the-money call bars carrying both a valid
+quote and a print: the scatter, the OLS fit, `y = x`, and `n`, slope, intercept, R², median
+|print − mid| in $ and %. The non-simultaneity caveat printed under it (SPEC §10).
+*Accepted when:* the numbers on the page equal the transform's output on the committed tape
+(I-13); a synthetic tape with planted noise recovers the planted slope within tolerance.
+
+**FR-18 — The page at `/covered-call/`.** Built by `build_page(tape, params)` and registered
+with the generator (AD-11); panels in SPEC §11's order; blotter, skip log and ledger as HTML
+tables that scroll below `FIGURE_MIN_WIDTH` rather than deform; theme-consistent; static; the
+per-page CI guards (synthetic refusal, `[unwritten]`, R² present, non-empty book).
+*Accepted when:* the Pages URL renders the page in incognito with every panel present and the
+NAV hover working; 14-width audit clean; zero console errors.
+
+**FR-19 — The write-up, PO-authored.** How the strike was chosen; wait-through-expiry (OTM
+expire / ITM assigned → flat); fill at mid, citing FR-17's R²; why Reg T; and the analysis —
+what happened, where theory met tape, what you would change. The FR-7 mechanism: a prose
+module, `[unwritten]` in red, a failing test, a CI refusal.
+*Accepted when:* every slot is written by the PO and specific to the book on the page (cites
+its own numbers); the guard passes.
+
+**FR-21 — The live book from Monday 2026-09-14.** *(PO, 2026-09-12: "Monday this system
+needs to have everything in place to purchase the shares, write the call and fill out the
+blotter — not on real capital." **Confirmed the same day:** from Monday the strategy runs on
+the tape as it arrives, with simulated capital, and **the system — not a hand — books each
+trade**, through the same rule and booking code the backtest uses.)* The same rule, run live: at the entry bar on 09-14 the QQQ
+print and the near-the-money Friday-09-18 call quotes are captured from Workspace (live RICs
+carry no caret suffix; the chain endpoint that fails for expired contracts works for live
+ones), the strike is chosen by `select_strike`, and the `BUY 100` + `SELL 1` rows are booked
+at the print and the mid with the raw quotes kept beside them (`covered_call_live.json`,
+committed — it is data the page renders). The page carries a **Live book** panel: the live
+blotter, its ledger to date, and the first resolution on 09-18 if it lands before the due
+date. If the quote at the bar is invalid, the week is skipped and the page says so — the rule
+is the rule on day one.
+*Accepted when:* the two 09-14 rows are on the page with their raw quotes; they pass I-3 … I-6;
+the panel states what is historical and what is live; the live rows were written by
+`covered_call/live.py`, not typed.
+
+### P1
+
+**FR-20 — One comparison variant.** Either `strike_rule = "delta"` (30Δ via the Part A
+inverter) or a buy-back at 50% of premium — a second `Params`, a second book, one comparison
+figure and a write-up paragraph. One, not both.
+*Accepted when:* both books pass the invariant suite; the figure names which is which; the
+write-up says what the comparison showed.
+
+## 17. Non-functional requirements (Part B additions)
+
+NFR-1 … NFR-5 apply unchanged. Added:
+
+- **NFR-6 — Logical consistency is executable.** SPEC §12's invariants I-1 … I-13 are
+  tests, run over the synthetic tape and the committed tape, **written before the engine**
+  and mutation-checked (inject the defect, watch the test fail — T-46). "No crazy or
+  impossible trades" is the brief's first criterion; this is how it stops being a matter of
+  opinion.
+
+## 18. Milestones and risks
+
+| # | Milestone | Depends on | Contents |
+|---|---|---|---|
+| A2-M0 | Governance and decisions | — | This part; T-62 spike; SD-1…SD-6 decided; AD-12 signed |
+| A2-M1 | The tape | A2-M0 | FR-13, synthetic tape, the one-time pull committed |
+| A2-M2 | The engine | A2-M1 | FR-14, FR-15, FR-16, the invariant suite, notebook 03 |
+| A2-M3 | The evidence | A2-M1 | FR-17 |
+| A2-M4 | The page | **T-79** (a second output from the current builder) + A2-M2/M3 | FR-18, FR-21's live panel, theme additions |
+| A2-M5 | Write-up and ship | A2-M4 | FR-19, browser drive, incognito, Canvas |
+| P1 | Comparison variant | every P0 green | FR-20 |
+
+If P1 threatens A2-M5, P1 loses — as in Part A.
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Hourly history for **expired** contracts is shallower than 10 weeks, or missing | The window shrinks or the bar size changes | **T-62 first**, before any decision or code — one RIC, no cache written |
+| Bar timestamp convention (start/end, UTC) misread | "Monday close" becomes Tuesday's open; every fill is at the wrong quote | T-62 records it; SPEC §3.1 fixes it; a test asserts the entry bar's clock time |
+| Many entry bars have no valid quote → most weeks skipped | A thin book; the strategy "does nothing" | Report it honestly (skip log); if > 50% of weeks skip, revisit SD-4 (bar) before SD-5 (strike) |
+| Holiday-week expiry RIC guessed wrong (Thursday date) | A week with no chain | DR-7 derives the date from the tape; T-62 checks one holiday week if the window has one |
+| An earnings gap lands a deep ITM assignment | Looks dramatic | It is the strategy working; the write-up discusses it (S-6) |
+| Tables break the 14-width audit | Layout defects on the graded page | Tables follow figures: scroll inside the panel below `FIGURE_MIN_WIDTH` (T-47) |
+| **Eight days to the due date with M5 (the restructure) queued ahead of A2** | A2 ships late, or the restructure ships half-done under a deadline | **Recommendation (2026-09-12, PO to confirm): defer M5 until after 09-20.** A2 is built on the current builder — T-79 adds a second output file sharing its chrome helpers; the Jinja2 generator (T-51) and the Reflex retirement (T-48) follow the submission. The restructure-first sequencing was decided before the due date was known. |
+| The 09-14 entry must be booked **by the system**, two days out | Monday's bar passes with nothing runnable | T-65 (rules) and T-80 (live capture + booking) are the only code that must exist by Monday; they are small, pure, and dry-run against 09-11's expired chain the day before. Workspace must be open on this machine at the entry bar — SD-4 decides the clock time the PO has to be at the desk. |
+
+## 19. Open questions
+
+- **OQ-9:** ~~The due date, as posted in Canvas.~~ **Closed 2026-09-12 — Sunday 2026-09-20,
+  11:59 pm EST**, with the first entry booked live on Monday 2026-09-14 (FR-21).
+- **OQ-14:** ~~What is the Monday-14 entry?~~ **Closed 2026-09-12.** The strategy goes live on
+  Monday with simulated capital and the system books it — FR-21 as written; T-65 + T-80 are
+  the code that must exist by the bar.
+- **OQ-10:** How far back does LSEG serve **hourly** bars for expired listed options? Part A
+  pulled daily only. → T-62.
+- **OQ-11:** LSEG's hourly bar timestamp convention — bar start or end, UTC or exchange
+  time? Decides what "last bar of the session" means in code. → T-62, then SPEC §3.1 / S-8.
+- **OQ-12:** The strike step near the money on the chosen name. Discovered, never assumed.
+  → T-62.
+- **OQ-13:** Does the brief's "Monday open or close" admit the last *hourly* bar (15:00–16:00)
+  as "close"? Assumed yes — the brief says the combo can be priced "any time of day". Ask
+  at the next class if SD-4 picks it.
+
+## 20. Definition of done — Assignment 2
+
+- [ ] SD-1 … SD-6 decided by the PO and printed on the page; AD-12 signed
+- [ ] `covered_call_tape.parquet` committed; `load_tape()` offline; `option_pipeline_data.pkl` untouched
+- [ ] Invariants I-1 … I-13 green on the synthetic tape and the committed tape, mutation-checked
+- [ ] Blotter: every entry and exit, the brief's columns, rule ids in the notes; skip log beside it
+- [ ] Ledger + Reg T account per bar; NAV / IM / MM chart with hover; the negative-available-funds sentence
+- [ ] Mid vs `TRDPRC_1` scatter with n, slope, R² on the page
+- [ ] Write-up authored by the PO, citing the page's own numbers
+- [ ] Live book: the 09-14 entry booked by the system from real quotes and on the page (FR-21)
+- [ ] Pages URL renders `/covered-call/` in incognito; 14-width audit clean; zero console errors
+- [ ] Docs in lockstep (PRD Part B status, BACKLOG-2, SPEC-COVERED-CALL, RUNBOOK §7)
+- [ ] Canvas submission posted
+- [ ] I can explain every line (guardrail #6)

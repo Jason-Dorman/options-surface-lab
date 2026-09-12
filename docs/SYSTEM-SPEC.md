@@ -57,8 +57,10 @@ options_surface_lab/                  # repo root = Reflex project root
 ├── requirements.txt
 ├── .gitignore
 ├── lseg-data.config.json             # LSEG app-key — local only, gitignored, NEVER commit
-├── README.md                         # assignment brief + how-to-run
+├── README.md                         # living front door: what this is, live URL, how to run (2026-09-12)
 ├── docs/
+│   ├── archive/ASSIGNMENT-1.md       # instructor brief, Assignment 1.1 — graded; archived 2026-09-12
+│   ├── ASSIGNMENT-2-COVERED-CALL.md  # instructor brief, covered-call backtest
 │   ├── PRD.md
 │   ├── SYSTEM-SPEC.md                # this file
 │   ├── ARCHITECTURE.md

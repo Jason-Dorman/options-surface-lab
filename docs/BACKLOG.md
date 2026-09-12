@@ -1,4 +1,4 @@
-# Backlog — Options Surface Lab (Assignment 1.1)
+# Backlog — Options Surface Lab
 
 The task-level build board. Requirement-level status stays in [PRD.md](PRD.md) §3/§12;
 this file is the ordered "what's next" for every session.
@@ -87,5 +87,34 @@ update status in the same session as the work (lockstep rule); PO-owned tasks ar
 |---|---|---|---|
 | T-19 | Finalize CI: pytest → `build_preview.py` → Pages on push; green on clean clone | FR-9, NFR-4 | ◐ shipped 2026-08-31, verify once more before submission |
 | T-20 | Incognito verification of the live Pages URL (figures, toggles, numbers, sentences) | FR-9 | ☐ |
-| T-21 | README how-to-run section (alongside, never replacing, the assignment brief) + Canvas submission | FR-9 | ☐ |
+| T-21 | README how-to-run section (alongside, never replacing, the assignment brief) + Canvas submission | FR-9 | ◐ 2026-09-12 — README half met by T-61 (the root README is the living front door with run commands and the live URL; the brief moved to `docs/ASSIGNMENT-1.md`). **[PO]** Canvas submission still open. |
 | T-22 | Final sweep: PRD §12 definition-of-done + docs-lockstep audit | all | ◐ 2026-09-04 — **docs-lockstep half done.** Reconciled: ARCHITECTURE §4 (app no longer "bakes" figures — T-14; `build_preview.py` is the deliverable, not a fallback — T-41; the test list named 2 of 8 files) and §5 (wall #2 said `SETTLE`, it is `MARK` — T-32); PRD §3 (headed 2026-08-29; the pickle was listed as "does not exist yet"; G-3 and G-6 were still open but shipped in T-11 / T-8+T-9); RUNBOOK §5 (still claimed the supporting panels stay pinned to one date — false since T-42) and its smoke checklist; notebook 01 (13 cells still used `SETTLE`/`has_settle` and would have raised — **plus two cells that never compiled at all**, a real newline inside a string literal, predating this session; the notebook now runs top-to-bottom on the real panel, verified by executing every cell). **Still open:** the PRD §12 definition-of-done pass at submission. |
+
+## M5 — Restructure for the semester (before HW2; AD-10 / AD-11 — **approved 2026-09-12**)
+
+Decided with the PO on 2026-09-12: the shape is right (pure transforms → Plotly → static page
+baked at build time → Pages) and one piece is dead weight — the Reflex page, a second renderer
+of a page the static builder already produces. Retire it, keep the live-app option open through
+a framework-free core, and make the builder a multi-page generator before HW2 needs a second
+page. T-54 is done. **Sequencing under review (2026-09-12):** Assignment 2 is due 09-20 with
+a live entry on 09-14; the session recommends deferring this whole milestone until after the
+submission and building A2 on the current builder ([BACKLOG-2.md](BACKLOG-2.md) T-79) —
+**PO to confirm**. Until then T-48 does not start.
+
+| ID | Task | Maps to | Status |
+|---|---|---|---|
+| T-54 | **[PO]** Sign off AD-10 and AD-11 as written in ARCHITECTURE §6, and **release the `*app.py` naming standard** — a project standard the PO elected to keep on 2026-09-01 (M1 note); AD-10 retires it with the Reflex page. | AD-10, AD-11 | ✅ 2026-09-12 — approved as written; the `*app.py` standard is released. |
+| T-53 | **[PO]** Repo name for the semester: keep `options-surface-lab` (a misnomer once HW2 lands, but the submitted URL survives) or rename to a course-level name now — renaming changes the Pages URL, so it is cheaper before more submissions point at it. | AD-11 | ✅ 2026-09-12 — PO: keep `options-surface-lab` for now. |
+| T-48 | **Retire the Reflex page (AD-10).** Delete `State` + page composition from `options_surface_app.py` (lines 355–866), `rxconfig.py`, the entry shim `options_surface_lab.py`, `.web/`, `reflex.lock/`; `reflex` moves to an optional extra. Repoint the five test references (`test_acquisition` import, `test_app_figures` ×2, `test_build_preview` commentary-import check, `test_theme` THEMED_SOURCES) and notebook 01's import. **Docs lockstep in the same session:** PRD §1 / §3 / §5 / FR-1 / FR-2; ARCHITECTURE §1–§4 / §7 / §9 and the AD-4 / AD-5 / AD-8 clauses AD-10 names; SPEC §2 / §3 / §4 / §8 / §14 / §16; RUNBOOK §2 / §4 / §5; CLAUDE.md. Gate: 219 green before and after. | AD-10, NFR-2 | ☐ **next** — T-54 approved |
+| T-49 | **Acquisition as a CLI (AD-10).** `lseg_available` / `load_cached_payload` / `load_or_fetch_pipeline_data` / `_normalize_history` / `_fetch_universe` / `_probe_mark_field` / `probe_mark_fields` / `fetch_from_lseg` move to `options_surface_lab/fetch.py` with a `__main__`; progress printed to the terminal (FR-2's "never silent"); cache refusal and `OSL_OFFLINE` unchanged; RUNBOOK §3's command updated. | FR-2, AD-10 | ☐ with T-48 |
+| T-50 | **The `(data, params)` rule and its guard (NFR-5).** A test that no module in the package imports a web framework (grep-based, like `test_theme`), and that every registered page builder is callable with explicit inputs and no globals. Mutation-check it: inject an `import reflex` and watch it fail (T-46's lesson). | AD-10, NFR-5 | ☐ with T-48 |
+| T-51 | **Site generator (AD-11).** Page registry; Jinja2 templates for the panel chrome, readout strip and command bar (`theme.PAGE_CSS` stays the stylesheet); `_site/<route>/index.html` with HW1 at `/`; `pages.yml` uploads `_site/`; publish guards per page; `test_build_preview` per page; Jinja2 named in `requirements.txt`. The as-of listener stays with HW1's page module. | AD-11, FR-9 | ☐ after T-48 |
+| T-52 | **Browser drive of the regenerated HW1 page** (RUNBOOK §5, all 14 widths): the generator must reproduce the page's behaviour — slider driving the whole page, ruler chip reaching the smile, legend, spot plane, captions — with zero page/console errors. Compare against the *current* `options_surface_preview.html`, not against the new build's own output. | AD-11, FR-9 | ☐ after T-51 |
+| T-61 | **Root README as a living document** (PO, 2026-09-12). The 1.1 brief moved, unedited, from the root to `docs/ASSIGNMENT-1.md`; the covered-call brief to `docs/ASSIGNMENT-2-COVERED-CALL.md` — both instructor-owned. The new root `README.md` says what the project is, the live URL, what is on the site and what is planned, how to run it, where things are and the document order. Every link repointed: CLAUDE.md (precedence table gains both briefs and the README), PRD, ARCHITECTURE, SPEC §3, this board. Meets FR-9's repo-README clause (T-21). | FR-9, T-21 | ✅ 2026-09-12 |
+
+## M6 — Assignment 2: covered call backtest → [BACKLOG-2.md](BACKLOG-2.md)
+
+The second assignment has its own board (PO, 2026-09-12). Its task IDs continue this file's
+sequence (T-55 … T-77 so far) and are never reused here. Requirements: [PRD Part B](PRD.md)
+§13–§20; behaviour: [SPEC-COVERED-CALL.md](SPEC-COVERED-CALL.md). The skeleton that stood here
+from earlier the same day moved there intact.

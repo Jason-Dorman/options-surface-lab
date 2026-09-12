@@ -16,6 +16,8 @@
 
 The structure below is **current** as of 2026-09-02. The FR-1 restructure, the CI workflow
 (FR-9) and `theme.py` (FR-8) have all landed; every module named below exists.
+**AD-10 and AD-11 (approved 2026-09-12) have not landed yet** — §1–§4 still describe the
+tree as it is; they change once T-48 / T-51 land (lockstep rule).
 
 ---
 
@@ -184,6 +186,11 @@ deployment model to a static page on 2026-09-01, after which `reflex export` lef
 entirely. AD-4.)*
 *Does not belong here:* figure construction (→ plot), colours/fonts/measurements (→ theme).
 
+**`options_surface_lab/covered_call/`** — *proposed, AD-12; does not exist yet.* Assignment 2's
+subpackage: `tape.py`, `rules.py`, `engine.py`, `plots.py`, `page.py`, `writeup.py`, layered
+as §2 prescribes. Specified in [SPEC-COVERED-CALL.md](SPEC-COVERED-CALL.md).
+*Does not belong here:* the RIC/OCC grammar (→ `option_surface_utils`), any token (→ `theme`).
+
 **`tests/`** — mirrors the transform core first, then everything a defect could reach the
 published page through. Uses the seeded synthetic panel as its fixture (AD-7), exposed as the
 session-scoped `synthetic_payload` / `synthetic_wide` fixtures in `tests/conftest.py`.
@@ -256,7 +263,8 @@ the app layer.
 server-side executes there. The revised assignment README sanctions serving an HTML file
 directly. *Decision:* CI runs `build_preview.py`, which reads the committed pickle at **build
 time**, renders the Plotly figures and embeds their data as JSON in one self-contained
-`index.html`; Pages serves that single file. The Reflex app remains the local development app.
+`index.html`; Pages serves that single file. The Reflex app remains the local development app *(until
+AD-10 lands — approved 2026-09-12)*.
 *Consequences:* the published page shows real data with no backend and no run-time pickle
 read; there are no relatively-pathed assets, so no base path to misconfigure; anything
 reachable only through a Reflex event handler does not exist in production at all, which
@@ -368,6 +376,9 @@ market data.
 *Decision:* a re-export shim satisfies Reflex while the real module keeps the rubric name.
 *Consequences:* both conventions hold; the shim must stay logic-free.
 
+> *Retired by AD-10 once it lands (approved 2026-09-12): the shim exists only for Reflex's
+> `app_name` convention, and the Reflex page goes with it.*
+
 **AD-9 — Honest holes: never extrapolate, never fabricate, never crash.**
 *Amended 2026-08-30, confirmed 2026-09-01:* the pairing this decision protects is
 **`MID_PRICE` vs `TRDPRC_1`**, not "SETTLE vs TRDPRC_1". The revised README now says so
@@ -385,6 +396,91 @@ degenerate inputs (IV inversion, empty slices) yield NaN/empty figures rather th
 exceptions or invented values. *Consequences:* edge-case handling is a feature with a spec
 ([SYSTEM-SPEC §13](SYSTEM-SPEC.md)), and "fill in the gaps" suggestions are rejected by
 default — that's next week's vol-surface job, done explicitly.
+
+**AD-10 — One renderer: the core is framework-free, and a live shell is a future thin layer.**
+*(**Approved by the PO 2026-09-12**, including the release of the `*app.py` naming standard.
+**Not yet landed — nothing below has moved**; §1–§4 still describe the tree as it is. Lands
+with T-48 / T-49 / T-50.)*
+*Context:* since AD-4 the deliverable has been `build_preview.py`'s static page and the Reflex
+app has been a local viewer — which left **two renderers of one page**.
+`options_surface_app.py` (lines 596–866) and `build_preview.py` (lines 194–302) each define
+`_readout` / `_panel` / `_commentary_panel`, and a 240-line `State` class restates, as
+server-side handlers, interactions the published page already does Plotly-natively. Every
+deploy-only defect in this project's history — T-13's width classes, T-47's missing
+breakpoints — was the two disagreeing, and `theme.PAGE_CSS` sharing exists to police it.
+Measured 2026-09-12: `rx.` appears in **one** module; `utils`, `plot`, `theme`, `commentary`
+and `build_preview` carry none; the 219-test suite references the app module five times;
+`.web/` is 418 MB. The HW2 brief asks for "HTML / CSS / JS — Node is not required" and calls
+the data tool "not graded". The PO wants the option of hosting a **live** app someday — not on
+Pages, and not this semester.
+*Decision:* (1) **Retire the Reflex page.** Delete the `State`/page half of
+`options_surface_app.py`, `rxconfig.py`, the AD-8 entry shim and `.web/`; `reflex` leaves the
+core requirements. (2) The one-time LSEG acquisition — the module's other half, which is not
+Reflex code — becomes a CLI, `python -m options_surface_lab.fetch`, that prints its progress:
+FR-2's "a pull is never silent" is kept by the terminal instead of by a badge. (3) **The core
+is framework-free.** Every page is a function of `(data, params)`; every figure builder, and
+from HW2 the backtest engine (`run_backtest(tape, params) -> Book`), is a pure callable, and no
+module in the package imports a web framework. A test enforces it the way `tests/test_theme.py`
+enforces AD-6 (NFR-5). (4) When a live app is wanted it is a **thin shell** of event handlers
+over those callables — Reflex is the default because the PO knows it — and the static
+generator stays the Pages build. It is not built now.
+*Consequences:* one renderer, so a page cannot be right in one product and wrong in the other
+— the deploy-only defect class loses its mechanism; each new page is written once; CI installs
+no Node. Lost: `reflex run`'s hot reload — `python build_preview.py` plus a browser replaces it
+(~32 s, dominated by `asof_frames`). Retired with it: AD-8; FR-1's `reflex run` acceptance
+clause; SPEC §2's "Local dev" mode and §8 in full; RUNBOOK §4; and the `*app.py` naming
+convention — a project standard the PO elected to keep on 2026-09-01, so releasing it is part
+of this sign-off. What keeps the live door open is rule (3), not a frozen app: the `State`
+class mirrored the static page and would be rewritten regardless, because a live app exists to
+*recompute* and the page never does. Rejected, for the record: a page model with two renderers
+(worth its two sessions only if live were this semester); Pyodide-class stacks that run Python
+in the browser (one codebase for both surfaces, but a 10–30 s blank first load on the graded
+page); a JS front end (fits Pages exactly, discards 1,193 lines of tested figure code and moves
+the analysis language out of Python).
+
+**AD-11 — The static builder is a small site generator.**
+*(**Approved by the PO 2026-09-12.** Not yet landed. Lands with T-51 / T-52. Assignment 2's due
+date — 09-20 — arrived after approval; the session recommends an **interim**: a second output
+file from the current builder sharing its chrome helpers (BACKLOG-2 T-79), with the registry
+and templates landing after the submission. PO to confirm.)*
+*Context:* `build_preview.py` writes one file by f-string assembly and `pages.yml` copies it to
+`_site/index.html`. HW2 needs a second page — blotter, ledger, NAV path, mid-vs-print scatter,
+write-up — and every later assignment another. The brief's URL example
+(`jakevestal.github.io/535_fintech/`) is a **course-level** site, and the 1.1 brief
+([archive/ASSIGNMENT-1.md](archive/ASSIGNMENT-1.md)) says every homework adds to the same site.
+*Decision:* `build_preview.py` becomes a generator over a **page registry**. Each assignment is
+a module exposing a page builder `(data, params) -> Page` (AD-10's rule); the generator renders
+every registered page through **Jinja2 templates** — the panel chrome, readout strip and
+command bar move from f-strings into templates, `theme.PAGE_CSS` stays the one stylesheet —
+into `_site/<route>/index.html`. HW1 stays at `/` so the submitted URL keeps working; HW2 goes
+to `/covered-call/`. The CI guards become per-page. HW1's pickle is untouched; HW2's new dataset
+is **parquet** — inspectable and pandas-version-stable, where the synthetic pickle has already
+failed to unpickle once.
+*Consequences:* Jinja2 becomes a direct dependency (3.1.6 is already in `algo`, pulled in by
+`lseg-data`; it must be named in `requirements.txt` because CI has no `lseg-data`). Templates
+are HTML the PO can own line by line (guardrail #6), which f-strings were not.
+`tests/test_build_preview.py` is the NFR-2 gate for the refactor and becomes per-page. The
+as-of listener (`_asof_script`) is HW1's, not the generator's — a page owns its script. A
+top-level landing page is deferred: nobody grades it this week. The repo's name is a PO
+decision (T-53) — renaming changes the Pages URL, which is cheaper now than after more
+submissions point at it.
+
+**AD-12 — One subpackage per assignment, layered inside.**
+*(Proposed 2026-09-12. Sign-off pending — T-74. Nothing exists yet.)*
+*Context:* Assignment 1.1's flat module set (`*utils.py` / `*plot.py` / `*app.py`) was the
+brief's file-layout rule, released with AD-10. A second assignment adds acquisition, a
+transform core (rules, engine), presentation and a page of its own; by the fourth, a flat set
+is unreadable, and AD-11's generator wants one page module per assignment anyway.
+*Decision:* `options_surface_lab/covered_call/` — `tape.py` (acquisition + parquet cache, the
+only network), `rules.py` + `engine.py` (transform core: no plotly, no theme), `plots.py`
+(presentation), `page.py` (application: the builder the generator registers), `writeup.py`
+(the PO's prose). §2's layer rules apply *inside* the subpackage; `tests/covered_call/`
+mirrors it. What is shared stays shared and stays flat: the RIC/OCC grammar in
+`option_surface_utils.py`, tokens in `theme.py`, the inverter for the P1 delta rule.
+*Consequences:* SYSTEM-SPEC §4's import table gains rows; an assignment may reach another
+only through `option_surface_utils` and `theme` — never into its internals; 1.1's flat modules
+stay where they are (renaming graded, deployed code for symmetry is churn with no reader).
+Behaviour for this subpackage is specified in [SPEC-COVERED-CALL.md](SPEC-COVERED-CALL.md).
 
 ## 7. Where does my change go?
 
@@ -406,6 +502,10 @@ architecture change (§5, §6 first).
 | Change how missing data renders | check AD-9 first | — |
 | Speed up the LSEG pull | acquisition only (banding, batching) | transforms |
 | Explore / eyeball the data | `notebooks/` (consume the package) | forked transform logic — graduate it to `utils` + test |
+| **(A2)** Add or change a strategy rule or parameter | `covered_call/rules.py` + `Params`, its test, and the page's rule sentence (FR-14 pins them) | the engine's loop — a rule *selects*, the engine *books* |
+| **(A2)** Change how a fill, a skip or an expiry is booked | `covered_call/engine.py` **and** the invariant suite (SPEC-COVERED-CALL §12). A booking change that breaks an invariant is a domain-rule change — PRD §14 first | the ledger's identities (I-1, I-2, I-11) |
+| **(A2)** Add a figure or table to the covered-call page | `covered_call/plots.py` → `covered_call/page.py`; tables through the generator's templates | 1.1's page; the theme, except through T-68 |
+| **(A2)** Pull or re-shape the hourly tape | `covered_call/tape.py` only; additive payload keys | `option_pipeline_data.pkl`, ever |
 
 ## 8. Cross-cutting posture
 
@@ -425,3 +525,11 @@ transform core consuming the wide table, new builders in presentation, and a new
 application layer — no wall moves. The first structural *change* on the horizon is
 multi-page routing (this page moves from `/` to its own route), which `rx.App.add_page`
 already accommodates. Extension-point detail: [SYSTEM-SPEC §15](SYSTEM-SPEC.md).
+
+> **Revised 2026-09-12 (approved, AD-10 / AD-11).** The paragraph above assumed Reflex
+> routing. The multi-page site now arrives through the static generator's page registry,
+> not `add_page`; this page stays at `/`. The next assignment — the covered-call backtest,
+> brief in [ASSIGNMENT-2-COVERED-CALL.md](ASSIGNMENT-2-COVERED-CALL.md) — is new pure
+> functions in the transform core (a backtest engine over an hourly tape), new builders in
+> presentation, and a page module registered with the generator. No wall moves; one wall
+> gains a rule (NFR-5: every page is a function of `(data, params)`).

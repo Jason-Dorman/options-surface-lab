@@ -13,13 +13,14 @@ and cite their IDs (FR-x, G-x, AD-x, NFR-x) when explaining decisions.
 
 | Precedence | Document | Authority over |
 |---|---|---|
-| 1 | [README.md](README.md) | The assignment: rubric, deadlines, domain rules. Instructor-owned — never edit its assignment content. |
-| 2 | [docs/PRD.md](docs/PRD.md) | Requirements (FR-1…FR-12), priorities, acceptance criteria, gap list (G-1…G-8), milestones |
+| 1 | [docs/ASSIGNMENT-2-COVERED-CALL.md](docs/ASSIGNMENT-2-COVERED-CALL.md) · *(graded, archived:* [docs/archive/ASSIGNMENT-1.md](docs/archive/ASSIGNMENT-1.md)*)* | The instructor's briefs — the covered-call backtest is the live one (**due Sun 2026-09-20 23:59 EST; first entry booked live Mon 2026-09-14**); 1.1's is kept for the record. Instructor-owned — never edit their assignment content. **Where any note below says "the README" or "the revised README", it means the 1.1 brief**, which lived at the repo root until 2026-09-12. |
+| 2 | [docs/PRD.md](docs/PRD.md) | Requirements — Part A (FR-1…FR-12, G-1…G-8) for 1.1; **Part B (§13–§20)** for Assignment 2: domain rules DR-x, the PO's strategy decisions SD-x with recommendations, FR-13…FR-20, NFR-6, its own milestones, OQ-9…OQ-13, definition of done |
 | 3 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, module boundaries, decisions (AD-1…AD-9), the "where does my change go" table (§7) |
-| 3 | [docs/SYSTEM-SPEC.md](docs/SYSTEM-SPEC.md) | Schemas, algorithms, edge-case behavior, runtime modes |
+| 3 | [docs/SYSTEM-SPEC.md](docs/SYSTEM-SPEC.md) · [docs/SPEC-COVERED-CALL.md](docs/SPEC-COVERED-CALL.md) | Schemas, algorithms, edge-case behavior, runtime modes (1.1) · the book: tape schema, the weekly loop, fills, settlement, Reg T, the invariant suite I-1…I-13 (Assignment 2) |
 | 4 | [docs/ENGINEERING-PRINCIPLES.md](docs/ENGINEERING-PRINCIPLES.md) | Code quality: SOLID, cohesion/coupling, complexity < 10, tests before refactoring |
 | 4 | [docs/DESIGN-BRIEF.md](docs/DESIGN-BRIEF.md) | The graphical identity (FR-8): palette, typography, the rules the restyle may not break. PO-directed — read it before changing any value in `theme.py`. |
-| 5 | [docs/BACKLOG.md](docs/BACKLOG.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md) | Operational: the task board (work top-down, T-x IDs) · procedures (env, LSEG pull, run, deploy) |
+| 5 | [docs/BACKLOG.md](docs/BACKLOG.md) · [docs/BACKLOG-2.md](docs/BACKLOG-2.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md) | Operational: the task boards — 1.1 + the semester restructure · Assignment 2 (one T-x sequence across both, work top-down) · procedures (env, LSEG pull, run, deploy) |
+| — | [README.md](README.md) | The front door: what the project is, the live URL, what is on the site, how to run. A **living summary** of the documents above, never their authority — keep it current under the lockstep rule. |
 
 *`DEMO-SCRIPT.md` and `checkpoint_audit.md` were deleted 2026-09-06 (PO): both were written
 for the Class-2 checkpoint, which has passed. The evidence they carried survives where it was
@@ -322,8 +323,17 @@ refuses a strike, and fails only if the fixture has none anywhere. The fixture i
 is still calendar-dependent — OQ-6's `end_date` parameter is the root fix and needs PO
 sign-off.
 
-**Next up:** M4 — T-19/T-20/T-21/T-22. **219 tests green, no xfail.** Update this paragraph
-as things land (lockstep rule).
+**Next up (2026-09-12):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST, and the first
+entry — 100 QQQ shares, the 09-18 call — is booked live on Monday 2026-09-14** (PRD Part B,
+FR-21 — **by the system**, with simulated capital: T-65 + T-80 must exist by then). The PO chose **QQQ** (SD-1); SD-2…SD-6 are still to be
+read and decided — **before Monday's entry bar**, since SD-4 sets its time and SD-5 its strike.
+AD-10 / AD-11 are approved but **not landed and nothing in the code has moved**; with eight
+days left the session recommends deferring the whole M5 restructure until after the
+submission and building A2 on the current builder (BACKLOG-2 T-79) — PO to confirm. The
+order that fits the calendar is at the top of `docs/BACKLOG-2.md`: T-62 spike → decisions →
+T-78 Monday → T-56 → T-57 → T-58 → T-79/T-59 → T-60 → ship. 1.1's brief is archived at
+`docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open. **219 tests green, no xfail.**
+Update this paragraph as things land (lockstep rule).
 
 **Secrets:** `lseg-data.config.json` (repo root) holds the LSEG app-key. It is gitignored —
 never commit it, never print its contents, never copy it into anything that ships.
