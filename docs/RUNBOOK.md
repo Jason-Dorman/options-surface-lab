@@ -367,4 +367,106 @@ Identical to what the rules module produces over the same tape.)*
 | `SKIP_NO_STOCK_PRINT` | The 15:00 ET bar is not on the tape yet — you ran before ~16:05 ET, or the market was shut. Wait and re-run; nothing was booked. |
 | `SKIP_NO_QUOTE` | The strike had no valid two-sided quote at the bar. **Correct behaviour** (DR-1). It is logged, not booked. |
 | `SKIP_NO_STRIKE` | The chain came back empty — check `diagnostics.option_error` in the state file, and that the expiry is a real trading Friday. |
+| `LSEG session did not open (state OpenState.Closed)`, or a handshake `ReadTimeout` | **Workspace is running but not answering the app-key handshake** — see §9. Nothing was requested and nothing was written. |
 | `REFUSED: … already has …` | The week is already booked or already skipped. Working as intended. |
+
+## 8. The one-time tape pull — Assignment 2 (FR-13, T-56/T-77)
+
+The backtest's data: `QQQ.O` and the near-the-money weekly calls of the window, hourly, into
+`covered_call_tape.parquet` + `covered_call_tape.meta.json`. Same discipline as §3 — **one
+human-invoked pull, committed, never repeated**. `options_surface_lab/covered_call/tape.py`.
+
+**Preconditions**
+
+- [ ] LSEG Workspace running and logged in.
+- [ ] `conda activate algo`, run from the repo root. **`pyarrow` must be installed** — it is
+      in `requirements.txt`; `python -c "import pyarrow"` is the check.
+- [ ] `covered_call_tape.parquet` does **not** exist. The pull refuses an existing one, by
+      design; if you mean to replace it, rename the old one first and tell the PO.
+- [ ] `OSL_OFFLINE` is not set to `1` (the pull refuses to run under it).
+
+**Pull it**
+
+```bash
+python -m options_surface_lab.covered_call.tape fetch
+```
+
+Expect **several minutes**. It requests one chain per week, on the $1.00 step T-62 measured,
+padded four strikes either side of *that week's* own range — and it asks for each contract
+under **both RIC forms**, because a contract's form depends on how long ago it expired and
+that boundary is not ours to predict (SPEC §3.3). A batch the API rejects outright is retried
+one RIC at a time (AD-2), so a few hundred requests is normal, not a symptom.
+
+**Verify before committing** — the pull prints this, and `… tape inspect` reprints it:
+
+```bash
+python -m options_surface_lab.covered_call.tape inspect
+```
+
+| Check | What good looks like |
+|---|---|
+| Weeks | One line per ISO week of the window, each with an entry day and an expiry day. A Friday holiday shows a **Thursday** expiry (DR-7) — that is right, not a bug. |
+| Contracts per week | Tens, not zero. A week with 0 contracts means its chain did not resolve; check `diagnostics.errors` in the sidecar before accepting it. |
+| RIC forms | Both `expired` and `live` may appear. The most recent weeks answering only `live` is exactly what T-62 predicted. |
+| Mids | A large majority of near-the-money option bars should carry a valid mid. A tape where most bars have none makes every week a skip — stop and ask the PO. |
+| `synthetic=False` | Anything else and the page will refuse to publish (SPEC §11). |
+| Accounting | The `contracts:` line must add up — *answered + refused = requested*. Every RIC that returned nothing is named in `diagnostics.unanswered`; a gap there means contracts went missing inside a batch that answered only partly. |
+| Soft failures | Expect hundreds. `LDError … No data` is a strike that never listed. `TypeError: 'UniverseContainer' object is not subscriptable` is a library-side batch failure — harmless, because AD-2's retry re-asks each RIC singly (7 of them on the 2026-09-15 pull, all recovered). |
+
+*(2026-09-15: the pull took ~25 minutes and returned 37,857 bars / 952 contracts. The
+band asks for ~100 strikes a week — wider than the week really traded, because thin
+extended-hours bars carry erroneous `LOW_1`/`HIGH_1` ticks. That is deliberate: too wide
+costs requests that fail soft and are recorded, too narrow silently omits the strike the
+rule needed.)*
+
+Then hand it to the PO with the sidecar: **both files are committed together**, and the
+sidecar is what a reader uses to trust the bars (fields requested, the `ts` convention, the
+discovered strike step, per-week counts, which RIC form answered per contract).
+
+```bash
+pytest tests/covered_call -q
+```
+
+| Symptom | Cause → fix |
+|---|---|
+| `FileExistsError` | A tape is already there. That is the guard working — caches are data artifacts (CLAUDE.md). |
+| `RuntimeError: OSL_OFFLINE=1` | You are in a shell that sets it (CI does). Unset it for a real pull. |
+| `RuntimeError: No QQQ.O bars returned` | Workspace is not logged in, or the window is wrong. **Nothing was written** — fix and re-run. |
+| A week with 0 contracts | Its expiry may not be a real listed date. Check the week's `expiry_day` against the stock tape, and `diagnostics.errors`. |
+| `LSEG session did not open (state OpenState.Closed)`, or a handshake `ReadTimeout` | **Workspace is running but not answering the app-key handshake** — see §9. Nothing was requested and nothing was written. |
+| `ModuleNotFoundError: pyarrow` | `pip install pyarrow` inside `algo`. |
+
+## 9. When Workspace is open and the API still will not connect
+
+*Found 2026-09-14, on T-77's first pull attempt.* **"Workspace is running" is not the
+check.** The Data API Proxy is a separate piece: it can be listening, healthy and reporting
+`ST_PROXY_READY` while the desktop behind it never completes the app-key handshake. What that
+looks like is a 20-second `ReadTimeout` on `http://localhost:9000/api/handshake`, repeated on
+every retry, with no error from the desktop at all.
+
+**Diagnose in this order** — each line separates one cause from the next:
+
+```bash
+# 1. Is the proxy listening, and which port does Workspace advertise?
+cat "$LOCALAPPDATA/../Roaming/Refinitiv/Data API Proxy/.portInUse"   # normally 9000
+
+# 2. Is the proxy healthy? ST_PROXY_READY = the proxy is up. It says nothing about login.
+curl -s http://localhost:9000/api/status
+
+# 3. Does a session actually open? open_session() does NOT raise when it fails —
+#    it logs and leaves a closed session behind, which is why this prints the state.
+python -c "import lseg.data as ld; ld.open_session(); print(ld.session.get_default().open_state); ld.close_session()"
+```
+
+| What you see | What it means → do this |
+|---|---|
+| Step 2 fails / connection refused | The proxy is not running. Start Workspace and wait for it to finish loading. |
+| Step 2 says `ST_PROXY_READY`, step 3 says `OpenState.Closed` with a handshake `ReadTimeout` | The proxy is up; the **desktop side is not answering**. Check Workspace is *signed in* (a quote loads in the app, not "Reconnecting"). If it is, **restart Workspace completely** — the proxy outlives sessions, and a stale one keeps its port while answering nothing. Re-run afterwards. |
+| Step 3 says `OpenState.Opened` | The session is fine; the failure is elsewhere — re-read the actual error. |
+| A handshake error naming the key | The app key in `lseg-data.config.json` is not valid for a desktop session. Regenerate it in APPKEY. Never print or commit the file. |
+
+**Both acquisition modules refuse to continue past a closed session** (`_require_open_session`
+in `covered_call/tape.py` and `covered_call/live.py`). That guard exists because without it the
+failure is reported as *missing data*: the pull said "No QQQ.O bars returned" and the live leg
+would have written a false `SKIP_NO_STOCK_PRINT` into the book — which I-10 then refuses to
+re-run. A desktop outage must never be recorded as a fact about the market.

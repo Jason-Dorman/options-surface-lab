@@ -186,8 +186,8 @@ deployment model to a static page on 2026-09-01, after which `reflex export` lef
 entirely. AD-4.)*
 *Does not belong here:* figure construction (→ plot), colours/fonts/measurements (→ theme).
 
-**`options_surface_lab/covered_call/`** — *AD-12; **`rules.py` landed 2026-09-13** (T-65), the
-rest still to come.* Assignment 2's subpackage: `tape.py`, `rules.py`, `engine.py`, `plots.py`,
+**`options_surface_lab/covered_call/`** — *AD-12, **accepted 2026-09-14** (T-74); `rules.py`
+and `live.py` landed 2026-09-13, `writeup.py` and `tape.py` 2026-09-14, the rest still to come.* Assignment 2's subpackage: `tape.py`, `rules.py`, `engine.py`, `plots.py`,
 `page.py`, `writeup.py`, layered as §2 prescribes. `rules.py` is the transform core's pure
 half — `Params` (the SD-x decisions as a frozen record), `select_strike`, `is_itm`, `valid_mid`,
 the blotter-row constructors, and the calendar helpers that own SPEC §3.2 item 4's **closing
@@ -195,16 +195,23 @@ bar**, the one place allowed to decide which hourly bar is "the close". **`live.
 same day** (T-80): FR-21's forward run, whose `capture()` is its only network and whose
 planners are pure functions of a captured payload, so the leg that books a real trade is
 tested offline. The blotter constructors sit in `rules.py` rather than `live.py` as T-80's
-wording had them, so that `engine.py` never imports the module holding the network. Specified in [SPEC-COVERED-CALL.md](SPEC-COVERED-CALL.md).
+wording had them, so that `engine.py` never imports the module holding the network.
+**`tape.py` landed 2026-09-14** (T-56): the acquisition half's other module, split the same
+way — `fetch_tape()` holds the only network and is human-invoked once (RUNBOOK §8), while
+`load_tape()` reaches it under no circumstances and returns the frozen `Tape(bars, meta)`
+record that `engine` and `page` are handed. The UTC→exchange-time conversion the two
+acquisition modules share lives in `rules.to_exchange_time`, so the OQ-11 convention cannot be
+applied one way in the backtest and another in the live leg. Specified in [SPEC-COVERED-CALL.md](SPEC-COVERED-CALL.md).
 *Does not belong here:* the RIC/OCC grammar (→ `option_surface_utils`), any token (→ `theme`).
 
 **`tests/`** — mirrors the transform core first, then everything a defect could reach the
 published page through. Uses the seeded synthetic panel as its fixture (AD-7), exposed as the
 session-scoped `synthetic_payload` / `synthetic_wide` fixtures in `tests/conftest.py`.
-**302 green, no xfail (2026-09-13):** `tests/covered_call/` mirrors A2's subpackage (AD-12) —
+**352 green, no xfail (2026-09-14):** `tests/covered_call/` mirrors A2's subpackage (AD-12) —
 `test_rules.py` carries I-9 as a seeded property plus the closing-bar group that pins the T-62
-trap, and `test_live.py` covers FR-21's forward run by faking the single LSEG seam so the
-booking path is exercised with no credentials. 15 of 15 injected defects caught across both; `test_ric_parsing` / `test_ric_building` /
+trap, `test_live.py` covers FR-21's forward run and `test_tape.py` the whole pull path, both by
+faking the single LSEG seam so the code that books trades and writes the tape is exercised with
+no credentials. 35 of 35 injected defects caught across the three; `test_ric_parsing` / `test_ric_building` /
 `test_transforms` / `test_acquisition` cover the FR-3 chain and the pull; `test_iv` covers
 FR-11 — the Black-Scholes round trip and, at equal weight, every path on which the inversion
 must refuse; `test_app_figures` pins the app→plot call sites, the published hero's controls,
@@ -476,18 +483,27 @@ decision (T-53) — renaming changes the Pages URL, which is cheaper now than af
 submissions point at it.
 
 **AD-12 — One subpackage per assignment, layered inside.**
-*(Proposed 2026-09-12. **Sign-off still pending — T-74.** `rules.py` landed 2026-09-13 under
-T-65, because T-65 names that path and Monday's live entry depends on it; if the PO rejects
-AD-12 the module moves, which is a rename and no rewrite.)*
+*(Proposed 2026-09-12. **Accepted — PO, 2026-09-14 (T-74), amended on two points that T-80
+established after the proposal was written:** `live.py` joins the module list, and the
+blotter-row constructors are pinned to `rules.py`. `rules.py` and `live.py` had already
+landed 2026-09-13 under T-65/T-80, because those tasks name those paths and Monday's live
+entry depended on them; the sign-off ratifies where they sit.)*
 *Context:* Assignment 1.1's flat module set (`*utils.py` / `*plot.py` / `*app.py`) was the
 brief's file-layout rule, released with AD-10. A second assignment adds acquisition, a
 transform core (rules, engine), presentation and a page of its own; by the fourth, a flat set
 is unreadable, and AD-11's generator wants one page module per assignment anyway.
-*Decision:* `options_surface_lab/covered_call/` — `tape.py` (acquisition + parquet cache, the
-only network), `rules.py` + `engine.py` (transform core: no plotly, no theme), `plots.py`
-(presentation), `page.py` (application: the builder the generator registers), `writeup.py`
-(the PO's prose). §2's layer rules apply *inside* the subpackage; `tests/covered_call/`
-mirrors it. What is shared stays shared and stays flat: the RIC/OCC grammar in
+*Decision:* `options_surface_lab/covered_call/` — `tape.py` (acquisition + parquet cache),
+`live.py` (FR-21's forward run — acquisition too, and the CLI), `rules.py` + `engine.py`
+(transform core: no plotly, no theme), `plots.py` (presentation), `page.py` (application: the
+builder the generator registers), `writeup.py` (the PO's prose). §2's layer rules apply
+*inside* the subpackage; `tests/covered_call/` mirrors it. **The network lives only in the
+acquisition pair**, and in each it is one seam — `live.py` imports `lseg.data` inside
+`lseg_session()` and nowhere else, which is what lets the leg that books a real trade be
+tested with no credentials (NFR-4). **The blotter-row constructors belong to `rules.py`, not
+to whichever module books first**: `live.py` needed them on 09-13 and `engine.py` needs the
+identical rows, so putting them in the pure module is what stops the engine importing the
+module that holds the network (NFR-5 — a live row and a backtested row come from one code
+path). What is shared stays shared and stays flat: the RIC/OCC grammar in
 `option_surface_utils.py`, tokens in `theme.py`, the inverter for the P1 delta rule.
 *Consequences:* SYSTEM-SPEC §4's import table gains rows; an assignment may reach another
 only through `option_surface_utils` and `theme` — never into its internals; 1.1's flat modules

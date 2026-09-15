@@ -49,6 +49,7 @@ from .rules import (
     format_bar_time,
     is_itm,
     select_strike,
+    to_exchange_time,
     trading_weeks,
     valid_mid,
 )
@@ -115,10 +116,32 @@ def lseg_session():
     import lseg.data as ld
 
     ld.open_session()
+    _require_open_session(ld)
     try:
         yield ld
     finally:
         ld.close_session()
+
+
+def _require_open_session(ld) -> None:
+    """Fail here if the session did not actually open, rather than three steps later.
+
+    ``ld.open_session()`` does **not** raise when the handshake fails: it logs, returns,
+    and leaves a *closed* session behind. Every request then fails with "Session is not
+    opened", which this module would otherwise log as ``SKIP_NO_STOCK_PRINT`` — a
+    *skipped week* written into the live book for a desktop-side problem (found 2026-09-14 on
+    T-77's pull, where a ready proxy never answered the handshake). I-10 says a week
+    appears once, so that skip would then refuse the re-run.
+    """
+    state = str(getattr(ld.session.get_default(), "open_state", "unknown"))
+    if not state.endswith("Opened"):
+        raise RuntimeError(
+            f"LSEG session did not open (state {state}). The API proxy can be up and "
+            "answering /api/status while the desktop never completes the app-key "
+            "handshake — so 'Workspace is running' is not the check. Confirm Workspace "
+            "is **signed in** and loading data, restart it if the handshake still hangs, "
+            "then re-run. Nothing was requested and nothing was written (RUNBOOK §3)."
+        )
 
 
 def _history(ld, universe, fields, start, end, interval="hourly"):
@@ -131,9 +154,13 @@ def _history(ld, universe, fields, start, end, interval="hourly"):
 
 
 def _to_exchange_time(df: pd.DataFrame, params: Params) -> pd.DataFrame:
-    """LSEG hands back tz-naive UTC stamped at the bar's START (T-62, SPEC §3.1)."""
+    """LSEG hands back tz-naive UTC stamped at the bar's START (T-62, SPEC §3.1).
+
+    The conversion itself lives in ``rules`` so that this module and ``tape`` cannot
+    apply the OQ-11 convention differently (T-56).
+    """
     out = df.copy()
-    out.index = pd.DatetimeIndex(out.index).tz_localize("UTC").tz_convert(params.tz)
+    out.index = to_exchange_time(out.index, params)
     return out
 
 

@@ -540,7 +540,7 @@ strategy decisions, S-x stated simplifications, I-x invariants.*
 
 | Field | Value |
 |---|---|
-| Due | **Sunday 2026-09-20, 11:59 pm EST** (OQ-9, closed 2026-09-12). **And the first entry — 100 shares bought, the Friday call written — is booked live on Monday 2026-09-14** (PO; FR-21). Eight days from the governance landing. **The code that books it exists and is rehearsed as of 2026-09-13** (T-65 + T-80, dry-run against the expired 09-11 chain); RUNBOOK §7 is the procedure. |
+| Due | **Sunday 2026-09-20, 11:59 pm EST** (OQ-9, closed 2026-09-12). **The first entry — 100 shares bought, the Friday call written — was booked live by the system on Monday 2026-09-14** (PO; FR-21): `BUY 100 QQQ @ 709.16` + `SELL 1` of the **710** call at mid **6.045** off the 15:00 ET bar, cash 4,688.50, I-1 reconciling. RUNBOOK §7 is the procedure; **settlement runs Friday 09-18**. |
 | Graded | **100% the published site** — the Pages URL |
 | Rubric | Algorithmic entry + strike rule, wait through expiry **20** · clean blotter + ledger implementing those rules, simulated limit fills **25** · Reg T NAV / IM / MM / available funds / cash used like an account **20** · mid vs `TRDPRC_1` scatter + R² **15** · analysis **20** |
 
@@ -714,8 +714,8 @@ NFR-1 … NFR-5 apply unchanged. Added:
 
 | # | Milestone | Depends on | Contents |
 |---|---|---|---|
-| A2-M0 | Governance and decisions | — | This part; T-62 spike; SD-1…SD-6 decided; AD-12 signed |
-| A2-M1 | The tape | A2-M0 | FR-13, synthetic tape, the one-time pull committed |
+| A2-M0 | Governance and decisions | — | This part; T-62 spike; SD-1…SD-6 decided; ~~AD-12 signed~~ **✅ 2026-09-14, amended (T-74)**. Remaining: FR-14 prints the decisions on the page |
+| A2-M1 | The tape | A2-M0 | FR-13, synthetic tape, the one-time pull committed. **`tape.py` landed 2026-09-14 (T-56)** and **the pull ran 2026-09-15 (T-77)** — 37,857 bars over 10 weeks, verified against T-65's independent run. What remains is **T-63's synthetic tape** |
 | A2-M2 | The engine | A2-M1 | FR-14, FR-15, FR-16, the invariant suite, notebook 03 |
 | A2-M3 | The evidence | A2-M1 | FR-17 |
 | A2-M4 | The page | **T-79** (a second output from the current builder) + A2-M2/M3 | FR-18, FR-21's live panel, theme additions |
@@ -768,15 +768,15 @@ If P1 threatens A2-M5, P1 loses — as in Part A.
 
 ## 20. Definition of done — Assignment 2
 
-- [x] ~~SD-1 … SD-6 decided by the PO~~ — **all six closed 2026-09-12/13** (T-55). Still open: **printed on the page** (FR-14) and **AD-12 signed** (T-74)
-- [ ] `covered_call_tape.parquet` committed; `load_tape()` offline; `option_pipeline_data.pkl` untouched
+- [x] ~~SD-1 … SD-6 decided by the PO~~ — **all six closed 2026-09-12/13** (T-55), and ~~AD-12 signed~~ **accepted with two amendments 2026-09-14** (T-74). Still open: **printed on the page** (FR-14)
+- [x] ~~`covered_call_tape.parquet` committed; `load_tape()` offline; `option_pipeline_data.pkl` untouched~~ — **pulled 2026-09-15 (T-77):** 37,857 bars, 952 contracts, 10 weeks; reproduces T-65's independently-verified entries and the 6-of-10 assignment count. *Commit both the parquet and its `.meta.json` sidecar.*
 - [ ] Invariants I-1 … I-13 green on the synthetic tape and the committed tape, mutation-checked
 - [ ] Blotter: every entry and exit, the brief's columns, rule ids in the notes; skip log beside it
 - [ ] Ledger + Reg T account per bar; NAV / IM / MM chart with hover; the negative-available-funds sentence
 - [ ] Mid vs `TRDPRC_1` scatter with n, slope, R² on the page
 - [ ] Write-up authored by the PO, citing the page's own numbers
-- [ ] Live book: the 09-14 entry booked by the system from real quotes and on the page (FR-21)
+- [ ] Live book: the 09-14 entry booked by the system from real quotes and on the page (FR-21) — **booked 2026-09-14** (`covered_call_live.json`); the *on the page* half waits on T-59, and 09-18's settlement on T-78
 - [ ] Pages URL renders `/covered-call/` in incognito; 14-width audit clean; zero console errors
-- [ ] Docs in lockstep (PRD Part B status, BACKLOG-2, SPEC-COVERED-CALL, RUNBOOK §7)
+- [ ] Docs in lockstep (PRD Part B status, BACKLOG-2, SPEC-COVERED-CALL, RUNBOOK §7 live leg + §8 tape pull)
 - [ ] Canvas submission posted
 - [ ] I can explain every line (guardrail #6)

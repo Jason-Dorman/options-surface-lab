@@ -5,6 +5,7 @@ pandas
 numpy
 scipy
 plotly
+pyarrow     # Assignment 2's tape is parquet, not pickle (AD-11, SPEC-COVERED-CALL §3.1)
 
 # Dev / test
 pytest

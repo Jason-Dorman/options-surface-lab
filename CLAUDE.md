@@ -74,7 +74,7 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 
 ```bash
 python build_preview.py    # THE DELIVERABLE — builds the static index.html that Pages serves
-pytest                     # 90 tests in tests/ — all green, no xfail
+pytest                     # 352 tests in tests/ — all green, no xfail
 reflex run                 # local dev server (FR-1); not what gets published
 ```
 
@@ -323,13 +323,34 @@ refuses a strike, and fails only if the fixture has none anywhere. The fixture i
 is still calendar-dependent — OQ-6's `end_date` parameter is the root fix and needs PO
 sign-off.
 
-**Next up (2026-09-12):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST, and the first
-entry — 100 QQQ shares, the 09-18 call — is booked live on Monday 2026-09-14** (PRD Part B,
-FR-21 — **by the system**, with simulated capital: T-65 + T-80 must exist by then). The PO chose **QQQ** (SD-1, 2026-09-12) and the **last hourly bar of the week's first session** as the
-entry bar (SD-4, 2026-09-13) — so Monday's entry is the **15:00–16:00 ET bar** and the PO is at the
-desk then. The close is where the mid is most defensible, which is the whole fill assumption;
-it also makes OQ-11 load-bearing (a bar's `ts` convention decides which bar "last" is) and OQ-13
-live (does the brief's "Monday close" admit the last hourly bar — ask in class).
+**Next up (2026-09-14):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST.** The first live
+entry is **booked** — see T-78 below. ~~T-56~~ and ~~T-77~~ are done — **the tape is pulled and verified** — so
+the critical path is **T-57** (the engine + the I-1…I-13 invariant suite),
+T-58, T-79/T-59 (the page), T-60 (the PO's write-up), then T-71/T-72 to ship. The PO chose **QQQ** (SD-1, 2026-09-12) and the **last
+hourly bar of the week's first session** as the entry bar (SD-4, 2026-09-13). The close is where
+the mid is most defensible, which is the whole fill assumption; it also makes OQ-11 load-bearing
+(a bar's `ts` convention decides which bar "last" is) and OQ-13 live (does the brief's "Monday
+close" admit the last hourly bar — ask in class).
+
+**T-78's entry leg ran 2026-09-14 (FR-21) — the system booked the first week, and the second
+half of T-78 is Friday 09-18's `… live settle`.** One run of `python -m
+options_surface_lab.covered_call.live enter` read the **15:00 ET** bar (the tape ran to 18:00, so
+`max(ts)` would have taken a post-close stub), saw spot **709.16**, selected the nearest OTM
+strike **710**, and booked `BUY 100 QQQ @ 709.16` + `SELL 1 QQQI182671000.U @ 6.045` — the mid of
+6.01/6.08 — leaving cash **4,688.50**. **I-1 reconciles against the blotter alone**
+(75,000 − 70,916 + 604.50); no skips, `ric_form: live`, no diagnostics errors, 97 covered-call
+tests green. `covered_call_live.json` is committed — it is data the page renders (FR-21's panel
+is T-59). Two things to carry:
+
+- **The legs are `sync=5s` apart** (stock `c_sec_ofst` 3599, call 3594) — trade-to-trade, not
+  trade-to-quote, exactly as SPEC §6.3 already qualifies it. The live week measures the same
+  residual the 09-08 dry run did rather than assuming it away.
+- **The observation point is load-bearing, and now there are two weeks of evidence for it.** The
+  entry bar's high was **711.96** against its 709.16 close, so reading the bar's *start* would
+  have written the **712** call, not 710 — the 09-08 rehearsal said the same thing (719 at the
+  close, 720 at the open). SD-4 fixes the *bar*; what this pair argues is that the rule must fix
+  the **observation point within it**. It belongs in the write-up (T-60), not in a reader's
+  discovery.
 
 **T-55 closed 2026-09-13 — all six strategy decisions are made** (PRD §15): window
 **`2026-07-06 → 2026-09-11`** (SD-2), **$75,000 fully funded** (SD-3), **nearest OTM** (SD-5),
@@ -341,9 +362,13 @@ invested and a **NAV**-measured return is not diluted by idle cash. `NEG_AVAILAB
 implemented and never fires. What remains of A2-M0 is printing the decisions on the page (FR-14) and signing AD-12.
 
 **T-65 landed 2026-09-13** — `options_surface_lab/covered_call/rules.py`, the first code of
-Assignment 2 and the first module of the AD-12 subpackage. **AD-12 itself is still unsigned
-(T-74)**; the module was placed where T-65 names it because Monday's entry depends on it, and
-a rejection is a rename, not a rewrite. It holds `Params` (frozen, defaulting to all six SD
+Assignment 2 and the first module of the AD-12 subpackage. **AD-12 was signed 2026-09-14
+(T-74)**, amended on the two points T-80 established after the proposal was written: `live.py`
+joins the module list, and the **blotter-row constructors are pinned to `rules.py`** so
+`engine.py` never imports the module holding the network (NFR-5 — a live row and a backtested
+row come from one code path). The audit behind the signature: `rules.py` is pandas + stdlib
+only, `live.py`'s sole network seam is `lseg_session()`, `writeup.py` has no imports, and
+nothing in 1.1 imports `covered_call`. It holds `Params` (frozen, defaulting to all six SD
 decisions, printed whole by FR-14), `select_strike`, `is_itm` and the calendar helpers.
 **37 tests, 9 of 9 injected defects caught.** Two things worth carrying:
 
@@ -401,6 +426,73 @@ things worth carrying:
   inside the range; the point is that the failure is silent, so it is refused rather than
   logged.
 
+**T-77's tape is in (2026-09-15): 37,857 bars, 952 contracts, 10 weeks, `synthetic=False`.**
+`covered_call_tape.parquet` + `covered_call_tape.meta.json`. **Verified against something it
+did not produce** (the T-46 rule): driven through `rules.py`, the tape reproduces all ten
+15:00 ET entry bars, W37 entering **Tuesday 09-08** off the tape, and **6 of 10 weeks
+assigning** — the numbers an independent script produced for T-65 — while W37's entry
+(S=718.41 → K=719 @ mid 4.80) is identical to T-80's dry run, which reached LSEG by the
+*other* code path. 98.5% of option bars at the ten entry bars carry a valid mid. Three
+findings:
+
+- **The caret changeover is a few days wide, and now measured twice.** On 09-13 the 09-11
+  contracts answered only under the *live* form; on 09-15 all 952 came back under the
+  **caret**. So the same window pulled on two dates yields two different `ric_form_used`
+  maps — which is exactly why the pull asks under both forms rather than choosing.
+- **Thin extended-hours bars carry erroneous `LOW_1`/`HIGH_1` ticks.** The 09-11 17:00 ET
+  stock bar prints a low of **667.36** while the tape traded at ~715. One such tick widens a
+  week's strike band by tens of strikes, so the pull asked ~100 strikes a week and ~93%
+  answered. Left as is: too wide costs soft failures that are recorded; too narrow silently
+  omits the strike the rule needed and turns a tradable week into a skip. **Anything that
+  plots the stock's high/low must expect these ticks.**
+- **The accounting held by luck, and now holds by construction.** 952 answered + 150 refused
+  = 1,102 requested reconciled only because every leftover landed in a batch that failed
+  *whole* and was retried one RIC at a time (AD-2). A batch that answers **partially** raises
+  nothing, so contracts inside it that returned nothing left no trace. `diagnostics.unanswered`
+  now names every RIC that returned nothing, `describe()` prints the reconciliation, and a
+  test asserts it on a fixture where partial answers are the normal case. *(The committed
+  sidecar predates the key; the same sum is derivable from `requested` minus the tape's own
+  RICs, which is what the printed line does.)*
+
+**T-56 landed 2026-09-14 — `covered_call/tape.py`, so the pull is one command** (FR-13).
+
+**The first attempt at T-77's pull failed on the desktop, not the data (2026-09-14), and that
+found a defect in both acquisition modules.** `ld.open_session()` **does not raise when the
+handshake fails** — it logs, returns, and leaves a *closed* session behind. So the pull ran its
+stock request against a dead session and reported `No QQQ.O bars returned`: a desktop outage
+misattributed as an empty tape. Worse on the live side, where the same path would have written
+a false `SKIP_NO_STOCK_PRINT` into the book — and **I-10's "a week appears once" would then
+refuse the re-run that would have booked it correctly**, which is Friday 09-18's settlement.
+`_require_open_session()` now fails at the seam in both modules, with a test each. The symptom
+to recognise: `/api/status` answers **`ST_PROXY_READY`** in ~2s while `POST /api/handshake`
+hangs past 20s and retries forever — the proxy is up, the desktop behind it is not answering.
+**"Workspace is running" is not the check**; RUNBOOK §9 is the procedure.
+`fetch_tape()` holds the module's only network and is human-invoked once (**RUNBOOK §8**;
+§7 is the live leg); `load_tape()` reaches it under **no** circumstances and hands back a frozen
+`Tape(bars, meta)` — the SPEC §3.1 table plus the payload keys, which live in a JSON **sidecar**
+beside the parquet and are committed with it. **31 tests, 16 of 16 injected defects caught**;
+the whole pull path runs offline by faking `lseg_session`, the one seam. `pyarrow` is now in
+`requirements.txt`. Four things worth carrying:
+
+- **The offline guarantee is a property of which function you called, not of an env var.**
+  `load_tape()` never pulls whatever `OSL_OFFLINE` says; `fetch_tape()` refuses to run under it
+  *and* refuses to overwrite an existing tape. And a pull that finds no stock bars **writes
+  nothing** — a half-written tape would block its own retry (fetch refuses an existing file) and
+  would render as a perfectly plausible empty book.
+- **A strike ladder computed in floats is a silent defect.** The RIC grammar stores a strike as
+  five digits of hundredths; a drifting ladder builds a RIC one cent off a real contract, and
+  that does not error — it returns nothing, which reads as "never listed". The band is integer
+  arithmetic in hundredths, and a test round-trips every strike it generates through
+  `build_option_ric` → `parse_option_ric`.
+- **The band is per week's own range, not the window's.** Ten weeks of QQQ span more than any
+  one week's chain; a window-wide ladder asks every expiry for strikes it never listed, which is
+  slow and fills the diagnostics with failures that mean nothing.
+- **The two RIC forms are asked per contract, not per week** (SPEC §3.3): the caret form first,
+  then the live form for whatever did not answer, and the winner is recorded in
+  `diagnostics.ric_form_used`. The most recent weeks answering only `live` is T-62's finding,
+  not a fault. **Still open:** the synthetic tape is T-63, so `load_tape()` with no parquet
+  **raises and says what to do** rather than inventing bars.
+
 **T-62 landed 2026-09-13** — the LSEG hourly spike, evidence in `notebooks/t62_qqq_hourly_spike.json`.
 QQQ's root and RIC format are proven, hourly reaches a contract's whole listed life, and the
 **strike step is $1.00**. Four things worth carrying:
@@ -426,9 +518,10 @@ QQQ's root and RIC format are proven, hourly reaches a contract's whole listed l
 AD-10 / AD-11 are approved but **not landed and nothing in the code has moved**; with eight
 days left the session recommends deferring the whole M5 restructure until after the
 submission and building A2 on the current builder (BACKLOG-2 T-79) — PO to confirm. The
-order that fits the calendar is at the top of `docs/BACKLOG-2.md`: T-62 spike → decisions →
-T-78 Monday → T-56 → T-57 → T-58 → T-79/T-59 → T-60 → ship. 1.1's brief is archived at
-`docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open. **219 tests green, no xfail.**
+order that fits the calendar is at the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions →
+T-78's entry~~ (all landed) → **T-56** → T-57 → T-58 → T-79/T-59 → T-60 → ship, with T-78's
+settlement leg on Friday 09-18. 1.1's brief is archived at
+`docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open. **352 tests green, no xfail** (2026-09-14, full run).
 Update this paragraph as things land (lockstep rule).
 
 **Secrets:** `lseg-data.config.json` (repo root) holds the LSEG app-key. It is gitignored —

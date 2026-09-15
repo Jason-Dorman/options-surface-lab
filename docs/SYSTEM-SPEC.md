@@ -133,6 +133,7 @@ flowchart TD
 | `build_preview.py` | utils, plot | reflex | Static HTML assembly |
 | `covered_call/rules.py` | pandas (stdlib `datetime`) | reflex, plotly, theme, lseg | A2's strategy: `Params`, strike choice, the ITM test, the calendar and the *closing bar*, the blotter rows |
 | `covered_call/live.py` | rules, utils, pandas, **lseg** | reflex, plotly, theme | FR-21's forward run: `capture` (the only network), the entry/settlement planners, the CLI |
+| `covered_call/tape.py` | rules, utils, pandas, numpy, pyarrow, **lseg** | reflex, plotly, theme, `option_pipeline_data.pkl` | FR-13's hourly tape: `fetch_tape` (the only network, human-invoked), `load_tape` (never), the `Tape` record, the chain band |
 
 This is the SRP/coupling contract from
 [ENGINEERING-PRINCIPLES.md](ENGINEERING-PRINCIPLES.md): 1.2's vol-surface work extends

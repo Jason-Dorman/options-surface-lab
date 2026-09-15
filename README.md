@@ -43,7 +43,7 @@ Python is the conda env **`algo`** (3.12). Commands are Git Bash syntax, from th
 source /c/Users/rjd61/anaconda3/etc/profile.d/conda.sh && conda activate algo
 
 python build_preview.py     # THE DELIVERABLE — writes options_surface_preview.html (~32 s)
-python -m pytest tests/ -q  # 219 tests, all green, no xfail
+python -m pytest tests/ -q  # 352 tests, all green, no xfail
 reflex run                  # local Reflex viewer (being retired — AD-10)
 ```
 
@@ -62,7 +62,7 @@ never commit `lseg-data.config.json` (the app-key; gitignored).
 | `options_surface_lab/commentary.py` | The PO's three sentences (FR-7) — prose only. |
 | `build_preview.py` | The static page builder. CI runs it. |
 | `option_pipeline_data.pkl` | The committed LSEG cache: 296 series × 53 days. A frozen artifact. |
-| `tests/` | 219 tests; the pure functions first, then everything a defect could reach the page through. |
+| `tests/` | 352 tests; the pure functions first, then everything a defect could reach the page through. |
 | `notebooks/` | Exploration and evidence, numbered by assignment. Consume the package; never a dependency. |
 | `.github/workflows/pages.yml` | pytest in a clean container with no credentials → build → guards → Pages. |
 

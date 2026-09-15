@@ -558,3 +558,38 @@ def test_the_intra_bar_range_is_captured_so_the_page_can_show_it(monkeypatch):
     snap = live.capture(dt.date(2026, 9, 11), Params())
     assert "high_1" in snap["underlying"] and "low_1" in snap["underlying"]
     assert "c_sec_ofst" in snap["underlying"]
+
+
+
+# --------------------------------------------------------------------------
+# The seam's own guard: open_session() does not raise when the handshake fails
+# --------------------------------------------------------------------------
+class _StubLd:
+    """Shaped like ``lseg.data``: ``ld.session.get_default().open_state``."""
+
+    def __init__(self, state):
+        self.session = self
+        self._state = state
+
+    def get_default(self):
+        return self
+
+    @property
+    def open_state(self):
+        return self._state
+
+
+def test_a_closed_session_is_refused_before_a_week_can_be_skipped():
+    """Worse here than in the pull: a closed session looks like a week with no print.
+
+    The live leg would have written ``SKIP_NO_STOCK_PRINT`` into the book for a
+    desktop-side outage — and I-10's "a week appears once" would then refuse the
+    re-run that would have booked it correctly.
+    """
+    with pytest.raises(RuntimeError) as excinfo:
+        live._require_open_session(_StubLd("OpenState.Closed"))
+    assert "signed in" in str(excinfo.value)
+
+
+def test_an_open_session_passes_the_guard():
+    assert live._require_open_session(_StubLd("OpenState.Opened")) is None

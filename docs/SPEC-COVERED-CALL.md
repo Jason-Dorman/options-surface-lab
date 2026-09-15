@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft v1 — 2026-09-12. Written before any code; every schema and rule here is a target until the task that lands it says otherwise (lockstep rule). |
+| Status | Draft v1 — 2026-09-12, **§2/§3/§5/§6.1/§8's records landed** (T-65, T-80, T-56). §3.1–§3.3 are now the code's behaviour, not a target; §3.4 (the synthetic tape) is still to come — T-63. Everything from §4 on remains a target until its task lands (lockstep rule). |
 | Scope | The book: tape → rules → engine → blotter + ledger + Reg T account → page. Schemas, the weekly algorithm, fills, settlement, edge cases, the invariant suite. |
 | Companion | Requirements: [PRD.md Part B](PRD.md) (§13–§20) · Board: [BACKLOG-2.md](BACKLOG-2.md) · Brief: [ASSIGNMENT-2-COVERED-CALL.md](ASSIGNMENT-2-COVERED-CALL.md) · Shared machinery: [SYSTEM-SPEC.md](SYSTEM-SPEC.md) §6 (RIC grammar), §5 (cache-first) · Structure: [ARCHITECTURE.md](ARCHITECTURE.md) AD-12 |
 
@@ -84,6 +84,15 @@ Payload keys alongside the table (SYSTEM-SPEC §5.1 posture — additive only):
 (requested RICs, returned RICs, per-week counts, `strike_step_discovered` (**$1.00** near the money on QQQ — T-62), `tz_convention`,
 `ric_form_used`).
 
+**Where they live (T-56):** in a JSON sidecar, `covered_call_tape.meta.json`, beside the
+parquet — not inside it. A parquet file's own key-value metadata is engine-specific and
+invisible to anyone who opens the file in something that is not pandas, and these keys are
+exactly what a reader needs in order to trust the bars. `load_tape()` returns both halves as
+one frozen record, `Tape(bars, meta)`, with `.stock` / `.options` / `.stock_index` /
+`.weeks(params)` / `.strikes_for(expiry)` on it; `.synthetic` defaults to **True** when the
+payload does not say, so an unlabelled tape is treated as the dangerous case. That record is
+what `run_backtest(tape, params)` and `build_page(tape, params)` are handed.
+
 ### 3.2 The calendar comes from the stock tape
 
 Weeks and expiries are **read off the stock bars, never generated from a calendar**:
@@ -129,6 +138,22 @@ its life (from listing to expiry) rather than the whole window.
 CI, tests or the build ever reaches the network. `option_pipeline_data.pkl` is never touched
 by any of this.
 
+**Landed 2026-09-14 (T-56)**, with three details the writing above left open:
+
+- The band is generated **per week, from that week's own bar range**, padded four steps either
+  side — not from the window's. Two weeks twenty points apart would otherwise each request the
+  other's strikes, against an expiry that never listed them.
+- The ladder is computed in **integer hundredths**, the unit the RIC grammar stores a strike
+  in. A float ladder drifts, and a RIC one cent off a real contract does not error — it
+  returns nothing, which reads as "that strike was never listed".
+- `load_tape()` **never reaches the network under any circumstances**, whatever `OSL_OFFLINE`
+  says; only `fetch_tape()` does, and it refuses to run under it. The offline guarantee is
+  therefore a property of which function you called, not of an environment variable.
+- A pull that returns no stock bars **writes nothing at all**: a half-written tape would block
+  the retry (fetch refuses an existing file) and would render as a plausible empty book.
+
+The procedure is [RUNBOOK](RUNBOOK.md) §8.
+
 ### 3.4 The synthetic tape
 
 `synthesize_tape(seed=7, end_date=...)` — the fixture and the no-cache fallback (AD-7). It takes
@@ -138,6 +163,11 @@ present on most near-the-money bars and absent on some (including at least one e
 window, so the skip path is always exercised), prints sparse, spreads wider on the first bar
 of the day than the last, one holiday-shortened week, and a stock path that produces both OTM
 and ITM Fridays. A page built from it says so and the CI guard refuses to publish it (§10).
+
+**Not written yet (T-63).** Until it is, `load_tape()` with no parquet present **raises and
+says what to do** rather than falling back: the one failure this module must not have is
+inventing bars in silence. So `OSL_OFFLINE=1` currently means "never pull", and the committed
+tape is what the tests and the build read.
 
 ## 4. The weekly loop
 

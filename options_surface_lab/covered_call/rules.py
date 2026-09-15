@@ -194,6 +194,21 @@ class Week:
         return len(self.sessions) < MIN_SESSIONS_PER_WEEK
 
 
+def to_exchange_time(index, params: Params) -> pd.DatetimeIndex:
+    """Localise LSEG's tz-naive UTC bar index and convert it to exchange time.
+
+    The single place the OQ-11 convention is applied (SPEC §3.1): LSEG returns the
+    index tz-naive in **UTC**, stamped at the bar's START. Both acquisition modules
+    (:mod:`tape` and :mod:`live`) hand their frames through here so the conversion
+    cannot be right in one of them and wrong in the other. An index that is already
+    tz-aware is converted, not re-localised.
+    """
+    index = pd.DatetimeIndex(index)
+    if index.tz is None:
+        index = index.tz_localize("UTC")
+    return index.tz_convert(params.tz)
+
+
 def _require_exchange_time(index: pd.DatetimeIndex, params: Params) -> pd.DatetimeIndex:
     """Guard the OQ-11 trap: a tz-naive index is almost certainly still UTC."""
     index = pd.DatetimeIndex(index)
