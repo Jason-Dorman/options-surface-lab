@@ -131,6 +131,8 @@ flowchart TD
 | `commentary.py` | (nothing) | everything | FR-7's three sentences — prose, authored by the PO |
 | `options_surface_app.py` | reflex, utils, plot, theme | — | State, events, page composition |
 | `build_preview.py` | utils, plot | reflex | Static HTML assembly |
+| `covered_call/rules.py` | pandas (stdlib `datetime`) | reflex, plotly, theme, lseg | A2's strategy: `Params`, strike choice, the ITM test, the calendar and the *closing bar*, the blotter rows |
+| `covered_call/live.py` | rules, utils, pandas, **lseg** | reflex, plotly, theme | FR-21's forward run: `capture` (the only network), the entry/settlement planners, the CLI |
 
 This is the SRP/coupling contract from
 [ENGINEERING-PRINCIPLES.md](ENGINEERING-PRINCIPLES.md): 1.2's vol-surface work extends

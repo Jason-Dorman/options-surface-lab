@@ -1,0 +1,486 @@
+{
+  "task": "T-62 \u2014 LSEG hourly spike on QQQ weeklies",
+  "run_at": "2026-09-13T21:52:42",
+  "session": "lseg.data 2.1.1, Workspace desktop, read-only, no cache written",
+  "conclusions": {
+    "OQ-10_hourly_reach": "Ample. QQQ.O hourly serves 2026-06-01 onward (1152 bars). An expired weekly call (04-Sep) serves 2026-07-23 -> 2026-09-04 (256 bars), i.e. its whole listed life. A 10-week window is comfortably covered.",
+    "OQ-11_bar_convention": "Bars are stamped at their START, in UTC, tz-naive. Proof: O_SEC_OFST=0 and C_SEC_OFST=3599 on essentially every bar; QQQ.O runs 08:00-23:00 UTC, which under start-stamping is exactly 04:00-20:00 ET, the US extended session; and the 19:00 UTC bar carries 55,942 trades against 3,966 in the 20:00 bar, which is the closing-hour surge. Therefore the 15:00-16:00 ET closing hour is the bar stamped 19:00 UTC WHILE EDT IS IN FORCE. Convert UTC -> America/New_York; never hardcode 19:00.",
+    "OQ-12_strike_step": "$1.00 near the money, on both a live (18-Sep) and an expired (04-Sep) QQQ weekly: every integer strike 710..721 returns data; 712.50 and 717.50 return none.",
+    "RIC_day_is_zero_padded": "The brief's rule 'DAY, not zero-padded (5, not 05)' is WRONG as LSEG resolves these today. All three of the brief's single-digit-day AAPL examples fail as written and succeed zero-padded. The repo's build_option_ric(), which uses {day:02d}, is correct.",
+    "expired_suffix_is_not_immediate": "Two days after expiry the 11-Sep QQQ contracts still resolve ONLY under the LIVE form (no caret): QQQI112671500.U returns 24 bars, QQQI112671500.U^I26 returns nothing. The 04-Sep contracts (9 days out) resolve only under the caret form. A pull must try both forms and record which won.",
+    "option_session_bars": "An option day has 8 hourly bars, 13:00..20:00 UTC. Under start-stamping that is 09:00-10:00 ET through 16:00-17:00 ET. The 20:00 UTC bar is AFTER the 16:00 ET equity close and carries real quotes, so 'the last bar of the session' is NOT the closing hour.",
+    "live_capture_works": "A live, unexpired weekly (QQQI182671500.U) returns hourly BID/ASK history. Monday's entry can therefore be captured from the completed 19:00 UTC bar after the fact; it is not a real-time race.",
+    "spot_context": "QQQ.O closed 714.88 on 2026-09-11; the window 2026-07-02..2026-09-11 has 50 sessions. 100 shares is about $71,500, so SD-3's round figure is $75,000."
+  },
+  "raw": {
+    "1_stock_daily": {
+      "error": null,
+      "rows": 50,
+      "index_name": "Date",
+      "index_dtype": "datetime64[ns]",
+      "index_tz": "None",
+      "first": "2026-07-02 00:00:00",
+      "last": "2026-09-11 00:00:00",
+      "columns": [
+        "TRDPRC_1"
+      ]
+    },
+    "1b_spot_sample": {
+      "last_10": {
+        "2026-08-28": 716.43,
+        "2026-08-31": 716.76,
+        "2026-09-01": 707.64,
+        "2026-09-02": 709.24,
+        "2026-09-03": 717.67,
+        "2026-09-04": 718.96,
+        "2026-09-08": 718.36,
+        "2026-09-09": 716.31,
+        "2026-09-10": 708.69,
+        "2026-09-11": 714.88
+      },
+      "n_sessions": 50
+    },
+    "2_stock_hourly": {
+      "error": null,
+      "rows": 64,
+      "index_name": "Timestamp",
+      "index_dtype": "datetime64[ns]",
+      "index_tz": "None",
+      "first": "2026-09-08 08:00:00",
+      "last": "2026-09-11 23:00:00",
+      "columns": [
+        "TRDPRC_1",
+        "BID",
+        "ASK"
+      ]
+    },
+    "2b_bars_per_session": {
+      "2026-09-08": "16 bars  08:00:00 .. 23:00:00",
+      "2026-09-09": "16 bars  08:00:00 .. 23:00:00",
+      "2026-09-10": "16 bars  08:00:00 .. 23:00:00",
+      "2026-09-11": "16 bars  08:00:00 .. 23:00:00"
+    },
+    "3_stock_hourly_reach": {
+      "error": null,
+      "rows": 1152,
+      "index_name": "Timestamp",
+      "index_dtype": "datetime64[ns]",
+      "index_tz": "None",
+      "first": "2026-06-01 08:00:00",
+      "last": "2026-09-11 23:00:00",
+      "columns": [
+        "TRDPRC_1"
+      ]
+    },
+    "4_volume_by_hour_utc_20260911": {
+      "error": null,
+      "rows": 0
+    },
+    "5_padded_0426_expired": {
+      "ric": "QQQI042672000.U^I26",
+      "error": null,
+      "rows": 80,
+      "first": "2026-08-24 13:00:00",
+      "last": "2026-09-04 20:00:00",
+      "columns": [
+        "TRDPRC_1",
+        "BID",
+        "ASK"
+      ]
+    },
+    "5_unpadded_426_expired": {
+      "ric": "QQQI42672000.U^I26",
+      "error": "LDError: No data to return, please check errors: ERROR: No successful response.\n(TS.Intraday.UserRequestError.90001, QQQI42672000)",
+      "rows": 0
+    },
+    "6_padded_1126_expired": {
+      "ric": "QQQI112671500.U^I26",
+      "error": "LDError: No data to return, please check errors: ERROR: No successful response.\n(TS.Intraday.UserRequestError.90001, QQQI112671500)",
+      "rows": 0
+    },
+    "7_live_0918_71500": {
+      "ric": "QQQI182671500.U",
+      "error": null,
+      "rows": 16,
+      "first": "2026-09-10 13:00:00",
+      "last": "2026-09-11 20:00:00",
+      "columns": [
+        "TRDPRC_1",
+        "BID",
+        "ASK"
+      ]
+    },
+    "7b_live_last_bars_71500": {
+      "bars": {
+        "2026-09-10 17:00:00": [
+          6.23,
+          6.19,
+          6.22
+        ],
+        "2026-09-10 18:00:00": [
+          6.2,
+          6.23,
+          6.29
+        ],
+        "2026-09-10 19:00:00": [
+          5.96,
+          5.96,
+          6.02
+        ],
+        "2026-09-10 20:00:00": [
+          6.11,
+          6.05,
+          6.16
+        ],
+        "2026-09-11 13:00:00": [
+          8.68,
+          7.5,
+          8.74
+        ],
+        "2026-09-11 14:00:00": [
+          7.0,
+          7.05,
+          7.14
+        ],
+        "2026-09-11 15:00:00": [
+          8.04,
+          7.92,
+          7.99
+        ],
+        "2026-09-11 16:00:00": [
+          7.56,
+          7.53,
+          7.59
+        ],
+        "2026-09-11 17:00:00": [
+          7.65,
+          7.64,
+          7.67
+        ],
+        "2026-09-11 18:00:00": [
+          7.35,
+          7.34,
+          7.38
+        ],
+        "2026-09-11 19:00:00": [
+          6.85,
+          6.69,
+          6.81
+        ],
+        "2026-09-11 20:00:00": [
+          6.76,
+          6.72,
+          6.8
+        ]
+      }
+    },
+    "8_default_fields_live": {
+      "error": null,
+      "rows": 8,
+      "first": "2026-09-11 13:00:00",
+      "last": "2026-09-11 20:00:00",
+      "columns": [
+        "HIGH_1",
+        "LOW_1",
+        "OPEN_PRC",
+        "TRDPRC_1",
+        "NUM_MOVES",
+        "ACVOL_UNS",
+        "O_SEC_OFST",
+        "C_SEC_OFST",
+        "BID_HIGH_1",
+        "BID_LOW_1",
+        "OPEN_BID",
+        "BID",
+        "BID_NUMMOV",
+        "ASK_HIGH_1",
+        "ASK_LOW_1",
+        "OPEN_ASK",
+        "ASK",
+        "ASK_NUMMOV"
+      ]
+    },
+    "9_stock_hour_activity_utc": {
+      "columns": [
+        "ACVOL_UNS",
+        "NUM_MOVES",
+        "O_SEC_OFST",
+        "C_SEC_OFST"
+      ],
+      "rows": {
+        "09-11 08:00": [
+          307812.05737,
+          4736.0,
+          0.0,
+          3599.0
+        ],
+        "09-11 09:00": [
+          44472.664318,
+          954.0,
+          0.0,
+          3598.0
+        ],
+        "09-11 10:00": [
+          86797.883089,
+          1168.0,
+          1.0,
+          3585.0
+        ],
+        "09-11 11:00": [
+          207865.786604,
+          2993.0,
+          0.0,
+          3599.0
+        ],
+        "09-11 12:00": [
+          1210536.936481,
+          14760.0,
+          0.0,
+          3598.0
+        ],
+        "09-11 13:00": [
+          4440921.256028,
+          64347.0,
+          0.0,
+          3599.0
+        ],
+        "09-11 14:00": [
+          4802637.92748,
+          138248.0,
+          0.0,
+          3599.0
+        ],
+        "09-11 15:00": [
+          2741070.815633,
+          126753.0,
+          0.0,
+          3599.0
+        ],
+        "09-11 16:00": [
+          1806269.427293,
+          53623.0,
+          0.0,
+          3599.0
+        ],
+        "09-11 17:00": [
+          1884403.790624,
+          34745.0,
+          0.0,
+          3599.0
+        ],
+        "09-11 18:00": [
+          2192148.751628,
+          29214.0,
+          0.0,
+          3599.0
+        ],
+        "09-11 19:00": [
+          4722051.760054,
+          55942.0,
+          0.0,
+          3599.0
+        ],
+        "09-11 20:00": [
+          1729920.85421,
+          3966.0,
+          0.0,
+          3590.0
+        ],
+        "09-11 21:00": [
+          408297.705668,
+          1008.0,
+          5.0,
+          3586.0
+        ],
+        "09-11 22:00": [
+          43587.124691,
+          973.0,
+          3.0,
+          3594.0
+        ],
+        "09-11 23:00": [
+          20278.782565,
+          667.0,
+          7.0,
+          3592.0
+        ]
+      }
+    },
+    "10_brief_AAPL_05Jun_unpadded": {
+      "ric": "AAPLF52619000.U^F26",
+      "rows": 0,
+      "error": "LDError: No data to return, please check errors: ERROR: No successful response.\n(TS.Interday.UserRequestError.70005, The universe is not found)"
+    },
+    "10_brief_AAPL_05Jun_padded": {
+      "ric": "AAPLF052619000.U^F26",
+      "rows": 12,
+      "error": null
+    },
+    "10_brief_AAPL_07Aug_unpadded": {
+      "ric": "AAPLH72620500.U^H26",
+      "rows": 0,
+      "error": "LDError: No data to return, please check errors: ERROR: No successful response.\n(TS.Interday.UserRequestError.70005, The universe is not found)"
+    },
+    "10_brief_AAPL_07Aug_padded": {
+      "ric": "AAPLH072620500.U^H26",
+      "rows": 30,
+      "error": null
+    },
+    "10_brief_AAPL_17Jul_twodigit": {
+      "ric": "AAPLG172620000.U^G26",
+      "rows": 40,
+      "error": null
+    },
+    "11_0911_71000_live_form": {
+      "ric": "QQQI112671000.U",
+      "rows": 24,
+      "error": "",
+      "last": "2026-09-11 20:00:00"
+    },
+    "11_0911_71000_expired_form": {
+      "ric": "QQQI112671000.U^I26",
+      "rows": 0,
+      "error": "LDError: No data to return, please check errors: ERROR: No successful response.\n(TS.Intraday.UserRequestError.90001, QQQ",
+      "last": null
+    },
+    "11_0911_71500_live_form": {
+      "ric": "QQQI112671500.U",
+      "rows": 24,
+      "error": "",
+      "last": "2026-09-11 20:00:00"
+    },
+    "11_0911_71500_expired_form": {
+      "ric": "QQQI112671500.U^I26",
+      "rows": 0,
+      "error": "LDError: No data to return, please check errors: ERROR: No successful response.\n(TS.Intraday.UserRequestError.90001, QQQ",
+      "last": null
+    },
+    "11_0911_72000_live_form": {
+      "ric": "QQQI112672000.U",
+      "rows": 24,
+      "error": "",
+      "last": "2026-09-11 20:00:00"
+    },
+    "11_0911_72000_expired_form": {
+      "ric": "QQQI112672000.U^I26",
+      "rows": 0,
+      "error": "LDError: No data to return, please check errors: ERROR: No successful response.\n(TS.Intraday.UserRequestError.90001, QQQ",
+      "last": null
+    },
+    "12_strike_ladder_0918_live": {
+      "strikes_rows": {
+        "700.00": 8,
+        "705.00": 8,
+        "710.00": 8,
+        "712.50": 0,
+        "715.00": 8,
+        "717.50": 0,
+        "720.00": 8,
+        "725.00": 8,
+        "730.00": 8
+      }
+    },
+    "13_expired_hourly_reach": {
+      "rows": 256,
+      "error": null,
+      "first": "2026-07-23 13:00:00",
+      "last": "2026-09-04 20:00:00"
+    },
+    "14_dollar_ladder_live_0918": {
+      "rows_by_strike": {
+        "710": 8,
+        "711": 8,
+        "712": 8,
+        "713": 8,
+        "714": 8,
+        "715": 8,
+        "716": 8,
+        "717": 8,
+        "718": 8,
+        "719": 8,
+        "720": 8,
+        "721": 8
+      }
+    },
+    "14_dollar_ladder_expired_0904": {
+      "rows_by_strike": {
+        "710": 16,
+        "711": 16,
+        "712": 16,
+        "713": 16,
+        "714": 16,
+        "715": 16,
+        "716": 16,
+        "717": 16,
+        "718": 16,
+        "719": 16,
+        "720": 16,
+        "721": 16
+      }
+    },
+    "15_closing_hour_vs_stub": {
+      "bars": {
+        "2026-09-08 19:00:00": {
+          "trdprc_1": 10.75,
+          "bid": 11.13,
+          "ask": 11.26,
+          "mid": 11.195
+        },
+        "2026-09-08 20:00:00": {
+          "trdprc_1": 11.0,
+          "bid": 10.95,
+          "ask": 11.09,
+          "mid": 11.02
+        },
+        "2026-09-09 19:00:00": {
+          "trdprc_1": 9.89,
+          "bid": 9.81,
+          "ask": 9.91,
+          "mid": 9.86
+        },
+        "2026-09-09 20:00:00": {
+          "trdprc_1": 9.97,
+          "bid": 9.85,
+          "ask": 9.96,
+          "mid": 9.905
+        },
+        "2026-09-10 19:00:00": {
+          "trdprc_1": 5.96,
+          "bid": 5.96,
+          "ask": 6.02,
+          "mid": 5.99
+        },
+        "2026-09-10 20:00:00": {
+          "trdprc_1": 6.11,
+          "bid": 6.05,
+          "ask": 6.16,
+          "mid": 6.105
+        },
+        "2026-09-11 19:00:00": {
+          "trdprc_1": 6.85,
+          "bid": 6.69,
+          "ask": 6.81,
+          "mid": 6.75
+        },
+        "2026-09-11 20:00:00": {
+          "trdprc_1": 6.76,
+          "bid": 6.72,
+          "ask": 6.8,
+          "mid": 6.76
+        }
+      }
+    },
+    "15b_all_bar_times": {
+      "times": [
+        "13:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00",
+        "18:00",
+        "19:00",
+        "20:00"
+      ]
+    }
+  }
+}

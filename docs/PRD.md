@@ -540,7 +540,7 @@ strategy decisions, S-x stated simplifications, I-x invariants.*
 
 | Field | Value |
 |---|---|
-| Due | **Sunday 2026-09-20, 11:59 pm EST** (OQ-9, closed 2026-09-12). **And the first entry — 100 shares bought, the Friday call written — is booked live on Monday 2026-09-14** (PO; FR-21). Eight days from the governance landing. |
+| Due | **Sunday 2026-09-20, 11:59 pm EST** (OQ-9, closed 2026-09-12). **And the first entry — 100 shares bought, the Friday call written — is booked live on Monday 2026-09-14** (PO; FR-21). Eight days from the governance landing. **The code that books it exists and is rehearsed as of 2026-09-13** (T-65 + T-80, dry-run against the expired 09-11 chain); RUNBOOK §7 is the procedure. |
 | Graded | **100% the published site** — the Pages URL |
 | Rubric | Algorithmic entry + strike rule, wait through expiry **20** · clean blotter + ledger implementing those rules, simulated limit fills **25** · Reg T NAV / IM / MM / available funds / cash used like an account **20** · mid vs `TRDPRC_1` scatter + R² **15** · analysis **20** |
 
@@ -600,11 +600,11 @@ simplifications (S-x) follow; those need no decision, only printing.
 | ID | Decision | Options | Recommendation | Status |
 |---|---|---|---|---|
 | **SD-1** | Underlying | AAPL (the brief's proven RICs) · SPY / QQQ (ETFs, no earnings gap) · MSFT / NVDA | *Was AAPL, for the de-risked pull.* | **✅ QQQ — PO, 2026-09-12.** RIC `QQQ.O`, root `QQQ`. Consequences: no earnings gap; QQQ lists **daily** expiries, so only the Friday contracts are requested and booked; $1 strikes near the money (T-62 confirms); 100 shares ≈ 100 × spot, so SD-3's round figure is set from Monday's print; the quarterly distribution's ex-date (late September in a normal year) sits near the live book and is named (S-6). The brief's proven RICs are AAPL, so **T-62 must prove the QQQ root and format** before the pull. |
-| **SD-2** | Window | **Most recent 10 full weeks** ending on the latest Friday whose contracts resolve under the expired RIC form. **Part A's window** (Jun–Aug) for narrative symmetry. | **Most recent, ending 2026-09-11** (`2026-07-06 → 2026-09-11`), so the historical book hands off to the live book that opens 2026-09-14 (FR-21) with no gap. The 09-11 contracts expired yesterday — T-62 checks they already resolve under the expired form; if not, end 09-04 and say so. The end must be an expiry session (SPEC §3.2). If hourly history is shallower than 10 weeks, the window shrinks and the page says so. | ☐ PO — **before Monday** |
-| **SD-3** | Starting cash | **Fully funded:** a round figure just above 100 × the first entry print (≈ 100 × QQQ's spot, rounded up to the next $5,000). **Margin-funded:** ~60% of that, so the account carries a debit and the "available funds" line is live. | **Fully funded.** Logical consistency is 45 points; a debit balance brings margin interest and a decision the brief did not ask for. The Reg T lines are still computed and plotted, the `NEG_AVAILABLE` check is implemented and simply never fires — and the write-up can say what would change at 60%. Margin-funded is a P1 variant if wanted. | ☐ PO |
-| **SD-4** | Entry bar *(decides the clock time of Monday's live entry)* | **First hourly bar** of the week's first session (the open — wide spreads, worst mids). **Last hourly bar** (the closing hour — tightest spreads, most reliable prints, both legs quoted). | **Last bar of the first session.** The brief allows "Monday open or close"; the close is the bar where a mid is most defensible, which is the whole fill assumption. Holiday Mondays are handled by DR-7, not by this choice. | ☐ PO |
-| **SD-5** | Strike rule | **Nearest OTM** (ATM if spot sits on a strike) — the brief's baseline, full credit. **Delta-target** (e.g. 30Δ via the 1.1 inverter) — fewer assignments, less premium, needs an IV per strike per entry. **Fixed % OTM.** | **Nearest OTM for P0**, exactly as the brief writes it; if the chosen strike has no valid quote the week is **skipped**, not walked to the next strike (DR-1 — walking would be a different rule). **Delta-30 as the P1 comparison** (FR-20): we already own the inverter, and "too close and you lose the upside" is the tension the brief wants discussed. | ☐ PO |
-| **SD-6** | ITM test at expiry | **Strict** — ITM iff settlement print > K; equal is OTM (OCC auto-exercise is $0.01 in the money). **Inclusive** — ≥ K. | **Strict.** It matches exercise mechanics and it is the rule the code can state in one clause. | ☐ PO |
+| **SD-2** | Window | **Most recent 10 full weeks** ending on the latest Friday whose contracts resolve under the expired RIC form. **Part A's window** (Jun–Aug) for narrative symmetry. | **Most recent, ending 2026-09-11** (`2026-07-06 → 2026-09-11`), so the historical book hands off to the live book that opens 2026-09-14 (FR-21) with no gap. **T-62 (2026-09-13) answered this:** the 09-11 contracts do **not** resolve under the caret form yet, but they do resolve under the *live* form — so 09-11 stays reachable provided the pull tries both forms (SPEC §3.3). No need to fall back to 09-04. The end must be an expiry session (SPEC §3.2). If hourly history is shallower than 10 weeks, the window shrinks and the page says so. | **✅ Most recent 10 weeks — PO, 2026-09-13.** `2026-07-06 → 2026-09-11`. T-62 verified **all 10 entry bars and all 10 expiry bars exist at 15:00 ET**, and that the Labor Day week (W37) correctly opens **Tuesday 09-08** off the stock tape — DR-7 earning its place on the first window we tried. The 09-11 week needs the live RIC form (SPEC §3.3). |
+| **SD-3** | Starting cash | **Fully funded:** a round figure just above 100 × the first entry print. T-62 measured QQQ at **714.88** on 2026-09-11, so 100 shares ≈ **$71,500** and the round figure is **$75,000**. **Margin-funded:** ~60% of that, so the account carries a debit and the "available funds" line is live. | **Fully funded.** Logical consistency is 45 points; a debit balance brings margin interest and a decision the brief did not ask for. The Reg T lines are still computed and plotted, the `NEG_AVAILABLE` check is implemented and simply never fires — and the write-up can say what would change at 60%. Margin-funded is a P1 variant if wanted. | **✅ $75,000, fully funded — PO, 2026-09-13.** *(Briefly $100,000 the same day; the PO moved to $75,000 once the cash drag was measured.)* Consequences: the most expensive entry in the window is **$72,984** (2026-08-17), so the account is fully invested at the peak with ~**3%** idle, cash never goes negative, Reg T initial margin peaks near **$36,500** against $75,000 of equity, and `NEG_AVAILABLE` is implemented but never fires. Performance is measured on **NAV**, so keeping idle cash near zero is what stops the percentage return from being diluted by an arbitrary cash balance. |
+| **SD-4** | Entry bar *(decides the clock time of Monday's live entry)* | **First hourly bar** of the week's first session (the open — wide spreads, worst mids). **Last hourly bar** (the closing hour — tightest spreads, most reliable prints, both legs quoted). | **Last bar of the first session.** The brief allows "Monday open or close"; the close is the bar where a mid is most defensible, which is the whole fill assumption. Holiday Mondays are handled by DR-7, not by this choice. | **✅ Last bar — PO, 2026-09-13.** `entry_bar = "last"`. Consequences: Monday 09-14's live entry is the **15:00–16:00 ET bar** — captured from that bar *after* it completes, not traded at it (T-62 proved LSEG serves the live contract's hourly quotes as history, so any time Monday evening books the identical trade); entry and expiry now read the *same* bar-of-session, since §7 already settles on the expiry session's last bar; **OQ-11 becomes load-bearing** — T-62 must record whether a bar's `ts` is its start or its end, because "last bar" has to resolve to the closing hour and not to one mislabelled by the convention; **OQ-13 is now live** and goes to the next class. Switching to `"first"` later is a `Params` change, not a rebuild. |
+| **SD-5** | Strike rule | **Nearest OTM** (ATM if spot sits on a strike) — the brief's baseline, full credit. **Delta-target** (e.g. 30Δ via the 1.1 inverter) — fewer assignments, less premium, needs an IV per strike per entry. **Fixed % OTM.** | **Nearest OTM for P0**, exactly as the brief writes it; if the chosen strike has no valid quote the week is **skipped**, not walked to the next strike (DR-1 — walking would be a different rule). **Delta-30 as the P1 comparison** (FR-20): we already own the inverter, and "too close and you lose the upside" is the tension the brief wants discussed. | **✅ Nearest OTM — PO, 2026-09-13.** Exactly the brief's baseline. **T-62's $1.00 strike step is the consequence to write up:** on a ~$715 underlying the rule lands roughly **0.1% above spot**, i.e. effectively at the money, and on the chosen window **6 of 10 weeks finish ITM and assign**. Maximum premium, almost no upside retained — precisely the tension the brief asks you to discuss. Delta-30 stays the P1 comparison (FR-20). |
+| **SD-6** | ITM test at expiry | **Strict** — ITM iff settlement print > K; equal is OTM (OCC auto-exercise is $0.01 in the money). **Inclusive** — ≥ K. | **Strict.** It matches exercise mechanics and it is the rule the code can state in one clause. | **✅ Strict — PO, 2026-09-13.** ITM iff settlement print `> K`; equality expires. No week in the chosen window settles exactly on a strike, so it changes nothing empirically here and is chosen for mechanical correctness. |
 
 | ID | Fixed by the brief / stated simplification | Where it shows |
 |---|---|---|
@@ -727,13 +727,13 @@ If P1 threatens A2-M5, P1 loses — as in Part A.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Hourly history for **expired** contracts is shallower than 10 weeks, or missing | The window shrinks or the bar size changes | **T-62 first**, before any decision or code — one RIC, no cache written |
-| Bar timestamp convention (start/end, UTC) misread | "Monday close" becomes Tuesday's open; every fill is at the wrong quote | T-62 records it; SPEC §3.1 fixes it; a test asserts the entry bar's clock time |
+| Bar timestamp convention (start/end, UTC) misread | "Monday close" becomes the post-close stub; every fill is at the wrong quote | **Closed by T-62 (OQ-11): UTC, start-stamped.** The live trap was not the timezone but `max(ts)` — both tapes run past 16:00 ET with real quotes. SPEC §3.2 item 4 defines the *closing bar*; a test asserts the entry bar's ET clock time is 15:00 |
 | Many entry bars have no valid quote → most weeks skipped | A thin book; the strategy "does nothing" | Report it honestly (skip log); if > 50% of weeks skip, revisit SD-4 (bar) before SD-5 (strike) |
 | Holiday-week expiry RIC guessed wrong (Thursday date) | A week with no chain | DR-7 derives the date from the tape; T-62 checks one holiday week if the window has one |
 | An earnings gap lands a deep ITM assignment | Looks dramatic | It is the strategy working; the write-up discusses it (S-6) |
 | Tables break the 14-width audit | Layout defects on the graded page | Tables follow figures: scroll inside the panel below `FIGURE_MIN_WIDTH` (T-47) |
 | **Eight days to the due date with M5 (the restructure) queued ahead of A2** | A2 ships late, or the restructure ships half-done under a deadline | **Recommendation (2026-09-12, PO to confirm): defer M5 until after 09-20.** A2 is built on the current builder — T-79 adds a second output file sharing its chrome helpers; the Jinja2 generator (T-51) and the Reflex retirement (T-48) follow the submission. The restructure-first sequencing was decided before the due date was known. |
-| The 09-14 entry must be booked **by the system**, two days out | Monday's bar passes with nothing runnable | T-65 (rules) and T-80 (live capture + booking) are the only code that must exist by Monday; they are small, pure, and dry-run against 09-11's expired chain the day before. Workspace must be open on this machine at the entry bar — SD-4 decides the clock time the PO has to be at the desk. |
+| The 09-14 entry must be booked **by the system**, two days out | Monday's bar passes with nothing runnable | T-65 (rules) and T-80 (live capture + booking) are the only code that must exist by Monday; they are small, pure, and dry-run against 09-11's expired chain the day before. Workspace must be open **when the command is run**, which T-62 showed need not be at the bar: LSEG serves hourly `BID`/`ASK` history for a live weekly, so the entry is captured from the **completed** 15:00–16:00 ET bar any time that evening, and the booked trade is the same whenever it runs. |
 
 ## 19. Open questions
 
@@ -742,19 +742,33 @@ If P1 threatens A2-M5, P1 loses — as in Part A.
 - **OQ-14:** ~~What is the Monday-14 entry?~~ **Closed 2026-09-12.** The strategy goes live on
   Monday with simulated capital and the system books it — FR-21 as written; T-65 + T-80 are
   the code that must exist by the bar.
-- **OQ-10:** How far back does LSEG serve **hourly** bars for expired listed options? Part A
-  pulled daily only. → T-62.
-- **OQ-11:** LSEG's hourly bar timestamp convention — bar start or end, UTC or exchange
-  time? Decides what "last bar of the session" means in code. → T-62, then SPEC §3.1 / S-8.
-- **OQ-12:** The strike step near the money on the chosen name. Discovered, never assumed.
-  → T-62.
+- **OQ-10:** ~~How far back does LSEG serve **hourly** bars for expired listed options?~~
+  **Closed 2026-09-13 (T-62) — ample.** `QQQ.O` hourly serves 2026-06-01 onward; an expired
+  weekly call serves its whole listed life (the 04-Sep contract from 2026-07-23, 256 bars).
+  A 10-week window is comfortably covered.
+- **OQ-11:** ~~LSEG's hourly bar timestamp convention?~~ **Closed 2026-09-13 (T-62) — tz-naive
+  UTC, stamped at the bar's START** (`O_SEC_OFST` = 0, `C_SEC_OFST` = 3599 throughout).
+  **And it does not mean what "last bar" sounds like:** both tapes run past the 16:00 ET close
+  with real quotes, so the last bar of a session is a post-close stub. SD-4's closing hour is
+  the bar starting **15:00 ET**, 19:00 UTC under EDT. SPEC §3.1 and §3.2 item 4 fix it.
+- **OQ-12:** ~~The strike step near the money on the chosen name.~~ **Closed 2026-09-13
+  (T-62) — $1.00.** Every integer strike 710…721 returns data on both a live and an expired
+  QQQ weekly; 712.50 and 717.50 return none.
+- **OQ-15:** *(new, 2026-09-13, T-62)* **The brief's RIC `DAY` rule does not resolve.** It
+  says "not zero-padded (`5`, not `05`)", but all three of its own single-digit-day AAPL
+  examples fail as written and succeed zero-padded. The repo's `build_option_ric()` already
+  pads, and Part A's UUUU pull proves it (the 07-Aug expiry returned 17 series as
+  `UUUUH0726…`). The brief is precedence 1 and is **not edited**; this is a question for the
+  instructor, and the code follows what LSEG actually resolves. → ask in class.
 - **OQ-13:** Does the brief's "Monday open or close" admit the last *hourly* bar (15:00–16:00)
-  as "close"? Assumed yes — the brief says the combo can be priced "any time of day". Ask
-  at the next class if SD-4 picks it.
+  as "close"? Assumed yes — the brief says the combo can be priced "any time of day".
+  **Live since SD-4 chose the last bar (2026-09-13)** — ask at the next class. If the answer
+  is no, `entry_bar = "first"` re-runs the backtest unchanged; the already-booked live entry
+  would be the one row that cannot be moved, and the page would say so.
 
 ## 20. Definition of done — Assignment 2
 
-- [ ] SD-1 … SD-6 decided by the PO and printed on the page; AD-12 signed
+- [x] ~~SD-1 … SD-6 decided by the PO~~ — **all six closed 2026-09-12/13** (T-55). Still open: **printed on the page** (FR-14) and **AD-12 signed** (T-74)
 - [ ] `covered_call_tape.parquet` committed; `load_tape()` offline; `option_pipeline_data.pkl` untouched
 - [ ] Invariants I-1 … I-13 green on the synthetic tape and the committed tape, mutation-checked
 - [ ] Blotter: every entry and exit, the brief's columns, rule ids in the notes; skip log beside it

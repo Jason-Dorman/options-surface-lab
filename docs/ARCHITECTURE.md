@@ -186,15 +186,25 @@ deployment model to a static page on 2026-09-01, after which `reflex export` lef
 entirely. AD-4.)*
 *Does not belong here:* figure construction (→ plot), colours/fonts/measurements (→ theme).
 
-**`options_surface_lab/covered_call/`** — *proposed, AD-12; does not exist yet.* Assignment 2's
-subpackage: `tape.py`, `rules.py`, `engine.py`, `plots.py`, `page.py`, `writeup.py`, layered
-as §2 prescribes. Specified in [SPEC-COVERED-CALL.md](SPEC-COVERED-CALL.md).
+**`options_surface_lab/covered_call/`** — *AD-12; **`rules.py` landed 2026-09-13** (T-65), the
+rest still to come.* Assignment 2's subpackage: `tape.py`, `rules.py`, `engine.py`, `plots.py`,
+`page.py`, `writeup.py`, layered as §2 prescribes. `rules.py` is the transform core's pure
+half — `Params` (the SD-x decisions as a frozen record), `select_strike`, `is_itm`, `valid_mid`,
+the blotter-row constructors, and the calendar helpers that own SPEC §3.2 item 4's **closing
+bar**, the one place allowed to decide which hourly bar is "the close". **`live.py` landed the
+same day** (T-80): FR-21's forward run, whose `capture()` is its only network and whose
+planners are pure functions of a captured payload, so the leg that books a real trade is
+tested offline. The blotter constructors sit in `rules.py` rather than `live.py` as T-80's
+wording had them, so that `engine.py` never imports the module holding the network. Specified in [SPEC-COVERED-CALL.md](SPEC-COVERED-CALL.md).
 *Does not belong here:* the RIC/OCC grammar (→ `option_surface_utils`), any token (→ `theme`).
 
 **`tests/`** — mirrors the transform core first, then everything a defect could reach the
 published page through. Uses the seeded synthetic panel as its fixture (AD-7), exposed as the
 session-scoped `synthetic_payload` / `synthetic_wide` fixtures in `tests/conftest.py`.
-**213 green, no xfail (2026-09-04):** `test_ric_parsing` / `test_ric_building` /
+**302 green, no xfail (2026-09-13):** `tests/covered_call/` mirrors A2's subpackage (AD-12) —
+`test_rules.py` carries I-9 as a seeded property plus the closing-bar group that pins the T-62
+trap, and `test_live.py` covers FR-21's forward run by faking the single LSEG seam so the
+booking path is exercised with no credentials. 15 of 15 injected defects caught across both; `test_ric_parsing` / `test_ric_building` /
 `test_transforms` / `test_acquisition` cover the FR-3 chain and the pull; `test_iv` covers
 FR-11 — the Black-Scholes round trip and, at equal weight, every path on which the inversion
 must refuse; `test_app_figures` pins the app→plot call sites, the published hero's controls,
@@ -466,7 +476,9 @@ decision (T-53) — renaming changes the Pages URL, which is cheaper now than af
 submissions point at it.
 
 **AD-12 — One subpackage per assignment, layered inside.**
-*(Proposed 2026-09-12. Sign-off pending — T-74. Nothing exists yet.)*
+*(Proposed 2026-09-12. **Sign-off still pending — T-74.** `rules.py` landed 2026-09-13 under
+T-65, because T-65 names that path and Monday's live entry depends on it; if the PO rejects
+AD-12 the module moves, which is a rename and no rewrite.)*
 *Context:* Assignment 1.1's flat module set (`*utils.py` / `*plot.py` / `*app.py`) was the
 brief's file-layout rule, released with AD-10. A second assignment adds acquisition, a
 transform core (rules, engine), presentation and a page of its own; by the fourth, a flat set

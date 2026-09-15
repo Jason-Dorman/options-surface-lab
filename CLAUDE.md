@@ -325,8 +325,104 @@ sign-off.
 
 **Next up (2026-09-12):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST, and the first
 entry — 100 QQQ shares, the 09-18 call — is booked live on Monday 2026-09-14** (PRD Part B,
-FR-21 — **by the system**, with simulated capital: T-65 + T-80 must exist by then). The PO chose **QQQ** (SD-1); SD-2…SD-6 are still to be
-read and decided — **before Monday's entry bar**, since SD-4 sets its time and SD-5 its strike.
+FR-21 — **by the system**, with simulated capital: T-65 + T-80 must exist by then). The PO chose **QQQ** (SD-1, 2026-09-12) and the **last hourly bar of the week's first session** as the
+entry bar (SD-4, 2026-09-13) — so Monday's entry is the **15:00–16:00 ET bar** and the PO is at the
+desk then. The close is where the mid is most defensible, which is the whole fill assumption;
+it also makes OQ-11 load-bearing (a bar's `ts` convention decides which bar "last" is) and OQ-13
+live (does the brief's "Monday close" admit the last hourly bar — ask in class).
+
+**T-55 closed 2026-09-13 — all six strategy decisions are made** (PRD §15): window
+**`2026-07-06 → 2026-09-11`** (SD-2), **$75,000 fully funded** (SD-3), **nearest OTM** (SD-5),
+**strict `> K`** at expiry (SD-6). Two consequences T-62 measured, both of which belong in the
+write-up rather than being discovered by a reader: nearest OTM on QQQ's **$1 strike step**
+lands ~0.1% above spot, so the rule is effectively at-the-money and **6 of the 10 weeks assign**;
+and the $75,000 base sits just above the peak entry cost of **$72,984**, so the book is ~97%
+invested and a **NAV**-measured return is not diluted by idle cash. `NEG_AVAILABLE` is
+implemented and never fires. What remains of A2-M0 is printing the decisions on the page (FR-14) and signing AD-12.
+
+**T-65 landed 2026-09-13** — `options_surface_lab/covered_call/rules.py`, the first code of
+Assignment 2 and the first module of the AD-12 subpackage. **AD-12 itself is still unsigned
+(T-74)**; the module was placed where T-65 names it because Monday's entry depends on it, and
+a rejection is a rename, not a rewrite. It holds `Params` (frozen, defaulting to all six SD
+decisions, printed whole by FR-14), `select_strike`, `is_itm` and the calendar helpers.
+**37 tests, 9 of 9 injected defects caught.** Two things worth carrying:
+
+- **`max(ts)` is banned in this package, and a test injects it.** It is the T-62 trap made
+  mechanical: `entry_bar_ts` / `closing_bar_ts` are the only functions allowed to say which
+  hourly bar is "the close", and settlement always reads the **closing** bar even when SD-4
+  picks the open, so the asymmetry is explicit rather than implied. A tz-naive index is
+  **refused**, not assumed to be exchange time — silently treating LSEG's UTC as ET moves
+  every bar four hours.
+- **Verified against something it did not produce** (the T-46 rule). Run over the real tape,
+  the module reproduces all 10 entry bars, spots, strikes and outcomes that an independent
+  throwaway script had produced: W37 enters **Tuesday 09-08** off the tape (Labor Day, DR-7),
+  and **6 of 10 weeks assign**.
+
+**T-80 landed 2026-09-13 — `covered_call/live.py`, so Monday's entry is runnable** (FR-21).
+`capture()` is the module's only network; `plan_entry` / `plan_settlement` are **pure functions
+of a captured payload**, which is why the leg that books a real trade is tested with no
+credentials (NFR-4) by faking the single session seam. **302 tests green, 15 of 15 injected
+defects caught.** The procedure is **RUNBOOK §7**; one command, `python -m
+options_surface_lab.covered_call.live enter`, any time after ~16:05 ET. T-67 came along for the
+ride (`occ_symbol`, plus `build_option_ric(..., expired=False)` for the live RIC form). Four
+things worth carrying:
+
+- **The mutation run found the two defects the offline tests could not reach**, both in the
+  parts only the CLI and the network path enter: the **re-run guard** and the **DR-7 session
+  resolution**. Faking `lseg_session` — one seam — brought both under test. *A guard that only
+  the live path executes is a guard no offline suite has ever run.*
+- **`expiry - 4 days` is not Monday.** The first CLI run entered on **2026-09-07, Labor Day**,
+  found no bars and logged a *false* `SKIP_NO_STOCK_PRINT`. `capture()` now pulls the week and
+  takes its first session off the tape, exactly as the backtest does. The live leg still needs
+  the calendar for the **expiry** (that week has not happened yet, SPEC §3.2 item 3b) and fails
+  soft when it is wrong.
+- **A re-run is refused**, for booked rows *and* for an already-logged skip (I-10: a week
+  appears once). The failure mode this guards is a nervous second run on Monday evening.
+- **The fill assumption is measured now, not asserted** (PO review, 2026-09-14, SPEC §6.3).
+  Two claims were written down that the data did not support and are now struck: that
+  `BID`/`ASK` are the **NBBO** (unverified for a `.U` RIC — the 1.1 README's "closing NBBO
+  midpoint" is `MID_PRICE` on *daily* bars, a different field at a different frequency), and
+  that the **quote** updated at a given second (`C_SEC_OFST` times the last **trade**; the
+  stock shows 59,239 trades against 135,274 bid moves and there is no `BID_SEC_OFST`). What
+  *is* supported: the fill is the midpoint of the **final bid and ask reported in the bar**.
+  DR-6 puts both legs in the same bar, which is not the same instant, so the residual gap is
+  now **measured and booked**: `capture()` pulls `C_SEC_OFST`/`HIGH_1`/`LOW_1` for both legs
+  and the entry note carries `sync=5s`. On the 09-08 entry bar the legs' last trades were 5
+  seconds apart with spot at 718.41, below the 719 strike. **That is trade-to-trade, not
+  trade-to-quote** (PO, second pass): with no timestamp for the final bid/ask update, the
+  closing quote could have been set earlier in the hour, so synchronisation is claimed at the
+  **common-bar level** only and the gap is offered as the sharpest available evidence, not as
+  proof. **And the strike was not obvious all
+  hour:** spot opened that bar at 719.315 and ranged 717.25–719.55, so reading the bar's
+  *start* would have picked **720**. That is the argument for fixing the observation point
+  rather than merely the bar, and it belongs in the write-up.
+- **A strike over $999.99 now raises.** It used to build a RIC that parses back to a
+  *different* contract and returns nothing — an invisible skipped week. QQQ at ~$715 is well
+  inside the range; the point is that the failure is silent, so it is refused rather than
+  logged.
+
+**T-62 landed 2026-09-13** — the LSEG hourly spike, evidence in `notebooks/t62_qqq_hourly_spike.json`.
+QQQ's root and RIC format are proven, hourly reaches a contract's whole listed life, and the
+**strike step is $1.00**. Four things worth carrying:
+
+- **"The last bar of the session" is not the close.** Bars are tz-naive **UTC stamped at the
+  START** (`O_SEC_OFST` = 0, `C_SEC_OFST` = 3599 throughout), and *both* tapes run past the
+  16:00 ET close carrying real quotes — the stock to 19:00 ET, options to 16:00 ET. So
+  `max(ts)` of a session is a post-close stub, and on 2026-09-08 it moved the 18-Sep 715
+  call's mid from 11.195 to 11.02. SD-4's closing hour is the bar whose **ET start is 15:00**
+  (19:00 UTC under EDT, 20:00 under EST — convert, never hardcode). SPEC §3.2 item 4.
+- **The live entry is not a race.** LSEG serves hourly `BID`/`ASK` *history* for a live,
+  unexpired weekly, so Monday's entry is captured from the **completed** 15:00–16:00 ET bar
+  that evening, through the same code path the backtest uses. Nothing post-16:00 enters the
+  decision.
+- **The brief's RIC `DAY` rule does not resolve** (OQ-15). It says "not zero-padded (`5`, not
+  `05`)", yet all three of its single-digit-day AAPL examples fail as written and succeed
+  padded; `build_option_ric()` already pads, and Part A's UUUU 07-Aug expiry proves it. The
+  brief is precedence 1 and is **not edited** — ask the instructor.
+- **The caret suffix is not immediate.** Two days after expiry the 09-11 contracts resolve
+  only under the *live* form; the 09-04 ones, nine days out, only under the caret. The pull
+  must try both and record the winner (SPEC §3.3) — otherwise recently-expired weeks
+  silently log as "no quote".
 AD-10 / AD-11 are approved but **not landed and nothing in the code has moved**; with eight
 days left the session recommends deferring the whole M5 restructure until after the
 submission and building A2 on the current builder (BACKLOG-2 T-79) — PO to confirm. The

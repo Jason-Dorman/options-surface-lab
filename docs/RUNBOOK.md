@@ -298,3 +298,73 @@ push to main
 | `pytest` can't import the package | Run from repo root (root `conftest.py` provides the path) |
 | Empty figures on the deployed site | Base path wrong, or import-time baking (T-14) not in place |
 | Pull returns almost nothing | Workspace not running/logged in; or split (T-6); or wrong root |
+
+## 7. The live leg — Monday's entry and Friday's settlement (FR-21, T-78/T-80)
+
+The strategy run forward with simulated capital. `options_surface_lab/covered_call/live.py`.
+
+**This is not a race.** T-62 proved LSEG serves hourly `BID`/`ASK` *history* for a live,
+unexpired weekly, so the 15:00–16:00 ET bar is read **after it completes**. The bar is
+immutable: 16:05 or 21:00 the same evening books the identical trade, and nothing after
+16:00 enters the decision. You do not need to be at the desk at the close.
+
+**Preconditions**
+
+- [ ] LSEG Workspace running and logged in (same as §3).
+- [ ] The 15:00–16:00 ET bar has closed — so any time after **~16:05 ET**, the same day.
+- [ ] `conda activate algo`, run from the repo root.
+
+**Monday — book the entry**
+
+```bash
+python -m options_surface_lab.covered_call.live enter
+```
+
+It prints the bar it read, then the rows it booked. Defaults are the SD decisions, so no
+flags are needed: `--expiry` defaults to this week's Friday and the entry session is read
+**off the tape** (DR-7), not computed as "Monday" — on a holiday week it finds Tuesday by
+itself.
+
+Expect two rows when flat (`BUY` 100 shares, `SELL` 1 call) or one row when shares are
+already held from an OTM week. Expect a **skip** and nothing booked if the chosen strike has
+no valid two-sided quote — that is DR-1 and it is correct behaviour, not a failure. **Do not
+re-run it to get a different answer.** A second run on the same session is refused, both for
+booked rows and for an already-logged skip.
+
+**Friday — settle**
+
+```bash
+python -m options_surface_lab.covered_call.live settle
+```
+
+Reads the expiry session's closing bar, then books `EXPIRE` (kept shares) or
+`ASSIGN` + a stock `SELL` at the strike. Settlement needs no option quote.
+
+**Verify, then hand to the PO**
+
+```bash
+python -c "import json; s=json.load(open('covered_call_live.json')); \
+print(s['cash'], s['position']); [print(r) for r in s['blotter']]"
+pytest tests/covered_call -q
+```
+
+`covered_call_live.json` is **data the page renders**, so it is committed. Cash must
+reconcile against the blotter alone (I-1): `cash == start_cash + Σ cash_delta`.
+
+**Rehearse without touching the real book** — point it at a scratch file and an expired week:
+
+```bash
+python -m options_surface_lab.covered_call.live enter \
+  --expiry 2026-09-11 --state /tmp/dryrun.json
+```
+
+*(Dry-run 2026-09-13 against the expired 09-11 chain: entered Tue 09-08 15:00 at
+S=718.41, wrote the 719 call at mid 4.80, settled 09-11 at 714.87 → `EXPIRE`, shares kept.
+Identical to what the rules module produces over the same tape.)*
+
+| Symptom | Cause → fix |
+|---|---|
+| `SKIP_NO_STOCK_PRINT` | The 15:00 ET bar is not on the tape yet — you ran before ~16:05 ET, or the market was shut. Wait and re-run; nothing was booked. |
+| `SKIP_NO_QUOTE` | The strike had no valid two-sided quote at the bar. **Correct behaviour** (DR-1). It is logged, not booked. |
+| `SKIP_NO_STRIKE` | The chain came back empty — check `diagnostics.option_error` in the state file, and that the expiry is a real trading Friday. |
+| `REFUSED: … already has …` | The week is already booked or already skipped. Working as intended. |

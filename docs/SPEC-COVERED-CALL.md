@@ -35,7 +35,7 @@ the whole thing (FR-14) so the strategy a reader sees is the one the engine ran.
 | `start`, `end` | `date` | The window; `end` is an expiry Friday so the last call resolves | SD-2 |
 | `interval` | `"hourly"` | Same bar size for stock and options — never mixed (DR-6) | brief |
 | `start_cash` | `float` | Opening cash; the only equity the account ever receives | SD-3 |
-| `entry_bar` | `"first"` \| `"last"` | Which hourly bar of the week's first session carries the entry | SD-4 |
+| `entry_bar` | `"first"` \| `"last"` | Which hourly bar of the week's first session carries the entry. **`"last"`** — the closing hour, 15:00–16:00 ET | SD-4 ✅ |
 | `strike_rule` | `"nearest_otm"` (P0) \| `"delta"` (P1) | How the strike is chosen (§5) | SD-5 |
 | `delta_target` | `float`, P1 only | For `strike_rule == "delta"` | SD-5 |
 | `itm_rule` | `"strict"` | ITM iff settlement print `> K`; equality is OTM (§7) | SD-6 |
@@ -52,8 +52,8 @@ apply.
 
 | Column | Type | Notes |
 |---|---|---|
-| `ts` | `datetime64[ns, America/New_York]` | Bar timestamp, tz-aware. LSEG's convention (bar start vs end, UTC vs local) is **discovered by T-62**, then fixed here. |
-| `ric` | `str` | Stock RIC or option RIC (expired form, with caret suffix) |
+| `ts` | `datetime64[ns, America/New_York]` | Bar timestamp, tz-aware, **stamped at the bar's START**. LSEG returns it tz-naive in **UTC**, start-stamped (T-62, 2026-09-13: `O_SEC_OFST` = 0 and `C_SEC_OFST` = 3599 on essentially every bar). Localise to UTC, convert to `America/New_York`, store converted. **Never hardcode a UTC hour** — 15:00 ET is 19:00 UTC under EDT and 20:00 UTC under EST, and the A2 window is entirely EDT. |
+| `ric` | `str` | Stock RIC, or the option RIC **in whichever form returned data** (§3.3) |
 | `kind` | `"stock"` \| `"option"` | |
 | `expiry` | `date` \| null | Option only |
 | `strike` | `float` \| null | Option only |
@@ -63,9 +63,26 @@ apply.
 | `trdprc_1` | `float` \| NaN | Last print in the bar, when someone traded |
 | `open`, `high`, `low`, `volume`, `num_moves` | `float` \| NaN | Present when a trade printed; stock always |
 
+### 3.3 Two RIC forms, and the day is zero-padded
+
+T-62 (2026-09-13) settled both, against LSEG:
+
+- **`DAY` is zero-padded.** The brief's rule (*"not zero-padded — `5`, not `05`"*) does not
+  resolve: all three of its single-digit-day AAPL examples fail as written and succeed padded
+  (`AAPLH72620500.U^H26` → *universe not found*; `AAPLH072620500.U^H26` → 30 rows). The repo's
+  `build_option_ric()` already pads. **Open with the instructor** — the brief is precedence 1
+  and is not edited here.
+- **The caret suffix is not immediate.** Two days after expiry the 11-Sep QQQ contracts still
+  resolve only *live* (`QQQI112671500.U` → 24 bars; `….U^I26` → nothing), while the 04-Sep
+  contracts, nine days out, resolve only under the caret. So a contract's form depends on how
+  long ago it expired, by a boundary we do not control. **The pull requests the live form and
+  the caret form, takes whichever returns rows, and records the winner per contract** in
+  `diagnostics.ric_form_used` — the same fail-soft posture as Part A's put-suffix probe.
+
 Payload keys alongside the table (SYSTEM-SPEC §5.1 posture — additive only):
 `ticker`, `root`, `window`, `interval`, `fetched_at`, `synthetic: bool`, `diagnostics`
-(requested RICs, returned RICs, per-week counts, `strike_step_discovered`, `tz_convention`).
+(requested RICs, returned RICs, per-week counts, `strike_step_discovered` (**$1.00** near the money on QQQ — T-62), `tz_convention`,
+`ric_form_used`).
 
 ### 3.2 The calendar comes from the stock tape
 
@@ -78,6 +95,21 @@ Weeks and expiries are **read off the stock bars, never generated from a calenda
    enter and expire). Logged, skipped.
 3. `end` must be a last-session day, so the final call resolves inside the window; the engine
    refuses a window that ends mid-week rather than inventing a close-out.
+3b. **The live leg is the one place a date comes from the calendar** (FR-21, `live.coming_friday`).
+   Looking *forward*, that week's tape does not exist yet, so the expiry has to be computed.
+   It fails soft rather than guessing: a Friday holiday means the RIC does not resolve, the
+   chain comes back empty, and the week is logged `SKIP_NO_STRIKE` instead of being booked
+   against a contract that was never listed. The *entry day* is still read off the tape —
+   `capture()` pulls the week and takes its first session, which is why a Labor Day Monday
+   enters on the Tuesday by itself.
+4. **The entry and expiry bars are the session's *closing hour*, never its last bar** (T-62).
+   Both tapes run past the 16:00 ET equity close and the late bars carry real quotes: an
+   option session returns 8 hourly bars, 09:00 ET through 16:00 ET starts; the stock returns
+   16, 04:00 ET through 19:00 ET starts. So the **closing bar** is the one whose ET start is
+   **15:00**, and `entry_bar = "first"` would mean the 09:00 bar. Taking `max(ts)` of a session
+   silently books the post-close stub instead: on 2026-09-08 that moved the 18-Sep 715 call's
+   mid from 11.195 to 11.02, $17.50 a contract. Every rule below says *closing bar* and means
+   this.
 
 This is the brief's *"take the last session in each week from the stock tape so you do not
 invent holiday expiries"*, made mechanical.
@@ -130,7 +162,8 @@ Per week `w`, at the entry bar `b_entry` of the first session:
 4. If `FLAT`: **BUY** `shares` at `S` — `cash -= shares × S`. *(Rule R-ENTRY-STOCK.)*
 5. **SELL** `contracts` call at `mid` — limit at mid, fill at mid, `cash += contracts × 100 × mid`. *(R-ENTRY-CALL.)* State → `COVERED`.
 
-At the last bar `b_exp` of the week's last session, if `COVERED`:
+At the **closing bar** `b_exp` of the week's last session (§3.2 item 4 — the 15:00 ET bar,
+not `max(ts)`), if `COVERED`:
 
 6. **Settle** (§7): `S_exp` = stock `trdprc_1` at `b_exp`. `S_exp > K` (SD-6) → **ASSIGN** the call (cash Δ 0) and **SELL** `shares` at `K` — `cash += shares × K`; state → `FLAT`. *(R-ASSIGN.)* Otherwise **EXPIRE** (cash Δ 0); state → `STOCK_ONLY`. *(R-EXPIRE.)*
 
@@ -172,9 +205,68 @@ FR-20) would separate them. The stock leg fills at the bar's `trdprc_1` — the 
 Nothing is ever filled between bars, at a price not on the tape, or on a bar with no valid
 quote. §12's I-3 and I-6 test exactly this.
 
+### 6.3 What the fill actually rests on, measured
+
+All of this was measured on 2026-09-14 against the 09-08 15:00 ET entry bar — the same bar
+the T-80 rehearsal booked — and it is stated at exactly the strength the data supports.
+
+**`BID` and `ASK` are the bar's final reported quote**, not its open and not an average.
+LSEG returns a four-field family per side (`OPEN_BID`, `BID_LOW_1`, `BID_HIGH_1`, `BID`); on
+the 719 call, `BID` = 4.77 against an open of 5.29, inside a 4.29–5.40 range. So the fill is
+*the midpoint of the final bid and ask reported in the 15:00–16:00 bar*, and the page says it
+that way.
+
+**What we may not say.** Two claims are *not* supported and must not appear on the page:
+
+1. That these are **NBBO** quotes. LSEG's `BID`/`ASK` on a `.U` RIC have not been shown to be
+   the OPRA national best bid and offer rather than some other consolidated best quote. The
+   1.1 README's "closing NBBO midpoint" describes `MID_PRICE` on *daily* bars, which is a
+   different field on a different frequency, and does not transfer.
+2. That the **quote** was updated at any particular second. `C_SEC_OFST` times the bar's last
+   **trade**: the stock reports `C_SEC_OFST` 3599 with `NUM_MOVES` 59,239 but `BID_NUMMOV`
+   135,274, and there is no `BID_SEC_OFST`. At this resolution the last quote update cannot
+   be timed, so nothing claims it was.
+
+**Synchronisation, measured rather than assumed** (DR-6 gives both legs the same bar, which is
+not the same as the same instant):
+
+| On the 09-08 15:00 ET bar | Stock | 719 call |
+|---|---|---|
+| last trade offset in the bar | 3599 s (15:59:59) | 3594 s (15:59:54) |
+| last print | 718.41 | 4.81 |
+
+The two legs' last trades are **5 seconds apart**, and spot finished at 718.41, below the 719
+strike the rule selected. **That is trade-to-trade, not trade-to-quote.** LSEG exposes no
+timestamp for the final bid/ask update at this resolution, so the closing quote could in
+principle have been established earlier in the hour; quote-level synchronisation **cannot be
+established** and is not claimed. Synchronisation is therefore stated at the **common-bar
+level**, with the trade offsets given as the sharpest available evidence — and `plan_entry`
+books the measured gap into the blotter note (`sync=5s`) so every row carries its own
+evidence instead of relying on this paragraph.
+
+**The strike was not obvious all hour, and the page says so.** Inside that same bar the stock
+opened at 719.315 and ranged 717.25–719.55. Had the entry been read at the bar's *start*
+rather than its close, the nearest-OTM rule would have chosen **720**, not 719. This is the
+concrete argument for fixing the observation point rather than merely fixing the bar, and it
+is why `capture()` records `HIGH_1`/`LOW_1` for the entry bar.
+
+**The page states this as a hierarchy** (PO, 2026-09-14), and `covered_call/writeup.py` is
+its single source: *Rule* — closing observation of the Monday hourly bar, then nearest OTM.
+*Fill* — the final bid and ask reported for that same hourly option bar, at the midpoint.
+*Stock* — the final observed stock print in that bar. *Audit evidence* — the last-trade
+offsets and the intra-bar range, shown for inspection. *Limitation* — the quote-update
+timestamp is unavailable, so synchronisation is established at the common-bar level, not at
+the exact quote-event level. **Never "the closing price"** for 718.41: it is the last stock
+print in the bar, and the official 4 pm auction price is a different number (S-7).
+
+**One observation is not the evidence.** On that bar the mid was 4.80 against a last print of
+4.81. Encouraging, not probative: the chain-wide midpoint-versus-print regression and its R²
+(FR-19) are what test whether midpoint fills are a reasonable execution assumption, and this
+single row only introduces them.
+
 ## 7. Expiry settlement
 
-- The settlement print is the stock's `trdprc_1` at the last bar of the expiry session.
+- The settlement print is the stock's `trdprc_1` at the **closing bar** of the expiry session.
   *(S-7. The official 4 pm close can differ by cents from the last hourly bar's last trade;
   using the tape's own bar keeps every number on the page reproducible from the tape.)*
 - **ITM iff `S_exp > K`** (SD-6, `itm_rule == "strict"`). Equality is OTM: the OCC's
@@ -233,7 +325,7 @@ One row per bar in the window, computed from the blotter and the tape:
 | `flag` | `NEG_AVAILABLE` when `available < 0` at an entry bar — the brief: *"you could not have put the trade on — say so"*. The trade is still booked (the backtest reports what the rule did) and the page prints the flag beside it. |
 
 When flat, `LMV = IM = MM = 0` and `NAV = cash`. The page plots `NAV`, `IM`, `MM` on one axis
-with hover, and the ledger table below it is the **daily** roll-up (the last bar of each
+with hover, and the ledger table below it is the **daily** roll-up (the **closing bar** of each
 session) so a reader can check a week by hand; the hourly frame is what the chart draws.
 
 Margin interest on a debit balance is not modelled (S-5); if SD-3 funds the account fully it
@@ -290,7 +382,7 @@ defect and watch the test fail.
 | I-4 | **Fill within the market:** every option fill satisfies `bid ≤ fill ≤ ask` at its bar (with mid, equality to mid). |
 | I-5 | **Never naked, never short stock:** `short_calls ≤ 1`, `short_calls == 1 ⇒ shares == 100`, `shares ∈ {0, 100}`, on every row. |
 | I-6 | **Every trade is on the tape:** every blotter `time` is a bar timestamp of its instrument. |
-| I-7 | **Every open call resolves:** for every week with a `SELL` call, the expiry session's last bar carries exactly one `EXPIRE` or one `ASSIGN` + one stock `SELL` at `fill == K`; no other exits exist. |
+| I-7 | **Every open call resolves:** for every week with a `SELL` call, the expiry session's **closing bar** carries exactly one `EXPIRE` or one `ASSIGN` + one stock `SELL` at `fill == K`; no other exits exist. |
 | I-8 | **Settlement is right:** `ASSIGN ⇔ S_exp > K` under `itm_rule`; `EXPIRE ⇔ S_exp ≤ K`. |
 | I-9 | **The rule chose the strike it says it chose:** for every entry, re-running `select_strike` on that bar's chain and spot reproduces `K`; under `nearest_otm`, no listed strike lies in `[S, K)`. |
 | I-10 | **Skips are real:** every week without an entry appears in the skip log with a reason the tape supports (no print / no strike / no valid quote / short week), and no week appears in both. |

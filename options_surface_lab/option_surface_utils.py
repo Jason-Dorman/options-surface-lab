@@ -106,6 +106,7 @@ def build_option_ric(
     cp: str,
     strike: float,
     put_suffix: str = "call",
+    expired: bool = True,
 ) -> str:
     """Inverse of :func:`parse_option_ric` — README RIC grammar + Appendix A::
 
@@ -125,6 +126,13 @@ def build_option_ric(
         instructor question; **it returns no data**.
 
     Calls are byte-identical under both settings.
+
+    ``expired=False`` drops the caret suffix entirely, which is the form a *live*
+    contract answers to (``QQQI182671500.U``). T-62 (2026-09-13) found the two forms
+    do not overlap and the changeover is not immediate: two days after expiry the
+    11-Sep QQQ contracts still answered only to the live form, while the 04-Sep ones,
+    nine days out, answered only to the caret. So a caller that wants a
+    recently-expired contract must try both and keep whichever returns rows.
     """
     cp = str(cp).upper()
     if cp not in CP_TO_MONTH_CODES:
@@ -136,9 +144,42 @@ def build_option_ric(
     suffix_code = (
         code if (cp == "C" or put_suffix == "right") else CP_TO_MONTH_CODES["C"][expiry.month]
     )
+    hundredths = int(round(strike * 100))
+    if not 0 < hundredths <= 99_999:
+        # The grammar's strike field is exactly five digits, so it tops out at
+        # $999.99. Emitting six would produce a RIC that parses back to a
+        # *different* contract and simply returns no data — an invisible skip
+        # rather than an error. Refuse instead.
+        raise ValueError(
+            f"strike {strike} does not fit the RIC grammar's 5-digit field "
+            f"(0.01 to 999.99); {root} would need a different root or an OCC-style symbol"
+        )
     yy = f"{expiry.year % 100:02d}"
-    body = f"{root.upper()}{code}{expiry.day:02d}{yy}{int(round(strike * 100)):05d}"
+    body = f"{root.upper()}{code}{expiry.day:02d}{yy}{hundredths:05d}"
+    if not expired:
+        return f"{body}.U"
     return f"{body}.U^{suffix_code}{yy}"
+
+
+def occ_symbol(root: str, expiry: dt.date, cp: str, strike: float) -> str:
+    """The OCC symbol, as the blotter prints it beside the RIC (SPEC-COVERED-CALL §8)::
+
+        {ROOT:<6}{YYMMDD}{C|P}{strike x 1000:08d}
+
+    ``AAPL``, 7 Aug 2026, call, 205 -> ``AAPL  260807C00205000``. Round-trips with
+    :func:`parse_option_ric` through :func:`build_option_ric` (T-67): both read the
+    same root, expiry, right and strike, so a blotter row cannot name one contract
+    in its RIC column and another in its OCC column.
+    """
+    cp = str(cp).upper()
+    if cp not in ("C", "P"):
+        raise ValueError(f"cp must be 'C' or 'P', got {cp!r}")
+    return (
+        f"{root.upper():<6}"
+        f"{expiry.year % 100:02d}{expiry.month:02d}{expiry.day:02d}"
+        f"{cp}"
+        f"{int(round(strike * 1000)):08d}"
+    )
 
 
 def build_candidate_rics(
