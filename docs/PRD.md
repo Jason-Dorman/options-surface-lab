@@ -601,7 +601,7 @@ simplifications (S-x) follow; those need no decision, only printing.
 |---|---|---|---|---|
 | **SD-1** | Underlying | AAPL (the brief's proven RICs) · SPY / QQQ (ETFs, no earnings gap) · MSFT / NVDA | *Was AAPL, for the de-risked pull.* | **✅ QQQ — PO, 2026-09-12.** RIC `QQQ.O`, root `QQQ`. Consequences: no earnings gap; QQQ lists **daily** expiries, so only the Friday contracts are requested and booked; $1 strikes near the money (T-62 confirms); 100 shares ≈ 100 × spot, so SD-3's round figure is set from Monday's print; the quarterly distribution's ex-date (late September in a normal year) sits near the live book and is named (S-6). The brief's proven RICs are AAPL, so **T-62 must prove the QQQ root and format** before the pull. |
 | **SD-2** | Window | **Most recent 10 full weeks** ending on the latest Friday whose contracts resolve under the expired RIC form. **Part A's window** (Jun–Aug) for narrative symmetry. | **Most recent, ending 2026-09-11** (`2026-07-06 → 2026-09-11`), so the historical book hands off to the live book that opens 2026-09-14 (FR-21) with no gap. **T-62 (2026-09-13) answered this:** the 09-11 contracts do **not** resolve under the caret form yet, but they do resolve under the *live* form — so 09-11 stays reachable provided the pull tries both forms (SPEC §3.3). No need to fall back to 09-04. The end must be an expiry session (SPEC §3.2). If hourly history is shallower than 10 weeks, the window shrinks and the page says so. | **✅ Most recent 10 weeks — PO, 2026-09-13.** `2026-07-06 → 2026-09-11`. T-62 verified **all 10 entry bars and all 10 expiry bars exist at 15:00 ET**, and that the Labor Day week (W37) correctly opens **Tuesday 09-08** off the stock tape — DR-7 earning its place on the first window we tried. The 09-11 week needs the live RIC form (SPEC §3.3). |
-| **SD-3** | Starting cash | **Fully funded:** a round figure just above 100 × the first entry print. T-62 measured QQQ at **714.88** on 2026-09-11, so 100 shares ≈ **$71,500** and the round figure is **$75,000**. **Margin-funded:** ~60% of that, so the account carries a debit and the "available funds" line is live. | **Fully funded.** Logical consistency is 45 points; a debit balance brings margin interest and a decision the brief did not ask for. The Reg T lines are still computed and plotted, the `NEG_AVAILABLE` check is implemented and simply never fires — and the write-up can say what would change at 60%. Margin-funded is a P1 variant if wanted. | **✅ $75,000, fully funded — PO, 2026-09-13.** *(Briefly $100,000 the same day; the PO moved to $75,000 once the cash drag was measured.)* Consequences: the most expensive entry in the window is **$72,984** (2026-08-17), so the account is fully invested at the peak with ~**3%** idle, cash never goes negative, Reg T initial margin peaks near **$36,500** against $75,000 of equity, and `NEG_AVAILABLE` is implemented but never fires. Performance is measured on **NAV**, so keeping idle cash near zero is what stops the percentage return from being diluted by an arbitrary cash balance. |
+| **SD-3** | Starting cash | **Fully funded:** a round figure just above 100 × the first entry print. T-62 measured QQQ at **714.88** on 2026-09-11, so 100 shares ≈ **$71,500** and the round figure is **$75,000**. **Margin-funded:** ~60% of that, so the account carries a debit and the "available funds" line is live. | **Fully funded.** Logical consistency is 45 points; a debit balance brings margin interest and a decision the brief did not ask for. The Reg T lines are still computed and plotted, the `NEG_AVAILABLE` check is implemented and simply never fires — and the write-up can say what would change at 60%. Margin-funded is a P1 variant if wanted. | **✅ $75,000, fully funded — PO, 2026-09-13.** *(Briefly $100,000 the same day; the PO moved to $75,000 once the cash drag was measured.)* Consequences: the most expensive entry in the window is **$72,982** (2026-08-17, 100 x 729.82 — corrected from $72,984 by T-57, which reads it off the committed tape), so the account is fully invested at the peak with ~**3%** idle, cash never goes negative, Reg T initial margin peaks near **$36,500** against $75,000 of equity, and `NEG_AVAILABLE` is implemented but never fires. Performance is measured on **NAV**, so keeping idle cash near zero is what stops the percentage return from being diluted by an arbitrary cash balance. |
 | **SD-4** | Entry bar *(decides the clock time of Monday's live entry)* | **First hourly bar** of the week's first session (the open — wide spreads, worst mids). **Last hourly bar** (the closing hour — tightest spreads, most reliable prints, both legs quoted). | **Last bar of the first session.** The brief allows "Monday open or close"; the close is the bar where a mid is most defensible, which is the whole fill assumption. Holiday Mondays are handled by DR-7, not by this choice. | **✅ Last bar — PO, 2026-09-13.** `entry_bar = "last"`. Consequences: Monday 09-14's live entry is the **15:00–16:00 ET bar** — captured from that bar *after* it completes, not traded at it (T-62 proved LSEG serves the live contract's hourly quotes as history, so any time Monday evening books the identical trade); entry and expiry now read the *same* bar-of-session, since §7 already settles on the expiry session's last bar; **OQ-11 becomes load-bearing** — T-62 must record whether a bar's `ts` is its start or its end, because "last bar" has to resolve to the closing hour and not to one mislabelled by the convention; **OQ-13 is now live** and goes to the next class. Switching to `"first"` later is a `Params` change, not a rebuild. |
 | **SD-5** | Strike rule | **Nearest OTM** (ATM if spot sits on a strike) — the brief's baseline, full credit. **Delta-target** (e.g. 30Δ via the 1.1 inverter) — fewer assignments, less premium, needs an IV per strike per entry. **Fixed % OTM.** | **Nearest OTM for P0**, exactly as the brief writes it; if the chosen strike has no valid quote the week is **skipped**, not walked to the next strike (DR-1 — walking would be a different rule). **Delta-30 as the P1 comparison** (FR-20): we already own the inverter, and "too close and you lose the upside" is the tension the brief wants discussed. | **✅ Nearest OTM — PO, 2026-09-13.** Exactly the brief's baseline. **T-62's $1.00 strike step is the consequence to write up:** on a ~$715 underlying the rule lands roughly **0.1% above spot**, i.e. effectively at the money, and on the chosen window **6 of 10 weeks finish ITM and assign**. Maximum premium, almost no upside retained — precisely the tension the brief asks you to discuss. Delta-30 stays the P1 comparison (FR-20). |
 | **SD-6** | ITM test at expiry | **Strict** — ITM iff settlement print > K; equal is OTM (OCC auto-exercise is $0.01 in the money). **Inclusive** — ≥ K. | **Strict.** It matches exercise mechanics and it is the rule the code can state in one clause. | **✅ Strict — PO, 2026-09-13.** ITM iff settlement print `> K`; equality expires. No week in the chosen window settles exactly on a strike, so it changes nothing empirically here and is chosen for mechanical correctness. |
@@ -647,6 +647,9 @@ in every note (§8), the skip log (§8.2), the per-bar ledger (§9). Pure (NFR-5
 *Accepted when:* invariants I-1 … I-10 pass on the synthetic tape **and** on the committed
 one; one week is hand-checked against raw quotes in a test docstring; the blotter has at
 least one `BUY`, one `SELL` call, and one of `EXPIRE` / `ASSIGN` on the real tape.
+**✅ 2026-09-15 (T-57, corrected the same day by T-82's adversarial review).** `covered_call/engine.py`, 83 tests, **42 defects injected across T-57 and T-82's review, 41 caught** — the single miss is unreachable by construction and named in place. On the
+committed tape: 10 weeks, 10 entries, **no skips**, 6 `ASSIGN` / 4 `EXPIRE`, $6,657.50 of
+premium collected, final NAV **$76,243.50** (**+1.66%**). All **four** skip reasons are exercised on the synthetic tape, over five skipped weeks (`SKIP_NO_QUOTE` fires twice).
 
 **FR-16 — The Reg T account, used like an account.** Per bar: NAV, LMV, option MV (negative),
 IM = 50% LMV, MM = 25% LMV, available = NAV − IM, excess = NAV − MM; zero when flat; the
@@ -654,6 +657,10 @@ IM = 50% LMV, MM = 25% LMV, available = NAV − IM, excess = NAV − MM; zero wh
 NAV, IM, MM on one chart with mouseover values.
 *Accepted when:* I-2 and I-11 pass; the chart's hover shows the three values per bar; the page
 states, in words, what a negative available-funds entry would mean — the brief's *"say so"*.
+**◐ 2026-09-15 (T-57):** the ledger half is in and I-2 / I-11 pass on both tapes; `available`
+bottoms at **$38,886.50 at an entry bar** under SD-3 — the only bars the flag is checked on — so `NEG_AVAILABLE` never fires on this book and is instead
+proven by a test that funds the account at $1,000 and watches the flag appear beside a trade
+that is still booked. The **chart** and the **sentence** wait on T-69 / T-59.
 
 **FR-17 — Mid vs `TRDPRC_1`, with R².** For near-the-money call bars carrying both a valid
 quote and a print: the scatter, the OLS fit, `y = x`, and `n`, slope, intercept, R², median
@@ -709,13 +716,20 @@ NFR-1 … NFR-5 apply unchanged. Added:
   and mutation-checked (inject the defect, watch the test fail — T-46). "No crazy or
   impossible trades" is the brief's first criterion; this is how it stops being a matter of
   opinion.
+  **◐ 2026-09-15 (T-57): I-1 … I-12 are green over both books and mutation-checked; I-13
+  waits on the page (T-59).** Three of the four defects the mutation run found first-pass
+  were in the *guards*, not the engine: I-11 multiplied by the module's own `IM_RATE` and so
+  passed at any rate (T-46's "a check that reads back its own effect"); the combo-skip test
+  had picked its week by role rather than by state and was watching a week that was never
+  flat; and `S_exp == K` — SD-6's whole decision — occurs on neither tape, so the `itm_rule`
+  branch was untested until a test built the case.
 
 ## 18. Milestones and risks
 
 | # | Milestone | Depends on | Contents |
 |---|---|---|---|
 | A2-M0 | Governance and decisions | — | This part; T-62 spike; SD-1…SD-6 decided; ~~AD-12 signed~~ **✅ 2026-09-14, amended (T-74)**. Remaining: FR-14 prints the decisions on the page |
-| A2-M1 | The tape | A2-M0 | FR-13, synthetic tape, the one-time pull committed. **`tape.py` landed 2026-09-14 (T-56)** and **the pull ran 2026-09-15 (T-77)** — 37,857 bars over 10 weeks, verified against T-65's independent run. What remains is **T-63's synthetic tape** |
+| A2-M1 | The tape | A2-M0 | FR-13, synthetic tape, the one-time pull committed. **complete 2026-09-15**: `tape.py` (T-56), the committed pull (T-77 — 37,857 bars over 10 weeks, verified against T-65's independent run), the synthetic tape and its fixtures (T-63), and the tape suite (T-64) |
 | A2-M2 | The engine | A2-M1 | FR-14, FR-15, FR-16, the invariant suite, notebook 03 |
 | A2-M3 | The evidence | A2-M1 | FR-17 |
 | A2-M4 | The page | **T-79** (a second output from the current builder) + A2-M2/M3 | FR-18, FR-21's live panel, theme additions |
@@ -770,9 +784,9 @@ If P1 threatens A2-M5, P1 loses — as in Part A.
 
 - [x] ~~SD-1 … SD-6 decided by the PO~~ — **all six closed 2026-09-12/13** (T-55), and ~~AD-12 signed~~ **accepted with two amendments 2026-09-14** (T-74). Still open: **printed on the page** (FR-14)
 - [x] ~~`covered_call_tape.parquet` committed; `load_tape()` offline; `option_pipeline_data.pkl` untouched~~ — **pulled 2026-09-15 (T-77):** 37,857 bars, 952 contracts, 10 weeks; reproduces T-65's independently-verified entries and the 6-of-10 assignment count. *Commit both the parquet and its `.meta.json` sidecar.*
-- [ ] Invariants I-1 … I-13 green on the synthetic tape and the committed tape, mutation-checked
-- [ ] Blotter: every entry and exit, the brief's columns, rule ids in the notes; skip log beside it
-- [ ] Ledger + Reg T account per bar; NAV / IM / MM chart with hover; the negative-available-funds sentence
+- [◐] Invariants **I-1 … I-12 green on both tapes, mutation-checked** *(T-57, 2026-09-15; I-7 widened and eight guards added by T-82's review the same day — 42 injected, 41 caught)*; **I-13 waits on the page** (T-59)
+- [◐] Blotter: every entry and exit, the brief's columns, rule ids in the notes; skip log beside it — **the engine emits both** (T-57); rendering them is T-59
+- [◐] Ledger + Reg T account per bar **(T-57 — 784 hourly rows, 49 daily)**; NAV / IM / MM chart with hover and the negative-available-funds sentence wait on T-69 / T-59
 - [ ] Mid vs `TRDPRC_1` scatter with n, slope, R² on the page
 - [ ] Write-up authored by the PO, citing the page's own numbers
 - [ ] Live book: the 09-14 entry booked by the system from real quotes and on the page (FR-21) — **booked 2026-09-14** (`covered_call_live.json`); the *on the page* half waits on T-59, and 09-18's settlement on T-78

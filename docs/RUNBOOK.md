@@ -340,6 +340,17 @@ python -m options_surface_lab.covered_call.live settle
 Reads the expiry session's closing bar, then books `EXPIRE` (kept shares) or
 `ASSIGN` + a stock `SELL` at the strike. Settlement needs no option quote.
 
+**No flags needed, and do not add `--expiry` out of habit** (T-81): `settle` now defaults to
+the expiry the book is actually short, and refuses outright if the capture it gets back is for
+a different week. `coming_friday()` — the old default — is the *next* Friday from the Saturday
+onward, so a run that slipped a day used to resolve the open call against the wrong week's
+close and book an `ASSIGN` dated after the contract expired.
+
+**If it exits 2 and says NOT WRITTEN, nothing happened and you can simply re-run.** That is an
+acquisition failure — LSEG unreachable, or the 15:00 ET bar not yet on the tape — and it is
+deliberately *not* recorded as a skip: a skip is a fact about the market, I-10 allows a week
+only once, and a false one would leave the call unresolvable without hand-editing the book.
+
 **Verify, then hand to the PO**
 
 ```bash
@@ -359,12 +370,16 @@ python -m options_surface_lab.covered_call.live enter \
 ```
 
 *(Dry-run 2026-09-13 against the expired 09-11 chain: entered Tue 09-08 15:00 at
-S=718.41, wrote the 719 call at mid 4.80, settled 09-11 at 714.87 → `EXPIRE`, shares kept.
+S=718.41, wrote the 719 call at mid 4.80, settled 09-11 at **714.78** → `EXPIRE`, shares kept.
+That print read 714.87 here until T-81 checked it against the committed tape, which is
+authoritative for it.
 Identical to what the rules module produces over the same tape.)*
 
 | Symptom | Cause → fix |
 |---|---|
-| `SKIP_NO_STOCK_PRINT` | The 15:00 ET bar is not on the tape yet — you ran before ~16:05 ET, or the market was shut. Wait and re-run; nothing was booked. |
+| `NOT WRITTEN: …` (exit 2) | An acquisition failure, not a market fact: LSEG unreachable, or the session has not reached the closing bar. **Nothing was written** — fix and re-run (§9). |
+| `SKIP_NO_STOCK_PRINT` | A *complete* session that carried no print at the closing bar. Genuinely a market fact, and recorded once (I-10). If you see this when LSEG was simply unreachable, something has regressed — that path now exits 2 instead. |
+| `ValueError: this capture is for … but the open call expires …` | You passed an `--expiry` (or ran on a later week) that is not the contract the book holds. Drop the flag; `settle` defaults to the right one. |
 | `SKIP_NO_QUOTE` | The strike had no valid two-sided quote at the bar. **Correct behaviour** (DR-1). It is logged, not booked. |
 | `SKIP_NO_STRIKE` | The chain came back empty — check `diagnostics.option_error` in the state file, and that the expiry is a real trading Friday. |
 | `LSEG session did not open (state OpenState.Closed)`, or a handshake `ReadTimeout` | **Workspace is running but not answering the app-key handshake** — see §9. Nothing was requested and nothing was written. |
@@ -410,7 +425,7 @@ python -m options_surface_lab.covered_call.tape inspect
 | RIC forms | Both `expired` and `live` may appear. The most recent weeks answering only `live` is exactly what T-62 predicted. |
 | Mids | A large majority of near-the-money option bars should carry a valid mid. A tape where most bars have none makes every week a skip — stop and ask the PO. |
 | `synthetic=False` | Anything else and the page will refuse to publish (SPEC §11). |
-| Accounting | The `contracts:` line must add up — *answered + refused = requested*. Every RIC that returned nothing is named in `diagnostics.unanswered`; a gap there means contracts went missing inside a batch that answered only partly. |
+| Accounting | The `contracts:` line must add up — *answered + refused = requested*, counted in **contracts**, with the RIC-request total in brackets (a strike asked under both forms is one contract). The 2026-09-15 pull printed `952 answered + 75 refused = 1027 requested (1102 RIC requests across both forms)`. Every contract nothing answered for is named in `diagnostics.unanswered`; a gap there means contracts went missing inside a batch that answered only partly. |
 | Soft failures | Expect hundreds. `LDError … No data` is a strike that never listed. `TypeError: 'UniverseContainer' object is not subscriptable` is a library-side batch failure — harmless, because AD-2's retry re-asks each RIC singly (7 of them on the 2026-09-15 pull, all recovered). |
 
 *(2026-09-15: the pull took ~25 minutes and returned 37,857 bars / 952 contracts. The

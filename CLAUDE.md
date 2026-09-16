@@ -74,7 +74,7 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 
 ```bash
 python build_preview.py    # THE DELIVERABLE — builds the static index.html that Pages serves
-pytest                     # 352 tests in tests/ — all green, no xfail
+pytest                     # 496 tests in tests/ — all green, no xfail
 reflex run                 # local dev server (FR-1); not what gets published
 ```
 
@@ -323,10 +323,11 @@ refuses a strike, and fails only if the fixture has none anywhere. The fixture i
 is still calendar-dependent — OQ-6's `end_date` parameter is the root fix and needs PO
 sign-off.
 
-**Next up (2026-09-14):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST.** The first live
-entry is **booked** — see T-78 below. ~~T-56~~ and ~~T-77~~ are done — **the tape is pulled and verified** — so
-the critical path is **T-57** (the engine + the I-1…I-13 invariant suite),
-T-58, T-79/T-59 (the page), T-60 (the PO's write-up), then T-71/T-72 to ship. The PO chose **QQQ** (SD-1, 2026-09-12) and the **last
+**Next up (2026-09-15):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST.** The first live
+entry is **booked** — see T-78 below. ~~T-56~~, ~~T-77~~ and ~~T-57~~ are done — **the tape is pulled and
+the book runs** — so the critical path is **T-58** (the mid-vs-print evidence),
+T-79/T-59 (the page), T-60 (the PO's write-up), then T-71/T-72 to ship. **T-66 (notebook 03) was
+meant to be co-built with T-57 and was not** — it is still open. The PO chose **QQQ** (SD-1, 2026-09-12) and the **last
 hourly bar of the week's first session** as the entry bar (SD-4, 2026-09-13). The close is where
 the mid is most defensible, which is the whole fill assumption; it also makes OQ-11 load-bearing
 (a bar's `ts` convention decides which bar "last" is) and OQ-13 live (does the brief's "Monday
@@ -357,7 +358,7 @@ is T-59). Two things to carry:
 **strict `> K`** at expiry (SD-6). Two consequences T-62 measured, both of which belong in the
 write-up rather than being discovered by a reader: nearest OTM on QQQ's **$1 strike step**
 lands ~0.1% above spot, so the rule is effectively at-the-money and **6 of the 10 weeks assign**;
-and the $75,000 base sits just above the peak entry cost of **$72,984**, so the book is ~97%
+and the $75,000 base sits just above the peak entry cost of **$72,982**, so the book is ~97%
 invested and a **NAV**-measured return is not diluted by idle cash. `NEG_AVAILABLE` is
 implemented and never fires. What remains of A2-M0 is printing the decisions on the page (FR-14) and signing AD-12.
 
@@ -426,6 +427,67 @@ things worth carrying:
   inside the range; the point is that the failure is silent, so it is refused rather than
   logged.
 
+**T-81 — the adversarial review of this session (2026-09-15). 31 findings ruled on, 23
+confirmed, and the two high ones were both on Friday's settlement leg.** Six lenses hunted
+`tape.py`, `rules.py`, `live.py` and the new tests; a skeptic then tried to refute each
+finding by running code against the committed tape rather than by reasoning. Four things to
+carry:
+
+- **The settlement leg could have resolved the wrong week.** `--expiry` defaults to
+  `coming_friday()`, which from the Saturday onward is the *next* Friday, and every downstream
+  guard keys on the **session** — so a settle run that slipped a day booked an `ASSIGN` against
+  the 25-Sep close for a contract that expired 18-Sep, and passed every check. Reproduced on a
+  copy of the real book. `plan_settlement` now **raises** on a mismatched expiry (not a skip —
+  a skip is a false market fact and I-10 would then refuse the correct re-run), and `settle`
+  defaults to the contract the book is short.
+- **An outage was being written into the book as a fact about the market.** An LSEG timeout,
+  or running before the 15:00 bar closed, wrote `SKIP_NO_STOCK_PRINT` and exited 0 — and I-10
+  then refused the re-run, leaving the call open forever (I-7). `capture()` had been recording
+  `stock_error` and `bars_in_session` all along and **nothing read them**. `unreadable_reason()`
+  now does, and writes nothing. *The guard I had added that morning closed only the handshake
+  door; every other way the bar is unreachable walked straight through it.*
+- **"Compare a thing against something it did not produce" applies to counting, too.** The
+  contract accounting counted RIC *strings*, so a strike asked under both RIC forms was counted
+  twice as a miss and a contract rescued by the second form read as answered *and* unanswered.
+  The real figure is **952 answered + 75 refused = 1,027 contracts** over 1,102 RIC requests —
+  the "952 + 150 = 1,102" reported earlier was inflated, and it had reached the RUNBOOK's
+  verification row, where an operator would have checked it and seen it "add up".
+- **Three of my own new guards could not fail.** The OQ-6 clock test sanitised docstrings by
+  replacing the literal `today()` — which deleted the exact substring its main arm then
+  searched for, so a plain `dt.date.today()` was undetectable. Nothing proved `lseg_session()`
+  *calls* the session guard (deleting the call left the suite green). And a test of the killed
+  quote's print asserted nothing whenever that bar happened not to print. A test written for a
+  defect must be watched to fail on it — **including the tests written in the same pass as the
+  fix**.
+
+**T-63 landed 2026-09-15 — the synthetic tape, so A2 runs with no tape at all** (AD-7,
+SPEC §3.4). `synthesize_tape(end_date, *, seed=7, weeks=12)` in `tape.py`, plus
+`tests/covered_call/conftest.py` (`synthetic_tape`, `role_weeks`, `params`, and a `real_tape`
+that **skips** rather than quietly synthesizing). **29 tests, 17 of 17 injected defects
+caught.** Four things worth carrying:
+
+- **`end_date` is required and positional — OQ-6 made mechanical.** A default would be a clock
+  reference waiting to happen, and the calendar-dependent fixture has already cost one false CI
+  failure. One test asserts the parameter has no default; another greps the generator's own
+  source for `date.today` / `datetime.now` and fails if either appears.
+- **Every skip the engine can log has a named week** (`SYNTHETIC_ROLES`): Monday holiday,
+  Friday holiday (Thursday expiry, and the RIC says so), a one-session week, a half-session
+  entry day, a zero bid on the chosen strike at an entry bar, and a chain that tops out below
+  spot. A test asks for the case **by name**; hunting for a week that happens to have the
+  property is how a fixture change quietly stops testing what its test claims. Each is
+  verified by reading it back through `rules.py`, not against the generator's intent.
+- **A fixture priced off one fixed spot passes every static bound.** The mutation run found it:
+  intrinsic below, the stock above, each number individually plausible — and the mid↔spot
+  *relationship* destroyed, which is precisely what T-57's fills and T-58's fit read. The guard
+  recomputes Black-Scholes from the tape's **own stock column** and demands a cent-level match.
+  Correlation was the first attempt and was too blunt (0.68 on a deep-OTM contract behaving
+  perfectly).
+- **SPEC §3.3 said something that would have broken the deploy**, and is corrected:
+  "`OSL_OFFLINE=1` forces the synthetic tape" was carried over from Part A's wording, but CI
+  sets that variable on **every** build — taken literally the covered-call page would be
+  rendered from a fabricated book, which §11's own publish guard then refuses. The flag means
+  **never pull**, here and in 1.1; the committed tape always wins when present. A test pins it.
+
 **T-77's tape is in (2026-09-15): 37,857 bars, 952 contracts, 10 weeks, `synthetic=False`.**
 `covered_call_tape.parquet` + `covered_call_tape.meta.json`. **Verified against something it
 did not produce** (the T-46 rule): driven through `rules.py`, the tape reproduces all ten
@@ -445,12 +507,16 @@ findings:
   answered. Left as is: too wide costs soft failures that are recorded; too narrow silently
   omits the strike the rule needed and turns a tradable week into a skip. **Anything that
   plots the stock's high/low must expect these ticks.**
-- **The accounting held by luck, and now holds by construction.** 952 answered + 150 refused
-  = 1,102 requested reconciled only because every leftover landed in a batch that failed
-  *whole* and was retried one RIC at a time (AD-2). A batch that answers **partially** raises
-  nothing, so contracts inside it that returned nothing left no trace. `diagnostics.unanswered`
-  now names every RIC that returned nothing, `describe()` prints the reconciliation, and a
-  test asserts it on a fixture where partial answers are the normal case. *(The committed
+- **The accounting held by luck, and the first version of it counted the wrong thing.** The
+  reconciliation is **952 answered + 75 refused = 1,027 contracts**, asked over **1,102 RIC
+  requests** across the two forms. "952 + 150 = 1,102", reported here first, counted RIC
+  *strings*: a strike asked under both forms is ONE contract, so every genuine miss was
+  counted twice and a contract rescued by the second form could read as answered *and*
+  unanswered at once (T-81). It also reconciled at all only because every leftover happened
+  to land in a batch that failed *whole* and was retried one RIC at a time (AD-2) — a batch
+  that answers **partially** raises nothing, so contracts inside it that returned nothing
+  left no trace. `diagnostics.unanswered` now names every *contract* nothing answered for,
+  `describe()` prints both counts, and the test reconciles `(expiry, strike)` pairs. *(The committed
   sidecar predates the key; the same sum is derivable from `requested` minus the tape's own
   RICs, which is what the printed line does.)*
 
@@ -491,7 +557,9 @@ the whole pull path runs offline by faking `lseg_session`, the one seam. `pyarro
   then the live form for whatever did not answer, and the winner is recorded in
   `diagnostics.ric_form_used`. The most recent weeks answering only `live` is T-62's finding,
   not a fault. **Still open:** the synthetic tape is T-63, so `load_tape()` with no parquet
-  **raises and says what to do** rather than inventing bars.
+  **raises and says what to do** rather than inventing bars. *(Superseded the next day by
+  T-63: it now falls back to the synthetic tape with a `RuntimeWarning`; `fallback=False`
+  raises instead.)*
 
 **T-62 landed 2026-09-13** — the LSEG hourly spike, evidence in `notebooks/t62_qqq_hourly_spike.json`.
 QQQ's root and RIC format are proven, hourly reaches a contract's whole listed life, and the
@@ -521,8 +589,102 @@ submission and building A2 on the current builder (BACKLOG-2 T-79) — PO to con
 order that fits the calendar is at the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions →
 T-78's entry~~ (all landed) → **T-56** → T-57 → T-58 → T-79/T-59 → T-60 → ship, with T-78's
 settlement leg on Friday 09-18. 1.1's brief is archived at
-`docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open. **352 tests green, no xfail** (2026-09-14, full run).
+`docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open. **496 tests green, no xfail** (2026-09-15, full run).
 Update this paragraph as things land (lockstep rule).
+
+**T-57 landed 2026-09-15 — `covered_call/engine.py`, so the book runs** (FR-15, FR-16, NFR-6).
+`run_backtest(tape, params) -> Book`: the weekly loop, fills, settlement, the blotter, the skip
+log and the per-bar Reg T ledger, plus `window_weeks` / `build_ledger` / `settlement_print`.
+**83 tests; 42 defects injected across T-57 and T-82's review, 41 caught** — the single miss is unreachable by construction and named in place. On the committed tape: **10 weeks, 10 entries,
+no skips, 6 ASSIGN / 4 EXPIRE, $6,657.50 of premium, final NAV $76,243.50 (+1.66%)** on $75,000;
+`available` bottoms at **$38,886.50 at an entry bar** — the only bars the flag is checked on — so
+`NEG_AVAILABLE` never fires. (The all-bars minimum, $38,236, sits on a thin **05:00 pre-market**
+bar; quoting it would have been this package's own `max(ts)` mistake in a new place.) All **four**
+skip reasons fire on the synthetic tape, over five skipped weeks — `SKIP_NO_QUOTE` fires twice. The week 2026-09-08 → 09-11 is **hand-checked in a test docstring** against the
+raw bars and reproduces T-80's live rehearsal, which reached the same entry by the other code
+path. Five things worth carrying:
+
+- **Everything except the blotter is a projection of it.** The skip log, the ledger and the
+  weekly table hold no number the blotter and the tape do not already hold, which is what lets
+  I-1 reconcile cash against the blotter *alone* and stops a defect in the loop from showing up
+  as two numbers that agree because one copied the other (SPEC §1).
+- **The spec had no answer for a missing print at the *expiry* closing bar, and the engine
+  needed one.** Entry and settlement are deliberately asymmetric: a missing print at the entry
+  bar skips the week (nothing is owed, DR-1 forbids inventing one), but settlement *may not*
+  skip — the call is already short and I-7 says every open call resolves, so a skipped
+  settlement leaves the book carrying that call forever. Settlement now carries the last print
+  in that session at or **before** the close and the row says `S_exp_carried`. It never reaches
+  *forward*: a bar after the close is T-62's post-close stub. SPEC §7 and §13 record it; neither
+  tape exercises it, so a test blanks the bar on a copy of the synthetic tape.
+- **`max(ts)` has a second hiding place: the headline.** `Book.final_nav` reads the last
+  **15:00** ledger row, not `ledger.iloc[-1]` — the stock tape runs to a 19:00 ET bar, and on
+  this tape the stub and the close differ by $10.65. The rule `rules.py` enforces for bars
+  applies just as much to the number a reader quotes.
+- **All four first-pass mutation survivors were defects in the *guards*, not the engine.** I-11
+  multiplied by the module's own `IM_RATE`, so it passed at any rate — T-46's "a check that
+  reads back its own effect", landed on again. The combo-skip test picked its week by *role*
+  and happened to watch one that was never flat, so a mutant that bought stock on a flat
+  no-quote week survived. And **`S_exp == K` occurs on neither tape**, so SD-6 — the whole ITM
+  decision — was untested until a test *built* the case by pinning a settlement print onto a
+  strike. A fixture that never reaches a branch is a branch with no test, however many tests
+  name it. The fourth was a skip log with every `detail` blanked, which nothing noticed.
+- **$72,982, not $72,984.** T-55/T-62's peak entry cost was $2 out; the 2026-08-17 15:00 bar
+  prints 729.82. Corrected in PRD §15 and BACKLOG-2.
+
+**T-82 — the adversarial review of T-57 (2026-09-15), run as a 13-agent workflow.** Six lenses
+(the weekly loop, money and the ledger, time and bars, test quality, claims-versus-reality,
+layering) each hunted the change; a skeptic then attacked that lens's findings **in an isolated
+worktree, required to run code rather than reason**; a completeness critic asked what nobody had
+covered. **37 rulings + 6 completeness findings — 33 confirmed, 4 partial, 0 refuted** — which
+collapse to roughly 25 distinct issues, because the serious ones were found independently by
+three to five lenses each. The top five were reproduced by hand before anything was changed.
+Zero refutations is worth noticing rather than celebrating: it means the lenses were
+conservative, not that the skeptics were rigorous.
+
+- **The one *high*: the engine fabricated the contract's RIC instead of reading it off the tape.**
+  `build_option_ric(..., expired=True)` hard-codes the **caret** form, but SPEC §3.3 says which
+  form a contract answers under depends on how long ago it expired — so which one a tape carries
+  depends on **the date of the pull** (T-77 measured the same window answering differently two
+  days apart). On a live-form tape the blotter named a contract with no bars, and every per-bar
+  call mark then missed and **carried forward silently**: 624 of 624 covered bars frozen, NAV
+  wrong on 614 of 784 bars by up to **$2,201**. I-3/I-4/I-6 would have gone red at the blotter
+  level — but **the ledger half had no invariant at all**, and the ledger is what FR-16's NAV
+  chart draws. The engine now reads the RIC the tape answered under and keys every mark on
+  `(expiry, strike, ts)`. *The committed tape is 952/952 caret, so nothing shipped wrong — the
+  defect was one re-pull away.*
+- **The guard written to enforce S-7 was itself the T-46 defect.** `test_marks_are_carried_forward…`
+  looked each mark up by `row["call_ric"]` — the same fabricated key the ledger had used — so it
+  passed with all 624 marks frozen. *A guard that addresses its subject by the key under test is
+  not a guard.* The replacement addresses the bar by `(expiry, strike, ts)` out of `tape.bars`.
+- **I-7 contradicted a rule the same session had written.** T-57 added §7's settlement
+  carry-forward, which *moves* the resolution to an earlier bar — and left I-7 asserting the
+  resolution sits on `closing_bar_ts`. The suite NFR-6 calls the executable definition of
+  "logically consistent" would have gone red against behaviour the spec calls correct. I-7 is
+  widened; it keeps its teeth (nothing after the close, nothing off-session, no silent
+  substitution). **Amending a spec means re-reading the invariants that quote it.**
+- **`daily_ledger()` deleted a whole session.** Selecting `hour == 15` drops a half session
+  entirely — no row, no note — and `final_nav` then quotes the *previous* session's close as the
+  window's. Live on the synthetic fixture (2026-08-24 vanished); latent on the real tape only
+  because this window happens to have no early close. Same fallback as §7 now, and the row's own
+  `ts` is the marker.
+- **My own new guard let the mutation through.** `test_the_book_is_identical_on_a_live_form_tape`
+  first checked the blotter's RICs against the **union** of both tapes' spellings — which
+  contains the caret form, i.e. the defect. Caught only because the fix was mutation-checked in
+  turn. *Mutation-check the repair, not just the original.*
+- **Three numbers this session wrote down were wrong, and one was wrong in a way the package has
+  a rule about.** `$38,236` for the available floor came off a thin **05:00 pre-market** bar —
+  `max(ts)`'s mistake in a new place; the flag is only checked at entry bars, where the floor is
+  **$38,886.50**. "All five skip paths" is **four reasons over five skipped weeks**. And the
+  blotter carried `6.130000000000001` in `fill` while the same row's note said `mid=6.13` —
+  rounding now happens once, in `rules.money()`.
+- **NFR-5's "one code path" is narrower than it reads, and that belongs in the write-up.** The
+  live leg guesses a band of RICs rather than reading a chain, so it cannot tell *listed but
+  unquoted* from *never listed*: given spot 700.40 with the 701 listed and unquoted, the backtest
+  logs `SKIP_NO_QUOTE` and the live leg writes the **702**. The *rule* is one function; the
+  *chain handed to it* is not the same set. Inherent to guess-and-check acquisition (DR-10) and
+  **not fixable by making the live leg treat an unanswered RIC as listed** — it would then skip
+  almost every week. Recorded in SPEC §5 as a stated limitation. **PO decision:** whether §7's
+  carry-forward should also bind the live leg (it currently does not, and §7 now says so).
 
 **Secrets:** `lseg-data.config.json` (repo root) holds the LSEG app-key. It is gitignored —
 never commit it, never print its contents, never copy it into anything that ships.

@@ -593,3 +593,189 @@ def test_a_closed_session_is_refused_before_a_week_can_be_skipped():
 
 def test_an_open_session_passes_the_guard():
     assert live._require_open_session(_StubLd("OpenState.Opened")) is None
+
+
+# --------------------------------------------------------------------------
+# T-81 — the adversarial review's two high findings, both on the settlement leg.
+# Both were reproduced against a copy of the real book before being fixed.
+# --------------------------------------------------------------------------
+def _booked_state(expiry="2026-09-18", strike=710.0):
+    """A book in the state the real one is in now: long 100, short one dated call."""
+    state = live.empty_state(Params())
+    state["position"] = {
+        "shares": 100, "short_calls": 1,
+        "call": {"ric": "QQQI182671000.U", "occ": "QQQ   260918C00710000",
+                 "strike": strike, "expiry": expiry},
+    }
+    state["cash"] = 4688.50
+    state["blotter"] = [
+        {"time": "2026-09-14 15:00", "instrument": "QQQ.O", "occ": "", "side": "BUY",
+         "qty": 100, "limit": 709.16, "fill": 709.16, "cash_delta": -70916.0, "note": "R-ENTRY-STOCK"},
+        {"time": "2026-09-14 15:00", "instrument": "QQQI182671000.U",
+         "occ": "QQQ   260918C00710000", "side": "SELL", "qty": 1, "limit": 6.045,
+         "fill": 6.045, "cash_delta": 604.5, "note": "R-ENTRY-CALL"},
+    ]
+    return state
+
+
+def _settlement_snapshot(expiry, session, settle_print, bars=("13:00", "15:00", "16:00")):
+    return {
+        "captured_at": "2026-09-18T16:10:00", "expiry": expiry, "session": session,
+        "entry_bar": f"{session} 15:00",
+        "underlying": {"ric": "QQQ.O", "trdprc_1": settle_print},
+        "chain": [],
+        "diagnostics": {"stock_error": None, "bar_kind": "closing",
+                        "bars_in_session": [f"{session} {b}" for b in bars]},
+    }
+
+
+def test_settling_a_capture_from_another_week_is_refused_outright():
+    """The 18-Sep call must not be resolved against the 25-Sep close.
+
+    `--expiry` used to default to `coming_friday()`, which from the Saturday onward is
+    the NEXT Friday — and every guard downstream keys on the *session*, so the run
+    booked an ASSIGN dated a week after the contract expired and passed every check.
+    It raises rather than skipping: a skip would be a false fact about the market, and
+    I-10 would then refuse the correct re-run.
+    """
+    state = _booked_state(expiry="2026-09-18")
+    snapshot = _settlement_snapshot("2026-09-25", "2026-09-25", 730.0)
+    with pytest.raises(ValueError, match="2026-09-18"):
+        live.plan_settlement(snapshot, state, Params())
+
+
+def test_settling_the_right_week_still_works():
+    """The guard must not refuse the run it exists to protect — the OTM branch."""
+    state = _booked_state(expiry="2026-09-18")
+    rows, skip = live.plan_settlement(
+        _settlement_snapshot("2026-09-18", "2026-09-18", 705.00), state, Params())
+    assert skip is None
+    assert [r.side for r in rows] == ["EXPIRE"]          # 705 < the 710 strike
+
+
+def test_an_itm_settlement_of_the_right_week_assigns():
+    state = _booked_state(expiry="2026-09-18")
+    rows, skip = live.plan_settlement(
+        _settlement_snapshot("2026-09-18", "2026-09-18", 714.00), state, Params())
+    assert skip is None and [r.side for r in rows] == ["ASSIGN", "SELL"]
+
+
+def test_the_settle_cli_defaults_to_the_contract_the_book_is_short(tmp_path, monkeypatch):
+    """Not "this week's Friday" — the expiry the position actually carries."""
+    path = tmp_path / "book.json"
+    live.save_state(_booked_state(expiry="2026-09-11"), path)
+    seen = {}
+
+    def fake_capture(expiry, params=None, on=None, band=None, bar_kind="entry"):
+        seen["expiry"], seen["bar_kind"] = expiry, bar_kind
+        return _settlement_snapshot(str(expiry), str(expiry), 700.0)
+
+    monkeypatch.setattr(live, "capture", fake_capture)
+    live.main(["settle", "--state", str(path)])
+    assert seen["expiry"] == dt.date(2026, 9, 11)
+    assert seen["bar_kind"] == "closing"
+
+
+# --------------------------------------------------------------------------
+# An outage is not a fact about the market (the second high finding)
+# --------------------------------------------------------------------------
+def test_a_failed_request_writes_no_skip_and_leaves_the_book_untouched(tmp_path, monkeypatch):
+    """An LSEG timeout used to write SKIP_NO_STOCK_PRINT and exit 0.
+
+    I-10 then refused the re-run, so the call stayed open forever (I-7) and the only
+    recovery was hand-editing committed data. RUNBOOK §9's rule, made mechanical: a
+    desktop outage must never be recorded as a fact about the market.
+    """
+    path = tmp_path / "book.json"
+    live.save_state(_booked_state(), path)
+    before = path.read_text(encoding="utf-8")
+    monkeypatch.setattr(live, "lseg_session", fake_lseg(days=[]))   # nothing comes back
+
+    code = live._run("settle", dt.date(2026, 9, 18), dt.date(2026, 9, 18), path, Params())
+    assert code != 0
+    assert path.read_text(encoding="utf-8") == before, "the book was modified by an outage"
+
+
+def test_a_session_that_has_not_reached_the_closing_bar_is_not_a_missing_print(tmp_path):
+    """Running at 15:30 ET is early, not a market fact. Wait and re-run; nothing written."""
+    snapshot = _settlement_snapshot("2026-09-18", "2026-09-18", 714.0,
+                                    bars=("13:00", "14:00"))
+    reason = live.unreadable_reason(snapshot, Params())
+    assert reason is not None and "15:00" in reason
+
+
+def test_a_complete_session_with_no_print_is_a_market_fact_and_still_skips(tmp_path, monkeypatch):
+    """The guard must not swallow the skip path it sits in front of (DR-1, I-10)."""
+    snapshot = _settlement_snapshot("2026-09-18", "2026-09-18", None)
+    assert live.unreadable_reason(snapshot, Params()) is None
+    rows, skip = live.plan_settlement(snapshot, _booked_state(), Params())
+    assert not rows and skip is not None and skip.reason == SKIP_NO_STOCK_PRINT
+
+
+def test_the_request_error_is_read_rather_than_left_in_the_payload():
+    """capture() recorded stock_error all along; nothing read it."""
+    snapshot = _settlement_snapshot("2026-09-18", "2026-09-18", 714.0)
+    snapshot["diagnostics"]["stock_error"] = "LDError: ReadTimeout('timed out')"
+    reason = live.unreadable_reason(snapshot, Params())
+    assert reason is not None and "ReadTimeout" in reason
+
+
+# --------------------------------------------------------------------------
+# Settlement reads the closing bar, whatever SD-4 chose for the entry
+# --------------------------------------------------------------------------
+def test_capture_reads_the_closing_bar_for_a_settlement_even_if_entry_is_the_open(monkeypatch):
+    """SPEC §7: the exit is always the close. Under `entry_bar="first"` the old code read
+    the 09:00 bar and would have resolved the week against the wrong print."""
+    monkeypatch.setattr(live, "lseg_session", fake_lseg({13: 700.0, 19: 714.0}))
+    snapshot = live.capture(dt.date(2026, 9, 11), Params(entry_bar="first"),
+                            on=dt.date(2026, 9, 11), bar_kind="closing")
+    assert snapshot["entry_bar"].endswith("15:00")
+    assert snapshot["diagnostics"]["bar_kind"] == "closing"
+
+
+def test_capture_still_follows_sd4_for_an_entry(monkeypatch):
+    monkeypatch.setattr(live, "lseg_session", fake_lseg({13: 700.0, 19: 714.0}))
+    snapshot = live.capture(dt.date(2026, 9, 11), Params(entry_bar="first"),
+                            on=dt.date(2026, 9, 11), bar_kind="entry")
+    assert snapshot["entry_bar"].endswith("09:00")
+
+
+def test_an_unknown_bar_kind_is_refused():
+    with pytest.raises(ValueError):
+        live.capture(dt.date(2026, 9, 11), Params(), on=dt.date(2026, 9, 11),
+                     bar_kind="whichever")
+
+
+def test_lives_context_manager_is_wired_to_the_guard_too(monkeypatch):
+    """The live leg has the same seam, and the same way of being silently unwired.
+
+    This one matters more: on Friday it is the difference between a refusal and a
+    false skip written into the graded book.
+    """
+    import sys as _sys
+
+    class _Fake:
+        def __init__(self):
+            self.session = self
+            self.opened = self.closed = 0
+
+        def open_session(self):
+            self.opened += 1
+
+        def close_session(self):
+            self.closed += 1
+
+        def get_default(self):
+            return self
+
+        @property
+        def open_state(self):
+            return "OpenState.Closed"
+
+    module = _Fake()
+    monkeypatch.setitem(_sys.modules, "lseg", type(_sys)("lseg"))
+    monkeypatch.setitem(_sys.modules, "lseg.data", module)
+    with pytest.raises(RuntimeError, match="signed in"):
+        with live.lseg_session():
+            pytest.fail("the session should never have been yielded")
+    assert module.opened == 1 and module.closed == 1

@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft v1 — 2026-09-12, **§2/§3/§5/§6.1/§8's records landed** (T-65, T-80, T-56). §3.1–§3.3 are now the code's behaviour, not a target; §3.4 (the synthetic tape) is still to come — T-63. Everything from §4 on remains a target until its task lands (lockstep rule). |
+| Status | Draft v1 — 2026-09-12. **§2–§9 and §12 are now the code's behaviour, not a target** (T-65, T-80, T-56, T-63, T-81, and **T-57 2026-09-15**: the weekly loop, fills, settlement, the blotter, the skip log, the ledger and the I-1…I-12 suite). §10, §11 and I-13 remain targets until T-58 / T-79 / T-59 land (lockstep rule). |
 | Scope | The book: tape → rules → engine → blotter + ledger + Reg T account → page. Schemas, the weekly algorithm, fills, settlement, edge cases, the invariant suite. |
 | Companion | Requirements: [PRD.md Part B](PRD.md) (§13–§20) · Board: [BACKLOG-2.md](BACKLOG-2.md) · Brief: [ASSIGNMENT-2-COVERED-CALL.md](ASSIGNMENT-2-COVERED-CALL.md) · Shared machinery: [SYSTEM-SPEC.md](SYSTEM-SPEC.md) §6 (RIC grammar), §5 (cache-first) · Structure: [ARCHITECTURE.md](ARCHITECTURE.md) AD-12 |
 
@@ -133,10 +133,17 @@ that step. Requests are batched with the single-RIC fallback (AD-2), every failu
 (empty series, never a crash — the brief's own words), and each contract is requested only for
 its life (from listing to expiry) rather than the whole window.
 
-**Cache-first, exactly as 1.1 (AD-1):** `load_tape()` reads the parquet when present;
-`fetch_tape()` refuses to overwrite one; `OSL_OFFLINE=1` forces the synthetic tape; nothing in
-CI, tests or the build ever reaches the network. `option_pipeline_data.pkl` is never touched
-by any of this.
+**Cache-first, exactly as 1.1 (AD-1):** `load_tape()` reads the parquet when present and
+synthesizes only when it is absent; `fetch_tape()` refuses to overwrite one; nothing in CI,
+tests or the build ever reaches the network. `option_pipeline_data.pkl` is never touched by
+any of this.
+
+> **Corrected 2026-09-15 (T-63).** This section first said "`OSL_OFFLINE=1` forces the
+> synthetic tape", carried over from Part A's wording. Taken literally it would break the
+> deploy: CI sets `OSL_OFFLINE` on **every** build, so the covered-call page would be rendered
+> from a fabricated book — which §11's own publish guard then refuses. What the flag means,
+> here and in 1.1's `lseg_available()`, is **never pull**. The committed tape always wins when
+> it is present; only `fetch_tape()` reads the variable, and a test pins that.
 
 **Landed 2026-09-14 (T-56)**, with three details the writing above left open:
 
@@ -164,10 +171,37 @@ window, so the skip path is always exercised), prints sparse, spreads wider on t
 of the day than the last, one holiday-shortened week, and a stock path that produces both OTM
 and ITM Fridays. A page built from it says so and the CI guard refuses to publish it (§10).
 
-**Not written yet (T-63).** Until it is, `load_tape()` with no parquet present **raises and
-says what to do** rather than falling back: the one failure this module must not have is
-inventing bars in silence. So `OSL_OFFLINE=1` currently means "never pull", and the committed
-tape is what the tests and the build read.
+**Landed 2026-09-15 (T-63)** as `synthesize_tape(end_date, *, seed=7, weeks=12)` in
+`tape.py`, returning a `Tape` whose schema, dtypes and payload shape a pulled tape's cannot be
+told apart from — only `Tape.synthetic` separates them, and that is what the page prints and
+CI refuses to publish.
+
+**`end_date` is required and positional**, a deliberate deviation from the signature sketched
+above: a default would be a clock reference waiting to happen, and OQ-6 has already cost one
+false CI failure. A test asserts the parameter has no default and that no clock function
+appears anywhere in the generator's source.
+
+Each week of the window has a **named role**, so a test asks for the case it needs instead of
+hunting for a week that happens to have it (`diagnostics.synthetic_roles`, and the
+`role_weeks` fixture):
+
+| Week | Role | What it exercises |
+|---|---|---|
+| 2 | `monday_holiday` | DR-7 — the week's first session is the Tuesday |
+| 4 | `no_quote_at_entry` | `SKIP_NO_QUOTE` — the chosen strike shows a zero bid at the entry bar |
+| 5 | `no_strike_above_spot` | `SKIP_NO_STRIKE` — the chain exists but tops out below spot |
+| 7 | `friday_holiday` | DR-7 — the expiry is the Thursday, and the RIC carries that date |
+| 8 | `short_week` | `SKIP_SHORT_WEEK` — one session, nothing can both enter and expire |
+| 9 | `half_session_entry_day` | `SKIP_NO_STOCK_PRINT` — the session exists, the 15:00 bar does not |
+
+The rest are ordinary, and both ITM and OTM Fridays occur among them (a window that never
+assigns exercises neither the assignment nor the shares leaving the book). Option prices are
+Black-Scholes on **each bar's own spot** at `SYNTHETIC_SIGMA`, so a mid is never inconsistent
+with the underlying beside it — a mutation run showed that pricing off one fixed spot passes
+every static bound while destroying exactly the relationship T-57 and T-58 read.
+
+`load_tape()` falls back to it with a `RuntimeWarning`, and `fallback=False` demands the real
+tape instead for callers that would rather stop than render a shape.
 
 ## 4. The weekly loop
 
@@ -198,7 +232,15 @@ not `max(ts)`), if `COVERED`:
 6. **Settle** (§7): `S_exp` = stock `trdprc_1` at `b_exp`. `S_exp > K` (SD-6) → **ASSIGN** the call (cash Δ 0) and **SELL** `shares` at `K` — `cash += shares × K`; state → `FLAT`. *(R-ASSIGN.)* Otherwise **EXPIRE** (cash Δ 0); state → `STOCK_ONLY`. *(R-EXPIRE.)*
 
 That is the brief's loop, with the skip branches the brief only implies made explicit. The
-ledger (§8) is then computed for **every bar** in the window from the blotter and the tape.
+ledger (§9) is then computed for **every bar** in the window from the blotter and the tape.
+
+**Landed 2026-09-15 (T-57)** as `covered_call/engine.py: run_backtest(tape, params) -> Book`,
+with two refusals the writing above left implicit. `window_weeks()` enforces §3.2 item 3 —
+`end` must be a **last-session day**, so the final call resolves inside the window — and it
+also refuses a week the window only **half** covers. Straddling is the silent case: trading
+the inside half would book an entry whose expiry session the tape does not carry, and dropping
+it would break I-10, which says every week without an entry appears in the skip log with a
+reason. Neither is acceptable, so the engine stops and says which weeks straddle.
 
 ## 5. Strike selection
 
@@ -215,6 +257,22 @@ here, so "no quote" and "no strike" are distinguishable in the skip log).
 
 The rule and its parameters are printed on the page in words, and a test pins the printed
 sentence to `params` so the two cannot say different things (FR-14).
+
+**The live leg cannot make this distinction, and says so** *(T-82, 2026-09-15)*. The
+definition above turns on `chain` being the **listed** strikes — that is what keeps
+`SKIP_NO_STRIKE` and `SKIP_NO_QUOTE` apart. The backtest reads the listed set off the tape
+(`Tape.strikes_for`). The live leg has no chain to read: `capture()` **guesses** a band of
+RICs around spot and keeps whichever answer, so a contract that is listed but returns
+nothing at the entry bar is indistinguishable from one that was never listed. It is
+therefore absent from `snapshot["chain"]`, and `select_strike` walks past it to the next
+strike up instead of the week skipping. Demonstrated: with spot 700.40 and the 701 listed
+but unquoted, the backtest logs `SKIP_NO_QUOTE` and the live leg writes the **702**.
+This is a property of guess-and-check acquisition (DR-10), not a defect in `select_strike`,
+and it cannot be closed by making the live leg treat an unanswered RIC as listed — it would
+then skip every week in which any guessed strike was never listed, which is most of them.
+**It is a stated limitation for the write-up, and it qualifies NFR-5's "one code path":**
+the *rule* is one function, the *chain handed to it* is not the same set. Monday 09-14's
+booked entry is unaffected — the 710 it wrote was quoted at the bar (6.01 / 6.08).
 
 ## 6. Fills
 
@@ -299,6 +357,29 @@ single row only introduces them.
 - The settlement print is the stock's `trdprc_1` at the **closing bar** of the expiry session.
   *(S-7. The official 4 pm close can differ by cents from the last hourly bar's last trade;
   using the tape's own bar keeps every number on the page reproducible from the tape.)*
+- **If that bar carries no print, settlement falls back to the last print in the same session
+  at or *before* the close, and the blotter row says so** (`S_exp_carried`). *(Added by T-57,
+  2026-09-15 — the specification had no answer here and the engine needed one.* **Entry and
+  settlement are deliberately asymmetric:** a missing print at the *entry* bar skips the week,
+  because nothing is owed yet and DR-1 forbids inventing one; a missing print at the
+  *settlement* bar may not skip, because the call is already short and I-7 says every open call
+  resolves — a skipped settlement would leave the book carrying that call forever. The fallback
+  searches **backwards** only: a bar after the close is T-62's post-close stub, and resolving a
+  contract against one is the `max(ts)` defect wearing a different hat. A session with no print
+  at all before the close **raises** — that is a broken tape, not a market fact. Neither tape
+  exercises this today, so the path is driven by a test that blanks the bar on a copy of the
+  synthetic tape.*)
+- **This carry-forward is the backtest's rule. The live leg (FR-21) does not carry forward**,
+  and logs `SKIP_NO_STOCK_PRINT` instead. It reads **one bar**, not a session, so it has
+  nothing to carry from; the ways a bar can be unreachable — an LSEG timeout, an early
+  close, a run before the 15:00 bar has closed — are intercepted upstream by
+  `live.unreadable_reason()`, which writes **nothing** and exits 2 (T-81). What is left is a
+  15:00–16:00 ET bar that exists and carries quotes but no trade at all, which is not a
+  reachable input for QQQ. *(Scoped 2026-09-15 by T-82: §7's paragraph above was written for
+  the engine and read as though it bound both legs, leaving the spec and `live.py`
+  asserting opposite rules over Friday's settlement. If the PO would rather the live leg
+  carried forward too, `capture()` already records `bars_in_session` and the change is
+  small — but it would be a change made days before that leg runs for real.)*
 - **ITM iff `S_exp > K`** (SD-6, `itm_rule == "strict"`). Equality is OTM: the OCC's
   auto-exercise threshold is $0.01 in the money, and a call exactly at the strike is not.
 - ITM → `ASSIGN` on the option (`qty 1, limit —, fill 0, cash Δ 0`) **and** `SELL` on the
@@ -336,14 +417,21 @@ something.
 
 ## 9. The ledger and the Reg T account
 
-One row per bar in the window, computed from the blotter and the tape:
+One row per **stock** bar in the window, computed from the blotter and the tape. Column names
+are lower case in the code (`lmv`, `option_mv`, `nav`, `im`, `mm`); the page title-cases them.
+Two more columns carry what a reader needs to place a row: `week` (the bar's own ISO label)
+and `entry` (true on a bar that booked an entry, which is what `flag` keys on).
+
+**The row at an entry bar already contains the trade.** `cash` counts every blotter row at or
+*before* the bar, so an entry bar shows the position on, not the position about to go on. A
+reader checking NAV by hand against the chart depends on knowing which.
 
 | Column | Formula |
 |---|---|
 | `shares` | Cumulative from blotter `BUY`/`SELL` |
 | `short_calls` | `0` or `1`; with `strike`, `expiry` when `1` |
 | `cash` | `start_cash + Σ cash_delta` over blotter rows at or before `ts` |
-| `stock_mark` | Stock `trdprc_1` at the bar; **carried forward** from the last bar that had one, `mark_carried = True` on such rows (S-7) |
+| `stock_mark` | Stock `trdprc_1` at the bar; **carried forward** from the last bar that had one (S-7). `mark_carried` is True on a row where **either** mark came from an earlier bar |
 | `call_mark` | The short call's `mid` at the bar; carried forward likewise; on the expiry bar it is **intrinsic** `max(S_exp − K, 0)` so the mark and the settlement agree |
 | `LMV` | `shares × stock_mark` |
 | `option_mv` | `− short_calls × 100 × call_mark` (a short call is a negative MV) |
@@ -356,7 +444,14 @@ One row per bar in the window, computed from the blotter and the tape:
 
 When flat, `LMV = IM = MM = 0` and `NAV = cash`. The page plots `NAV`, `IM`, `MM` on one axis
 with hover, and the ledger table below it is the **daily** roll-up (the **closing bar** of each
-session) so a reader can check a week by hand; the hourly frame is what the chart draws.
+session) so a reader can check a week by hand; the hourly frame is what the chart draws. The
+roll-up is a *selection* of hourly rows, never a re-aggregation, so a number in the table is a
+number in the chart.
+
+**A headline figure comes off the close, never off the last row** (T-57). The stock tape runs
+to a 19:00 ET bar, so `ledger.iloc[-1]` is a thin post-close stub — `Book.final_nav` reads the
+last **15:00** row instead. This is T-62's `max(ts)` trap one layer up, and on the committed
+tape the two numbers differ, which is what makes the test that pins it a check.
 
 Margin interest on a debit balance is not modelled (S-5); if SD-3 funds the account fully it
 never arises, and if it does not, the write-up says so.
@@ -404,6 +499,12 @@ Each is a test over the **real** tape's book as well as the synthetic one. Writt
 engine; the engine is done when they pass. Mutation-check them (T-46's rule): inject the
 defect and watch the test fail.
 
+**Landed 2026-09-15 (T-57):** I-1 … I-12 are in `tests/covered_call/test_engine.py`, each one
+running over **both** books — the seeded synthetic tape and the committed real one — and each
+mutation-checked. They recompute from the *blotter's own rendered columns* and from
+`tape.bars`, never from something `run_backtest` handed back on the side (T-46's rule). I-13
+waits on the page (T-59).
+
 | ID | Invariant |
 |---|---|
 | I-1 | **Cash reconciles:** for every bar, `cash == start_cash + Σ cash_delta` of blotter rows at or before it; the final cash equals the sum of the blotter, to the cent. |
@@ -412,7 +513,7 @@ defect and watch the test fail.
 | I-4 | **Fill within the market:** every option fill satisfies `bid ≤ fill ≤ ask` at its bar (with mid, equality to mid). |
 | I-5 | **Never naked, never short stock:** `short_calls ≤ 1`, `short_calls == 1 ⇒ shares == 100`, `shares ∈ {0, 100}`, on every row. |
 | I-6 | **Every trade is on the tape:** every blotter `time` is a bar timestamp of its instrument. |
-| I-7 | **Every open call resolves:** for every week with a `SELL` call, the expiry session's **closing bar** carries exactly one `EXPIRE` or one `ASSIGN` + one stock `SELL` at `fill == K`; no other exits exist. |
+| I-7 | **Every open call resolves:** for every week with a `SELL` call, the bar the settlement print came from — the expiry session's **closing bar**, or, when that bar carries no print, the earlier bar §7's carry-forward read (`S_exp_carried` in the note) — carries exactly one `EXPIRE` or one `ASSIGN` + one stock `SELL` at `fill == K`. Nothing resolves after the close, nothing off the expiry session, and no substitution is silent; no other exits exist. *(Widened 2026-09-15 by T-82: as first written, I-7 contradicted §7's carry-forward, which the same session had added — the suite NFR-6 calls the executable definition of "logically consistent" would have gone red against behaviour the spec calls correct.)* |
 | I-8 | **Settlement is right:** `ASSIGN ⇔ S_exp > K` under `itm_rule`; `EXPIRE ⇔ S_exp ≤ K`. |
 | I-9 | **The rule chose the strike it says it chose:** for every entry, re-running `select_strike` on that bar's chain and spot reproduces `K`; under `nearest_otm`, no listed strike lies in `[S, K)`. |
 | I-10 | **Skips are real:** every week without an entry appears in the skip log with a reason the tape supports (no print / no strike / no valid quote / short week), and no week appears in both. |
@@ -427,6 +528,8 @@ defect and watch the test fail.
 | No bid or no ask at the entry bar | Skip the week (`SKIP_NO_QUOTE`); in `FLAT`, buy nothing |
 | Bid = 0, or ask < bid | Not a valid quote (§6.1) — same as above |
 | Stock print missing at the entry bar | `SKIP_NO_STOCK_PRINT` |
+| Stock print missing at the **expiry closing bar** | Settlement carries the last print in that session at or before the close; the blotter note says `S_exp_carried`. No print in the session at all → the engine raises (§7) |
+| A week the window only half covers | Refused at load — the engine will neither trade half a week nor drop it (§4) |
 | No listed strike ≥ spot | `SKIP_NO_STRIKE` |
 | Monday holiday | The week's first session is the entry day (§3.2) |
 | Friday holiday | The week's last session is the expiry day; the RIC carries that date |

@@ -15,7 +15,7 @@ under [docs/](docs/) are. Keep it current (the lockstep rule in [CLAUDE.md](CLAU
 | Page | Assignment | State |
 |---|---|---|
 | `/` — **the options surface** | [Assignment 1.1](docs/archive/ASSIGNMENT-1.md): expired-options sparsity on UUUU, the mark (`MID_PRICE`) against the print (`TRDPRC_1`) | **Live.** Seven panels: a 3D price surface with an as-of slider over 53 trading days that drives the whole page, the underlying, an implied-vol smile, mark-vs-print, spread, and two occupancy grids. Headline: **1,601 of 7,458 listed contract-days (21.5%) carry a mark with no trade.** |
-| `/covered-call/` — **covered call backtest** | [Assignment 2](docs/ASSIGNMENT-2-COVERED-CALL.md): long 100 shares, short 1 weekly call; blotter, ledger, Reg T account, NAV path, mid-vs-print R², write-up | **In build — due Sunday 2026-09-20.** Underlying QQQ; the first live entry is booked Monday 2026-09-14. Board: [BACKLOG-2](docs/BACKLOG-2.md). |
+| `/covered-call/` — **covered call backtest** | [Assignment 2](docs/ASSIGNMENT-2-COVERED-CALL.md): long 100 shares, short 1 weekly call; blotter, ledger, Reg T account, NAV path, mid-vs-print R², write-up | **In build — due Sunday 2026-09-20.** Underlying QQQ; the first live entry is booked Monday 2026-09-14. The tape and the **backtest engine** are in (2026-09-15): 10 weeks, 6 assigned, final NAV $76,243.50 on $75,000. The page itself is next. Board: [BACKLOG-2](docs/BACKLOG-2.md). |
 
 ## How it works
 
@@ -43,7 +43,7 @@ Python is the conda env **`algo`** (3.12). Commands are Git Bash syntax, from th
 source /c/Users/rjd61/anaconda3/etc/profile.d/conda.sh && conda activate algo
 
 python build_preview.py     # THE DELIVERABLE — writes options_surface_preview.html (~32 s)
-python -m pytest tests/ -q  # 352 tests, all green, no xfail
+python -m pytest tests/ -q  # 496 tests, all green, no xfail
 reflex run                  # local Reflex viewer (being retired — AD-10)
 ```
 
@@ -62,7 +62,7 @@ never commit `lseg-data.config.json` (the app-key; gitignored).
 | `options_surface_lab/commentary.py` | The PO's three sentences (FR-7) — prose only. |
 | `build_preview.py` | The static page builder. CI runs it. |
 | `option_pipeline_data.pkl` | The committed LSEG cache: 296 series × 53 days. A frozen artifact. |
-| `tests/` | 352 tests; the pure functions first, then everything a defect could reach the page through. |
+| `tests/` | 496 tests; the pure functions first, then everything a defect could reach the page through. |
 | `notebooks/` | Exploration and evidence, numbered by assignment. Consume the package; never a dependency. |
 | `.github/workflows/pages.yml` | pytest in a clean container with no credentials → build → guards → Pages. |
 

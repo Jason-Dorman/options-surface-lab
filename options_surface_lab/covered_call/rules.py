@@ -309,6 +309,23 @@ SKIP_SHORT_WEEK = "SKIP_SHORT_WEEK"
 #: ``limit`` and ``fill`` on a row that is not an order (SPEC §8).
 NO_LIMIT = "—"
 
+#: Places every dollar figure in the book is held to — fills, limits, cash deltas,
+#: and everything the ledger derives from them.
+#:
+#: Four, not two: a stock print carries four decimals on this tape (719.0201), so
+#: rounding to cents would move a real fill. And **not zero**: ``(6.01 + 6.08) / 2``
+#: is not 6.045 in binary, so an unrounded mid reaches the blotter as
+#: ``6.130000000000001`` while the same row's note prints ``mid=6.13``. The blotter
+#: is a book artifact — it is what I-12 hashes and what the page will render — so a
+#: row may not disagree with itself. Rounding happens **once, here**, at the point a
+#: row is constructed; the ledger then accumulates rounded numbers.
+MONEY_DP = 4
+
+
+def money(value: float) -> float:
+    """A dollar figure, held to :data:`MONEY_DP`. The one place rounding happens."""
+    return round(float(value), MONEY_DP)
+
 _TIME_FMT = "%Y-%m-%d %H:%M"
 
 
@@ -357,11 +374,11 @@ def format_bar_time(ts) -> str:
 
 def entry_stock_row(ts, ric: str, spot: float, params: Params) -> BlotterRow:
     """R-ENTRY-STOCK — buy the shares at the bar's print (SPEC §4 step 4, §6.2)."""
-    spot = float(spot)
+    spot = money(spot)
     return BlotterRow(
         time=format_bar_time(ts), instrument=ric, occ="", side="BUY",
         qty=params.shares, limit=spot, fill=spot,
-        cash_delta=-params.shares * spot,
+        cash_delta=money(-params.shares * spot),
         note=f"{RULE_ENTRY_STOCK} S={spot:.4f}",
     )
 
@@ -377,14 +394,14 @@ def entry_call_row(
     stock print and the option quote being contemporaneous, and at hourly resolution
     that is a claim to *measure*, not to assert.
     """
-    mid, strike, spot = float(mid), float(strike), float(spot)
+    mid, strike, spot = money(mid), float(strike), money(spot)
     note = f"{RULE_ENTRY_CALL} K={strike:g} S={spot:.4f} mid={mid:g}"
     if sync_gap_s is not None:
         note += f" sync={sync_gap_s:g}s"
     return BlotterRow(
         time=format_bar_time(ts), instrument=ric, occ=occ, side="SELL",
         qty=params.contracts, limit=mid, fill=mid,
-        cash_delta=params.contracts * 100 * mid,
+        cash_delta=money(params.contracts * 100 * mid),
         note=note,
     )
 
@@ -394,7 +411,7 @@ def expire_row(ts, ric: str, occ: str, strike: float, settle: float, params: Par
     return BlotterRow(
         time=format_bar_time(ts), instrument=ric, occ=occ, side="EXPIRE",
         qty=params.contracts, limit=NO_LIMIT, fill=0.0, cash_delta=0.0,
-        note=f"{RULE_EXPIRE} K={float(strike):g} S_exp={float(settle):.4f}",
+        note=f"{RULE_EXPIRE} K={float(strike):g} S_exp={money(settle):.4f}",
     )
 
 
@@ -407,7 +424,7 @@ def assign_rows(
     does. Keeping them as two rows is what lets I-1 reconcile cash against the
     blotter alone.
     """
-    strike, settle = float(strike), float(settle)
+    strike, settle = float(strike), money(settle)
     return [
         BlotterRow(
             time=format_bar_time(ts), instrument=call_ric, occ=occ, side="ASSIGN",
@@ -417,7 +434,7 @@ def assign_rows(
         BlotterRow(
             time=format_bar_time(ts), instrument=stock_ric, occ="", side="SELL",
             qty=params.shares, limit=strike, fill=strike,
-            cash_delta=params.shares * strike,
+            cash_delta=money(params.shares * strike),
             note=f"{RULE_ASSIGN_SELL} K={strike:g}",
         ),
     ]

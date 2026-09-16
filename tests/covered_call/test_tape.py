@@ -18,6 +18,7 @@ from __future__ import annotations
 import contextlib
 import datetime as dt
 import json
+import sys
 
 import pandas as pd
 import pytest
@@ -75,8 +76,16 @@ def _expiry_of(day: dt.date) -> dt.date:
     raise AssertionError(f"the fake tape has no session on {day}")
 
 
-def fake_lseg(days=ALL_DAYS, quote=(4.77, 4.83), reject_batches_over=None, listed=None):
-    """A stand-in Workspace session. Answers only for the RICs it has listed."""
+def fake_lseg(days=ALL_DAYS, quote=(4.77, 4.83), reject_batches_over=None, listed=None,
+              silent=()):
+    """A stand-in Workspace session. Answers only for the RICs it has listed.
+
+    ``silent`` names strikes that come back with their columns PRESENT and every value
+    NaN — a contract that is listed but never quoted in the window. That shape is the
+    only reason ``_long_rows`` drops empty series and the only thing that distinguishes
+    "listed" from "quoted" in ``strikes_for``, and the fixture could not produce it
+    until T-81 asked why those paths had no test.
+    """
     listed = LISTED_STRIKES if listed is None else listed
 
     def listed_rics():
@@ -114,7 +123,12 @@ def fake_lseg(days=ALL_DAYS, quote=(4.77, 4.83), reject_batches_over=None, liste
             index = _naive_utc(window, OPTION_UTC_HOURS)
             columns = pd.MultiIndex.from_product([answering, list(fields)])
             frame = pd.DataFrame(index=index, columns=columns, dtype=float)
+            quiet = {build_option_ric("QQQ", expiry, "C", k,
+                                      expired=FORM_BY_EXPIRY[expiry] == "expired")
+                     for expiry in listed for k in silent}
             for ric in answering:
+                if ric in quiet:
+                    continue          # columns exist, every value stays NaN
                 frame[(ric, "BID")] = quote[0]
                 frame[(ric, "ASK")] = quote[1]
                 frame[(ric, "TRDPRC_1")] = sum(quote) / 2
@@ -292,13 +306,26 @@ def test_every_requested_contract_gets_a_verdict(pulled):
     """
     tape, _, _ = pulled
     diag = tape.meta["diagnostics"]
-    requested = set(diag["requested"])
-    answered = set(tape.options["ric"].unique())
+
+    def contracts(rics):
+        """(expiry, strike) — one instrument, whichever RIC spelling asked for it.
+
+        The reconciliation is over *contracts*, not strings, because a strike asked
+        under both RIC forms is one contract: comparing strings let a contract rescued
+        by the second form count as answered and unanswered at once, and counted every
+        genuine miss twice (T-81).
+        """
+        return {(p["expiry"], p["strike"]) for p in map(parse_option_ric, rics) if p}
+
+    requested = contracts(diag["requested"])
+    answered = contracts(tape.options["ric"].unique())
+    unanswered = contracts(diag["unanswered"])
     assert answered <= requested, "the tape holds contracts the pull never asked for"
-    assert requested - answered == set(diag["unanswered"]), (
+    assert requested - answered == unanswered, (
         "a requested contract returned nothing and was not recorded as unanswered"
     )
-    assert not (answered & set(diag["unanswered"])), "a RIC is both answered and not"
+    assert not (answered & unanswered), "a contract is both answered and not"
+    assert len(diag["unanswered"]) == len(unanswered), "a contract is listed twice"
 
 
 def test_a_rejected_batch_is_retried_one_ric_at_a_time(monkeypatch, tmp_path):
@@ -392,9 +419,14 @@ def test_the_loader_opens_no_session(pulled, monkeypatch):
     assert len(load_tape(path).bars) > 0
 
 
-def test_the_loader_says_what_to_do_when_there_is_no_tape(tmp_path):
+def test_a_caller_that_demands_the_real_tape_is_told_what_to_do(tmp_path):
+    """``fallback=False`` is for callers that would rather stop than render a shape.
+
+    The default *does* fall back, loudly, to the synthetic tape — that path and its
+    warning live in ``test_synthetic_tape.py`` beside the generator (T-63).
+    """
     with pytest.raises(FileNotFoundError) as excinfo:
-        load_tape(tmp_path / "absent.parquet")
+        load_tape(tmp_path / "absent.parquet", fallback=False)
     assert "RUNBOOK" in str(excinfo.value)
 
 
@@ -462,6 +494,23 @@ def test_the_requested_fields_are_the_ones_the_schema_needs():
     assert set(tape_mod.FIELD_TO_COLUMN.values()) <= set(BAR_COLUMNS)
 
 
+def test_describe_reconciles_contracts_not_ric_strings(pulled):
+    """A strike asked under both RIC forms is ONE contract.
+
+    Counting strings made the operator's verification line — the one RUNBOOK §8 tells
+    them to check — read 2x on every genuine miss: the real pull printed
+    "952 answered + 150 refused = 1102 requested" for 952 contracts and 75 absent ones
+    (T-81). The line now counts contracts and reports the RIC requests separately.
+    """
+    tape, _, _ = pulled
+    line = next(l for l in tape_mod.describe(tape).splitlines() if l.startswith("contracts:"))
+    answered = tape.options["ric"].nunique()
+    refused = len({(p["expiry"], p["strike"]) for p in
+                   map(parse_option_ric, tape.meta["diagnostics"]["unanswered"]) if p})
+    assert f"{answered} answered + {refused} refused = {answered + refused} requested" in line
+    assert "RIC requests across both forms" in line
+
+
 def test_describe_reports_what_a_human_checks_before_committing(pulled):
     tape, _, _ = pulled
     text = tape_mod.describe(tape)
@@ -503,3 +552,107 @@ def test_a_closed_session_is_refused_before_anything_is_requested():
 
 def test_an_open_session_passes_the_guard():
     assert tape_mod._require_open_session(_StubLd("OpenState.Opened")) is None
+
+
+# --------------------------------------------------------------------------
+# T-81 — paths the fake Workspace could not previously reach
+# --------------------------------------------------------------------------
+def test_a_contract_quoted_nowhere_in_the_window_is_not_in_the_tape(monkeypatch, tmp_path):
+    """An all-NaN frame is not data. ``_long_rows`` drops it; nothing else could.
+
+    LSEG answers for a RIC it knows with columns full of NaN when the contract simply
+    never traded or quoted in the window. Keeping those rows would put thousands of
+    empty bars in the tape and make a dead contract indistinguishable from a quiet one.
+    """
+    monkeypatch.delenv("OSL_OFFLINE", raising=False)
+    friday, quiet_strike = dt.date(2026, 7, 10), 700.0
+    monkeypatch.setattr(tape_mod, "lseg_session", fake_lseg(silent=(quiet_strike,)))
+    tape = fetch_tape(PARAMS, path=tmp_path / "t.parquet")
+
+    quiet_ric = build_option_ric("QQQ", friday, "C", quiet_strike, expired=True)
+    assert quiet_ric not in set(tape.options["ric"]), "an all-NaN contract entered the tape"
+    assert quiet_strike not in tape.strikes_for(friday)
+    # ...and it is accounted for rather than vanishing: it was asked for, and it is
+    # recorded among the contracts nothing answered for.
+    assert quiet_ric in set(tape.meta["diagnostics"]["requested"])
+    assert quiet_ric in set(tape.meta["diagnostics"]["unanswered"])
+
+
+def test_strikes_for_lists_a_strike_that_is_quoted_on_only_one_bar(monkeypatch, tmp_path):
+    """SPEC §5: the chain is what was LISTED that week, quoted at this bar or not.
+
+    "No strike at or above spot" and "the chosen strike had no quote" are different
+    skips (I-10), so a strike that quotes once must stay in the chain for every bar.
+    """
+    tape, _, _ = _pull(monkeypatch, tmp_path)
+    friday = dt.date(2026, 7, 10)
+    chain = tape.strikes_for(friday)
+    options = tape.options[tape.options["expiry"] == friday]
+    bars = sorted(options["ts"].unique())
+    on_last_bar = set(options[options["ts"] == bars[-1]]["strike"])
+    assert set(chain) >= on_last_bar
+    assert len(chain) == options["strike"].nunique(), (
+        "strikes_for is reporting the bar's quotes rather than the week's listings"
+    )
+
+
+def _pull(monkeypatch, tmp_path, **kwargs):
+    monkeypatch.delenv("OSL_OFFLINE", raising=False)
+    session = fake_lseg(**kwargs)
+    monkeypatch.setattr(tape_mod, "lseg_session", session)
+    path = tmp_path / "covered_call_tape.parquet"
+    return fetch_tape(PARAMS, path=path), path, session
+
+
+# --------------------------------------------------------------------------
+# The seam itself: does lseg_session() actually call the guard?
+# --------------------------------------------------------------------------
+class _FakeLsegModule:
+    """Shaped like the `lseg.data` module the acquisition modules import locally."""
+
+    def __init__(self, state):
+        self.session = self
+        self._state = state
+        self.opened = self.closed = 0
+
+    def open_session(self):
+        self.opened += 1
+
+    def close_session(self):
+        self.closed += 1
+
+    def get_default(self):
+        return self
+
+    @property
+    def open_state(self):
+        return self._state
+
+
+def _install_fake_lseg(monkeypatch, state):
+    module = _FakeLsegModule(state)
+    monkeypatch.setitem(sys.modules, "lseg", type(sys)("lseg"))
+    monkeypatch.setitem(sys.modules, "lseg.data", module)
+    return module
+
+
+def test_the_context_manager_refuses_a_closed_session_and_still_closes_it(monkeypatch):
+    """The guard is wired in, not merely written.
+
+    Calling `_require_open_session` directly proves the helper works and proves nothing
+    about whether anything calls it — deleting the call site left the whole suite green
+    until T-81 said so. This drives the real context manager with a fake `lseg.data`.
+    """
+    module = _install_fake_lseg(monkeypatch, "OpenState.Closed")
+    with pytest.raises(RuntimeError, match="signed in"):
+        with tape_mod.lseg_session():
+            pytest.fail("the session should never have been yielded")
+    assert module.opened == 1
+    assert module.closed == 1, "a refused session was left open"
+
+
+def test_the_context_manager_yields_an_open_session(monkeypatch):
+    module = _install_fake_lseg(monkeypatch, "OpenState.Opened")
+    with tape_mod.lseg_session() as ld:
+        assert ld is module
+    assert module.opened == module.closed == 1

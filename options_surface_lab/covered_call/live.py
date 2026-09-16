@@ -34,6 +34,7 @@ import pandas as pd
 
 from ..option_surface_utils import build_option_ric, occ_symbol
 from .rules import (
+    CLOSING_BAR_HOUR_ET,
     SKIP_NO_QUOTE,
     SKIP_NO_STOCK_PRINT,
     SKIP_NO_STRIKE,
@@ -116,8 +117,10 @@ def lseg_session():
     import lseg.data as ld
 
     ld.open_session()
-    _require_open_session(ld)
     try:
+        # Inside the try, so a refused session is still closed: open_session() can leave
+        # a half-open connection behind even when the handshake failed (T-81).
+        _require_open_session(ld)
         yield ld
     finally:
         ld.close_session()
@@ -140,7 +143,7 @@ def _require_open_session(ld) -> None:
             "answering /api/status while the desktop never completes the app-key "
             "handshake — so 'Workspace is running' is not the check. Confirm Workspace "
             "is **signed in** and loading data, restart it if the handshake still hangs, "
-            "then re-run. Nothing was requested and nothing was written (RUNBOOK §3)."
+            "then re-run. Nothing was requested and nothing was written (RUNBOOK §9)."
         )
 
 
@@ -179,16 +182,27 @@ def capture(
     params: Params | None = None,
     on: dt.date | None = None,
     band: int = STRIKE_BAND,
+    bar_kind: str = "entry",
 ) -> dict:
-    """Read the entry bar and the near-the-money call chain for ``expiry``.
+    """Read one bar of one session, plus the near-the-money call chain for ``expiry``.
 
-    ``on`` is the session whose entry bar is read; it defaults to ``expiry``'s
-    Monday. Contracts are requested in the **live** RIC form (no caret) because
-    the contract has not expired yet — T-62 proved the shape and proved that a
-    recently expired one answers only to the live form for some days afterwards.
+    ``on`` is the session to read; it defaults to ``expiry``'s Monday. Contracts are
+    requested in the **live** RIC form (no caret) because the contract has not expired
+    yet — T-62 proved the shape and proved that a recently expired one answers only to
+    the live form for some days afterwards.
+
+    ``bar_kind`` picks which bar: ``"entry"`` follows SD-4, ``"closing"`` is always the
+    15:00 ET bar because settlement resolves on the session's close whatever SD-4 chose
+    (SPEC §7). Under the current decision (``entry_bar="last"``) the two are the same
+    bar, which is why this went unnoticed until T-81's review: with ``entry_bar="first"``
+    — the switch PRD OQ-13 explicitly leaves open — settlement would have read the
+    **09:00** bar and resolved the week against the wrong print.
     """
     params = params or Params()
     week_monday = expiry - dt.timedelta(days=4)
+    if bar_kind not in ("entry", "closing"):
+        raise ValueError(f"bar_kind must be 'entry' or 'closing', got {bar_kind!r}")
+    pick_bar = entry_bar_ts if bar_kind == "entry" else closing_bar_ts
 
     snapshot = {
         "captured_at": dt.datetime.now().isoformat(timespec="seconds"),
@@ -196,6 +210,7 @@ def capture(
         "underlying": {"ric": params.underlying}, "chain": [],
         "diagnostics": {"stock_error": None, "option_error": None, "requested": [],
                         "bars_in_session": [], "ric_form": "live",
+                        "bar_kind": bar_kind,
                         "session_source": "given"
                         if on else "UNRESOLVED — no bars on the tape yet"},
     }
@@ -220,7 +235,7 @@ def capture(
             snapshot["session"] = str(on)
             snapshot["diagnostics"]["session_source"] = "first session on the tape (DR-7)"
 
-        bar = entry_bar_ts(stock.index, on, params)
+        bar = pick_bar(stock.index, on, params)
         snapshot["diagnostics"]["bars_in_session"] = [
             format_bar_time(t) for t in stock.index if t.date() == on
         ]
@@ -339,6 +354,21 @@ def plan_settlement(
     if not call or state["position"]["short_calls"] == 0:
         return [], None
 
+    # The contract the book is short is the contract that must be resolved. Nothing else
+    # in this module ties the capture to it: `--expiry` defaults to `coming_friday()`,
+    # which from the Saturday onward is the NEXT Friday, and every guard downstream keys
+    # on the *session* — so a settle run that slipped past Friday would resolve the
+    # 18-Sep call against the 25-Sep close, book an ASSIGN dated a week after the
+    # contract expired, and pass every check (T-81's review reproduced it on a copy of
+    # the real book). It raises rather than logging a skip: a skip would be a false fact
+    # about the market, and I-10 would then refuse the correct re-run.
+    if call.get("expiry") and snapshot.get("expiry") != call["expiry"]:
+        raise ValueError(
+            f"this capture is for {snapshot.get('expiry')}, but the open call expires "
+            f"{call['expiry']}. Settle the contract the book actually holds: "
+            f"`live settle --expiry {call['expiry']}`. Nothing was written."
+        )
+
     bar = snapshot.get("entry_bar")
     settle = (snapshot.get("underlying") or {}).get("trdprc_1")
     if bar is None or settle is None:
@@ -399,11 +429,47 @@ def already_booked(state: dict, session: str, sides: tuple[str, ...]) -> bool:
     )
 
 
+def unreadable_reason(snapshot: dict, params: Params) -> str | None:
+    """Why this capture cannot be read as a fact about the market — or ``None``.
+
+    The difference that matters on a Friday evening: *the market did not print* is a
+    fact the book must record, while *we could not ask* is an outage that must leave
+    the book untouched. Both arrive here as an empty frame.
+
+    Without this, an LSEG timeout wrote ``SKIP_NO_STOCK_PRINT`` into the live book and
+    exited 0 — and I-10's "a week appears once" then refused the re-run that would have
+    settled it correctly, leaving the call open forever (I-7) and recoverable only by
+    hand-editing committed data. T-81's review reproduced exactly that against a copy
+    of the real book. ``capture()`` had the evidence in ``diagnostics`` all along and
+    nothing read it.
+    """
+    diagnostics = snapshot.get("diagnostics") or {}
+    if diagnostics.get("stock_error"):
+        return f"the stock request failed: {diagnostics['stock_error']}"
+    bars = diagnostics.get("bars_in_session") or []
+    if not bars:
+        return (f"no bars on {snapshot.get('session')} at all — the session has not "
+                "reached the tape yet, or the market was shut")
+    hour = params.entry_bar_hour_et if diagnostics.get("bar_kind") != "closing" \
+        else CLOSING_BAR_HOUR_ET
+    if max(b[-5:] for b in bars) < f"{hour:02d}:00":
+        return (f"the tape stops at {max(b[-5:] for b in bars)} — the {hour:02d}:00 ET "
+                "bar has not closed yet. Wait until after ~16:05 ET and re-run")
+    return None
+
+
 def _run(action: str, expiry: dt.date, on: dt.date | None, path: Path, params: Params) -> int:
     state = load_state(params, path)
     sides = ("BUY", "SELL") if action == "enter" else ("EXPIRE", "ASSIGN")
 
-    snapshot = capture(expiry, params, on=on)
+    snapshot = capture(expiry, params, on=on,
+                       bar_kind="closing" if action == "settle" else "entry")
+    unreadable = unreadable_reason(snapshot, params)
+    if action != "capture" and unreadable is not None:
+        print(f"NOT WRITTEN: {unreadable}.")
+        print("That is an acquisition failure, not a fact about the market — the book is "
+              "untouched and the week is still open. Fix it and re-run (RUNBOOK §9).")
+        return 2
     state["captures"].append(snapshot)
     session = snapshot["session"]          # capture may have resolved it off the tape (DR-7)
     if action != "capture" and already_booked(state, session, sides):
@@ -446,20 +512,36 @@ def _run(action: str, expiry: dt.date, on: dt.date | None, path: Path, params: P
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="The covered call, run forward (FR-21).")
     parser.add_argument("action", choices=["capture", "enter", "settle"])
-    parser.add_argument("--expiry", default=None,
-                        help="the contract's expiry, YYYY-MM-DD; defaults to this week's Friday")
+    parser.add_argument(
+        "--expiry", default=None,
+        help="the contract's expiry, YYYY-MM-DD. Defaults to this week's Friday for an "
+             "entry, and for a settlement to the expiry the book is already short")
     parser.add_argument("--on", default=None,
                         help="session to read; defaults to the Monday before the expiry")
     parser.add_argument("--state", default=str(STATE_PATH))
     args = parser.parse_args(argv)
-    expiry = dt.date.fromisoformat(args.expiry) if args.expiry else coming_friday()
+    params = Params()
+    state_path = Path(args.state)
+    if args.expiry:
+        expiry = dt.date.fromisoformat(args.expiry)
+    elif args.action == "settle":
+        # Settle the contract the book is short, not "this week's Friday": from the
+        # Saturday onward those are different dates (T-81). Falls back to the calendar
+        # only when nothing is open, where the run has nothing to resolve anyway.
+        open_call = load_state(params, state_path)["position"].get("call") or {}
+        expiry = (dt.date.fromisoformat(open_call["expiry"]) if open_call.get("expiry")
+                  else coming_friday())
+    else:
+        expiry = coming_friday()
     on = dt.date.fromisoformat(args.on) if args.on else None
     if args.action == "settle" and args.on is None:
         on = expiry          # settlement reads the expiry session's own closing bar
     session = str(on) if on else "the week's first session, read off the tape (DR-7)"
+    bar = ("15:00 ET (the closing bar, SPEC §7)" if args.action == "settle"
+           else params_hour(params))
     print(f"{args.action}: expiry {expiry}, session {session}, "
-          f"entry bar = {params_hour(Params())}")
-    return _run(args.action, expiry, on, Path(args.state), Params())
+          f"bar = {bar}")
+    return _run(args.action, expiry, on, state_path, params)
 
 
 def params_hour(params: Params) -> str:

@@ -187,7 +187,7 @@ entirely. AD-4.)*
 *Does not belong here:* figure construction (→ plot), colours/fonts/measurements (→ theme).
 
 **`options_surface_lab/covered_call/`** — *AD-12, **accepted 2026-09-14** (T-74); `rules.py`
-and `live.py` landed 2026-09-13, `writeup.py` and `tape.py` 2026-09-14, the rest still to come.* Assignment 2's subpackage: `tape.py`, `rules.py`, `engine.py`, `plots.py`,
+and `live.py` landed 2026-09-13, `writeup.py` and `tape.py` 2026-09-14, **`engine.py` 2026-09-15 (T-57)**; `plots.py` and `page.py` still to come.* Assignment 2's subpackage: `tape.py`, `rules.py`, `engine.py`, `plots.py`,
 `page.py`, `writeup.py`, layered as §2 prescribes. `rules.py` is the transform core's pure
 half — `Params` (the SD-x decisions as a frozen record), `select_strike`, `is_itm`, `valid_mid`,
 the blotter-row constructors, and the calendar helpers that own SPEC §3.2 item 4's **closing
@@ -201,17 +201,21 @@ way — `fetch_tape()` holds the only network and is human-invoked once (RUNBOOK
 `load_tape()` reaches it under no circumstances and returns the frozen `Tape(bars, meta)`
 record that `engine` and `page` are handed. The UTC→exchange-time conversion the two
 acquisition modules share lives in `rules.to_exchange_time`, so the OQ-11 convention cannot be
-applied one way in the backtest and another in the live leg. Specified in [SPEC-COVERED-CALL.md](SPEC-COVERED-CALL.md).
+applied one way in the backtest and another in the live leg. **AD-7's fallback for A2 is
+`tape.synthesize_tape` (T-63)** — the seeded tape that backs both the fixtures and a
+tape-less machine, with an explicit `end_date` so it can never report on the calendar, and
+one named pathology per skip reason the engine can log. **`engine.py` landed 2026-09-15** (T-57): `run_backtest(tape, params) -> Book` is the whole of FR-15/FR-16 and is pure — it takes a `Tape` as a *parameter*, so its only import of the acquisition half is a `TYPE_CHECKING` one, and a test checks that structurally rather than by grep. Every number it returns beyond the blotter — the skip log, the per-bar ledger, the weekly table — is a **projection** of the blotter over the tape, never a second place a number is decided (SPEC §1). Specified in [SPEC-COVERED-CALL.md](SPEC-COVERED-CALL.md).
 *Does not belong here:* the RIC/OCC grammar (→ `option_surface_utils`), any token (→ `theme`).
 
 **`tests/`** — mirrors the transform core first, then everything a defect could reach the
 published page through. Uses the seeded synthetic panel as its fixture (AD-7), exposed as the
 session-scoped `synthetic_payload` / `synthetic_wide` fixtures in `tests/conftest.py`.
-**352 green, no xfail (2026-09-14):** `tests/covered_call/` mirrors A2's subpackage (AD-12) —
+**496 green, no xfail (2026-09-15):** `tests/covered_call/` mirrors A2's subpackage (AD-12) —
 `test_rules.py` carries I-9 as a seeded property plus the closing-bar group that pins the T-62
 trap, `test_live.py` covers FR-21's forward run and `test_tape.py` the whole pull path, both by
 faking the single LSEG seam so the code that books trades and writes the tape is exercised with
-no credentials. 35 of 35 injected defects caught across the three; `test_ric_parsing` / `test_ric_building` /
+no credentials, and `test_synthetic_tape.py` holds AD-7's fixture to the same schema a pulled
+tape has plus one named pathology per skip reason (T-63). 71 of 73 injected defects caught across the three (T-81's adversarial review added the last 21 and names the two it could not reach); `test_ric_parsing` / `test_ric_building` /
 `test_transforms` / `test_acquisition` cover the FR-3 chain and the pull; `test_iv` covers
 FR-11 — the Black-Scholes round trip and, at equal weight, every path on which the inversion
 must refuse; `test_app_figures` pins the app→plot call sites, the published hero's controls,
