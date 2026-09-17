@@ -79,24 +79,10 @@ def test_the_marker_is_emitted_when_the_panel_is_synthetic():
     assert warning_shown, "synthesize_demo_payload must flag itself as synthetic"
 
 
-def test_the_committed_page_is_self_contained():
-    """Pages serves this file alone — anything it reaches for beyond the CDN would 404."""
-    page = Path(__file__).resolve().parents[1] / "options_surface_preview.html"
-    if not page.exists():
-        pytest.skip("preview not built in this working tree")
-    html = page.read_text(encoding="utf-8", errors="ignore")
-
-    assert "localhost" not in html, "a backend URL leaked into the published page"
-    assert "_event" not in html, "a Reflex websocket endpoint leaked into the published page"
-    assert "file://" not in html
-
-    # Plotly and Google Fonts are the only hosts the page may reach. Both are CDNs that
-    # degrade gracefully — Plotly is required, and every theme font stack falls back to a
-    # system face. Anything else would be a backend, a tracker, or a broken asset path.
-    allowed = ("cdn.plot.ly", "plotly.com", "fonts.googleapis.com", "fonts.gstatic.com")
-    external = set(re.findall(r"https?://[^\s\"'<>]+", html))
-    non_cdn = {u for u in external if not any(host in u for host in allowed)}
-    assert not non_cdn, f"page depends on an unexpected host: {sorted(non_cdn)[:3]}"
+# Self-containment and orphan CSS classes are asserted of EVERY page in `test_pages.py`
+# (T-79), parametrized off `page_shell.LOCAL_PATHS`. They used to live here, when there was
+# one page; restating them per builder is how the second page would end up with the weaker
+# copy. What stays in this module is what is true of 1.1's page specifically.
 
 
 def test_the_committed_page_was_not_built_from_synthetic_data():
@@ -131,40 +117,6 @@ def test_the_real_panel_actually_carries_marks():
         "headline number at zero and the whole comparison missing"
     )
     assert stats["n_both"] > 0, "no contract-day has both a mark and a trade"
-
-
-def test_every_class_the_page_uses_is_defined_in_its_own_stylesheet():
-    """The page carries its whole stylesheet, so an orphan class is a silent layout bug.
-
-    CSS fails open: an undefined class is not an error, the element simply keeps its default.
-    That is how the deployed page shipped with the 3D surface one column wide while the local
-    Reflex app — which styles its panels inline — looked perfect. Anything the builder emits
-    must resolve against the `<style>` block travelling with it.
-    """
-    page = Path(__file__).resolve().parents[1] / "options_surface_preview.html"
-    if not page.exists():
-        pytest.skip("preview not built in this working tree")
-    html = page.read_text(encoding="utf-8", errors="ignore")
-
-    style = re.search(r"<style>(.*?)</style>", html, re.S)
-    assert style, "the page must carry its own stylesheet"
-
-    # Only base-level rules count. The responsive block re-lists every width class to
-    # collapse it on narrow screens, so counting selectors anywhere in the sheet would
-    # report a class as "defined" on the strength of its mobile override alone — which is
-    # exactly the hole that let the missing `.osl-w6` reach production.
-    css = re.sub(r"@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}", "", style.group(1), flags=re.S)
-    defined = set(re.findall(r"\.(osl-[a-z0-9-]+)", css))
-
-    used = set()
-    for attr in re.findall(r"class=[\"']([^\"']*)[\"']", html):
-        used.update(c for c in attr.split() if c.startswith("osl-"))
-
-    orphans = sorted(used - defined)
-    assert not orphans, (
-        f"these classes are used but never defined, so their styling is silently dropped: "
-        f"{orphans}"
-    )
 
 
 def test_the_published_page_wires_the_slider_to_every_panel():

@@ -1,31 +1,47 @@
-"""Build the published page: one self-contained HTML file, no Reflex, no backend.
+"""Build Assignment 1.1's published page: one self-contained HTML file, no Reflex, no backend.
 
-This is the deliverable (AD-4). CI runs it, copies the output to _site/index.html and
-publishes that to GitHub Pages.
+This is 1.1's deliverable (AD-4). CI runs it with `--site _site`, which writes
+`_site/index.html` — the site root, so the URL already submitted on Canvas keeps working —
+and publishes that to GitHub Pages. Run with no arguments it writes the root artifact
+`options_surface_preview.html` instead, which is what the PO opens locally and what
+`tests/test_build_preview.py` reads.
 
 Layout is the terminal arrangement from DESIGN-BRIEF §5: a command bar, a strip of readouts,
 then numbered panels on a 10-column hairline grid — the 3D surface at 6 columns with the
 underlying beside it at 4, two 5+5 rows beneath, and the derived IV surface full width at the
-foot. All chrome comes from `theme.PAGE_CSS`; this module contains no colour, font or
+foot. The chrome itself is `page_shell.PageShell`, shared with the covered-call builder
+(T-79); all styling comes from `theme.PAGE_CSS`, and this module contains no colour, font or
 measurement of its own (FR-8 / AD-6).
 """
 
+import argparse
 import json
 from pathlib import Path
 
 # Grepped for by the CI publish guard — see .github/workflows/pages.yml.
 SYNTHETIC_MARKER = "synthetic panel"
 
+#: This page's key in `page_shell.SITE_PATHS` / `LOCAL_PATHS` — where it publishes, and how
+#: the covered-call page links back to it.
+PAGE = "index"
+
 import pandas as pd
 
 from options_surface_lab import commentary, theme as T
+from options_surface_lab.page_shell import (
+    CAP_ID_PREFIX,
+    FIG_ID_PREFIX,
+    LOCAL_PATHS,
+    SITE_PATHS,
+    PageShell,
+    nav_for,
+)
 from options_surface_lab.option_surface_plot import (
     X_AXIS_TITLE,
     X_MODES,
     X_MODE_LABEL,
     as_panel_figure,
     asof_frames,
-    figure_caption,
     candlestick_figure,
     coverage_heatmap,
     IV_COUNT_LINE,
@@ -45,7 +61,14 @@ from options_surface_lab.option_surface_utils import (
 )
 
 
-def main() -> Path:
+def main(site: Path | str | None = None) -> Path:
+    """Render the page and write it. `site` is the directory to publish into, or None.
+
+    Both spellings come out of one render — the only difference is where the file lands and
+    how its nav links are spelled — so the artifact the PO inspects locally and the one CI
+    publishes cannot diverge (RUNBOOK §5's posture: check the built page, not the dev app).
+    """
+    shell = PageShell("Options Surface Lab")
     payload = load_payload("option_pipeline_data.pkl")
     tidy = flatten_lseg_options(payload["options"])
     tidy = attach_underlying(tidy, payload["stock"])
@@ -84,7 +107,8 @@ def main() -> Path:
     # belongs next to the price rather than at the foot of the page.
     fig_iv = as_panel_figure(iv_smile_figure(wide, asof, ticker=ticker), margin=T.SMILE_MARGIN)
 
-    out = Path(__file__).resolve().parent / "options_surface_preview.html"
+    root = Path(__file__).resolve().parent
+    out = (Path(site) / SITE_PATHS[PAGE]) if site else (root / LOCAL_PATHS[PAGE])
 
     asof_txt = str(pd.Timestamp(asof).date()) if asof is not None else "n/a"
     mark_label = MARK_FIELD_DEFAULT
@@ -101,36 +125,31 @@ def main() -> Path:
     # because a synthetic page renders plausibly and invents marks that do not exist.
     # tests/test_build_preview.py pins the marker to the workflow so the two cannot drift.
     warning = (
-        f'<div class="osl-warn">Built from a {SYNTHETIC_MARKER}, not the LSEG pull — '
-        f"this must not be published.</div>"
+        shell.warning(
+            f"Built from a {SYNTHETIC_MARKER}, not the LSEG pull — "
+            "this must not be published."
+        )
         if payload.get("synthetic")
         else ""
     )
 
-    bar = f"""
-    <div class="osl-bar">
-      <div class="osl-wordmark">Options Surface Lab</div>
-      <div class="osl-ident">
-        <b>{ticker}</b> listed options &nbsp;·&nbsp; mark = <b>{mark_label}</b>
-        &nbsp;·&nbsp; as-of <b id="osl-asof">{asof_txt}</b>
-        &nbsp;·&nbsp; {n_series} series in panel
-      </div>
-    </div>
-    """
+    bar = shell.command_bar(
+        f"<b>{ticker}</b> listed options &nbsp;·&nbsp; mark = <b>{mark_label}</b>"
+        f'&nbsp;·&nbsp; as-of <b id="osl-asof">{asof_txt}</b>'
+        f"&nbsp;·&nbsp; {n_series} series in panel",
+        nav=nav_for(PAGE, site=bool(site)),
+    )
 
     # Labels carry no date any more — the as-of lives in the command bar and moves with the
     # slider, so a label reading "Series on 2026-07-10" would go stale the moment it moved.
-    readouts = "".join(
-        _readout(i, label, value)
-        for i, (label, value) in enumerate(
-            (
-                ("Series listed", stats["n_quotes"]),
-                ("Mark, no print", f"{stats['n_mark_only']} ({stats['pct_mark_no_trade']:.0f}%)"),
-                ("Both mark &amp; print", stats["n_both"]),
-                ("Median |mark − trade|", med_txt),
-                ("Median relative gap", rel_txt),
-                ("Median bid-ask spread", spread_txt),
-            )
+    readouts = shell.readouts(
+        (
+            ("Series listed", stats["n_quotes"]),
+            ("Mark, no print", f"{stats['n_mark_only']} ({stats['pct_mark_no_trade']:.0f}%)"),
+            ("Both mark &amp; print", stats["n_both"]),
+            ("Median |mark − trade|", med_txt),
+            ("Median relative gap", rel_txt),
+            ("Median bid-ask spread", spread_txt),
         )
     )
 
@@ -145,113 +164,50 @@ def main() -> Path:
         # The note is where the hero's two native controls are advertised — the axis toggle
         # is a small button pair in the corner of the plot and nothing else says what the
         # 1.00 on a K/S axis means (FR-10).
-        _panel(1, "Price surface · 3D",
-               "drag the slider — the whole page follows &nbsp;·&nbsp; "
-               "K / S rebases to spot, 1.00 = at the money",
-               fig_surface, width=T.W_HERO, hero=True),
-        _panel(2, f"{ticker} underlying", "spot context · 12 weeks · close = TRDPRC_1",
-               fig_cs, width=T.W_SIDECAR),
+        shell.figure_panel(
+            1, "Price surface · 3D",
+            "drag the slider — the whole page follows &nbsp;·&nbsp; "
+            "K / S rebases to spot, 1.00 = at the money",
+            fig_surface, width=T.W_HERO, hero=True),
+        shell.figure_panel(
+            2, f"{ticker} underlying", "spot context · 12 weeks · close = TRDPRC_1",
+            fig_cs, width=T.W_SIDECAR),
         # FR-7. Directly under the hero row, because the brief asks for three sentences
         # "under the plot" and the plot is panel [1]. Full width and unnumbered: the indices
         # name FIGURES, and they are also the listener's addressing scheme (`osl-fig-{n}`),
         # so renumbering five panels to slot prose into the sequence would churn the page's
         # only wiring for a decoration.
-        _commentary_panel(),
+        _commentary_panel(shell),
         # Header kept to one line: the name and note wrapped on the first build, which made
         # this panel 17px taller than the one beside it — visible on a hairline grid, since
         # panels deliberately do not stretch to their row. The rate lives in the figure's
         # own caption, which is what has to stand alone on the static page anyway.
-        _panel(3, "Implied vol · derived",
-               "one curve per expiry &nbsp;·&nbsp; a break = the solver refusing",
-               fig_iv),
-        _panel(4, "Mark vs print", f"{mark_label} against TRDPRC_1", fig_cmp),
-        _panel(5, "Spread · can you believe the mark?", "bid-ask as % of the mark",
-               fig_spread, width=T.W_FULL),
-        _panel(6, "Mark occupancy", "lit = a mark exists", fig_hm_s),
-        _panel(7, "Print occupancy", "lit = someone traded", fig_hm_t),
+        shell.figure_panel(
+            3, "Implied vol · derived",
+            "one curve per expiry &nbsp;·&nbsp; a break = the solver refusing",
+            fig_iv),
+        shell.figure_panel(4, "Mark vs print", f"{mark_label} against TRDPRC_1", fig_cmp),
+        shell.figure_panel(
+            5, "Spread · can you believe the mark?", "bid-ask as % of the mark",
+            fig_spread, width=T.W_FULL),
+        shell.figure_panel(6, "Mark occupancy", "lit = a mark exists", fig_hm_s),
+        shell.figure_panel(7, "Print occupancy", "lit = someone traded", fig_hm_t),
     ]
 
-    parts = [
-        "<!doctype html><html lang='en'><head><meta charset='utf-8'>",
-        "<meta name='viewport' content='width=device-width, initial-scale=1'>",
-        "<title>Options Surface Lab</title>",
-        T.GOOGLE_FONTS_LINK,
-        f"<style>{T.PAGE_CSS}</style></head><body>",
-        bar,
-        f'<div class="osl-readouts">{readouts}</div>',
-        warning,
-        '<div class="osl-grid">',
-        *panels,
-        "</div>",
-        _asof_script(asof_frames(wide, cp="C"), asof_txt),
-        "</body></html>",
-    ]
-    out.write_text("\n".join(parts), encoding="utf-8")
+    html = shell.document(
+        bar=bar,
+        readouts=readouts,
+        warning=warning,
+        panels=panels,
+        scripts=[_asof_script(asof_frames(wide, cp="C"), asof_txt)],
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding="utf-8")
     print(f"Wrote {out}  asof={asof}  quotes={stats['n_quotes']}  synthetic={payload.get('synthetic')}")
     return out
 
 
-def _readout(index: int, label: str, value) -> str:
-    """One cell of the readout strip. Styling is in theme.PAGE_CSS.
-
-    `data-osl-readout` is the slider's handle on the value: the listener looks the cells up by
-    index and writes the figures for the selected date into them.
-    """
-    return (
-        '<div class="osl-readout">'
-        f'<div class="osl-readout-label">{label}</div>'
-        f'<div class="osl-readout-value" data-osl-readout="{index}">{value}</div>'
-        "</div>"
-    )
-
-
-def _panel(n: int, name: str, note: str, fig, width: int = None, hero: bool = False) -> str:
-    """A numbered panel: a header rule, the figure's caption, then the figure.
-
-    `width` is in grid columns out of `theme.GRID_COLUMNS` (default: half the row); `hero`
-    marks the one panel that goes full width in the two-column band (theme.BREAK_TWO_COL).
-
-    **The caption is HTML here, not an annotation inside the plot** (T-47). It therefore
-    wraps, and can neither collide with the figure's own chrome nor be clipped by its
-    margins — two failure modes this project shipped four times between them. The text comes
-    from the figure itself (`figure_caption`), so the published page and the Reflex app
-    cannot disagree about what a panel says.
-
-    The plot div takes a stable id (`osl-fig-{n}`) rather than Plotly's random uuid, because
-    the as-of listener addresses the panels by id — a uuid regenerated on every build would
-    make the wiring unreproducible.
-
-    Plotly.js is requested from the CDN by the first panel only. Asking six times emitted the
-    same `<script src>` six times — harmless in a browser, but it made the page's single
-    external dependency six times harder to see when auditing it against NFR-4.
-    """
-    global _plotly_included
-    body = fig.to_html(
-        full_html=False,
-        include_plotlyjs=("cdn" if not _plotly_included else False),
-        div_id=f"{FIG_ID_PREFIX}{n}",
-    )
-    _plotly_included = True
-    lines = "".join(
-        f'<span class="osl-caption-line" data-osl-cap-line="{i}">{line}</span>'
-        for i, line in enumerate(figure_caption(fig))
-    )
-    caption = f'<div class="osl-caption" id="{CAP_ID_PREFIX}{n}">{lines}</div>' if lines else ""
-    fig_class = "osl-figure osl-figure-hero" if hero else "osl-figure"
-    return (
-        f'<div class="osl-panel osl-w{width or T.W_HALF}{" osl-hero" if hero else ""}">'
-        '<div class="osl-panel-head">'
-        f'<div><span class="osl-panel-n">[{n}]</span>'
-        f'<span class="osl-panel-name">{name}</span></div>'
-        f'<div class="osl-panel-note">{note}</div>'
-        "</div>"
-        f"{caption}"
-        f'<div class="osl-panel-body"><div class="{fig_class}">{body}</div></div>'
-        "</div>"
-    )
-
-
-def _commentary_panel() -> str:
+def _commentary_panel(shell: PageShell) -> str:
     """FR-7's three sentences, in a panel of the same chrome as every other (T-12).
 
     The text is `options_surface_lab/commentary.py` and nothing else — the PO writes it there,
@@ -268,14 +224,12 @@ def _commentary_panel() -> str:
         "</div>"
         for question, text, written in commentary.answers()
     )
-    return (
-        f'<div class="osl-panel osl-w{T.W_FULL}">'
-        '<div class="osl-panel-head">'
-        f'<div><span class="osl-panel-name">{commentary.PANEL_NAME}</span></div>'
-        f'<div class="osl-panel-note">{commentary.PANEL_NOTE}</div>'
-        "</div>"
-        f'<div class="osl-commentary">{blocks}</div>'
-        "</div>"
+    return shell.panel(
+        commentary.PANEL_NAME,
+        commentary.PANEL_NOTE,
+        blocks,
+        width=T.W_FULL,
+        body_class="osl-commentary",
     )
 
 
@@ -284,10 +238,10 @@ def _unwritten(text: str) -> str:
     return f'<span class="osl-commentary-todo">{text}</span>'
 
 
-FIG_ID_PREFIX = "osl-fig-"
-# The caption element the as-of listener rewrites, per panel. Captions are HTML now, so a
-# Plotly slider step cannot reach them — the listener applies them like the readouts (T-47).
-CAP_ID_PREFIX = "osl-cap-"
+# `FIG_ID_PREFIX` / `CAP_ID_PREFIX` are the shell's (page_shell.py) — the panels and the
+# listener have to agree on one id scheme, and the panels are emitted there now. The caption
+# element the listener rewrites is HTML, so a Plotly slider step cannot reach it: the
+# listener applies captions the way it applies the readouts (T-47).
 
 # Which panel each frame key updates. Kept beside the script that reads it so a renamed key
 # and a stale selector cannot drift apart.
@@ -450,9 +404,19 @@ def _asof_script(frames: dict, default_label: str) -> str:
 </script>"""
 
 
-# Module-level so the library is emitted exactly once per page. Kept beside its only writer.
-_plotly_included = False
+def _cli() -> Path:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--site",
+        metavar="DIR",
+        default=None,
+        help=(
+            f"publish into DIR/{SITE_PATHS[PAGE]} instead of writing the root artifact "
+            f"{LOCAL_PATHS[PAGE]}. CI passes `--site _site`."
+        ),
+    )
+    return main(parser.parse_args().site)
 
 
 if __name__ == "__main__":
-    main()
+    _cli()

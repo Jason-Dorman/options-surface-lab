@@ -70,23 +70,43 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build index.html from the committed pickle
+      # Two pages now (T-79): Assignment 1.1 at the site root, so the URL already submitted
+      # on Canvas keeps working, and Assignment 2 at /covered-call/. Each builder writes
+      # straight into _site — the route it publishes to is `page_shell.SITE_PATHS`, and
+      # tests/ pins those paths to this file so the build step and the guards below cannot
+      # drift from where the pages actually land.
+      - name: Build both pages from the committed data
         run: |
           set -euo pipefail
-          python build_preview.py
           mkdir -p _site
-          cp options_surface_preview.html _site/index.html
+          python build_preview.py --site _site
+          python build_covered_call.py --site _site
           # Pages runs Jekyll by default and strips paths beginning with "_".
           touch _site/.nojekyll
 
-      # The build must fail loudly rather than publish a page built on the fallback panel.
-      # A synthetic deploy would look plausible and be wrong — it invents settles that do
-      # not exist in the real data (notebook 01 §10b).
-      - name: Refuse to publish synthetic data or an empty page
+      # The build must fail loudly rather than publish a page built on generated data. A
+      # synthetic deploy would look plausible and be wrong — 1.1's fallback invents settles
+      # that do not exist in the real data (notebook 01 §10b), and a synthetic covered-call
+      # tape is ten plausible weeks of a market that never happened.
+      #
+      # The guards are PER PAGE: each page gets the checks its own content supports, and a
+      # marker is never shared between them, or one page's fabrication would pass the
+      # other's check.
+      - name: Refuse to publish an empty or fabricated page
         run: |
           set -euo pipefail
+
+          # ---- every page ----
+          # Non-empty, and reachable from the rest of the site. A page nothing links to is
+          # published and invisible, which no render can show.
+          for p in _site/index.html _site/covered-call/index.html; do
+            test -s "$p" || { echo "::error::$p is empty or was never written"; exit 1; }
+            grep -q 'class="osl-nav"' "$p" || {
+              echo "::error::$p carries no link to the rest of the site"; exit 1; }
+          done
+
+          # ---- Assignment 1.1 — the site root ----
           page=_site/index.html
-          test -s "$page" || { echo "::error::index.html is empty"; exit 1; }
           if grep -q "synthetic panel" "$page"; then
             echo "::error::page was built from the synthetic fallback — is option_pipeline_data.pkl committed?"
             exit 1
@@ -121,6 +141,22 @@ jobs:
           # figure count above, so it gets its own check.
           grep -q 'id="osl-frames"' "$page" || { echo "::error::per-date frames missing — the slider would move the hero only"; exit 1; }
           grep -q "plotly_sliderchange" "$page" || { echo "::error::nothing listens to the as-of slider"; exit 1; }
+
+          # ---- Assignment 2 — /covered-call/ ----
+          page=_site/covered-call/index.html
+          if grep -q "synthetic tape" "$page"; then
+            echo "::error::the covered-call page was built from the synthetic tape — is covered_call_tape.parquet committed?"
+            exit 1
+          fi
+          # The readouts are the whole book in six numbers. An empty strip means
+          # run_backtest returned nothing and the page rendered its frame around it.
+          grep -q "data-osl-readout" "$page" || {
+            echo "::error::the covered-call page carries no readouts — the book is empty"; exit 1; }
+          # SPEC §11's remaining per-page guards — a BUY and a settled week in the blotter,
+          # the R-squared line, and FR-19's `[unwritten]` refusal — land with the panels
+          # they guard (T-59 / T-70). A guard written before its subject cannot fail for
+          # the right reason, and one written for a subject that never arrives fails the
+          # deploy for the wrong one.
 
       - uses: actions/upload-pages-artifact@v3
         with:

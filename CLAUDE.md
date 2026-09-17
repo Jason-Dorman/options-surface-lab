@@ -73,14 +73,19 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 (verified 2026-08-29); the bare `pytest` command works once the env is activated.
 
 ```bash
-python build_preview.py    # THE DELIVERABLE — builds the static index.html that Pages serves
-pytest                     # 547 tests in tests/ — all green, no xfail
-reflex run                 # local dev server (FR-1); not what gets published
+python build_preview.py       # 1.1's page — the static index.html Pages serves at /
+python build_covered_call.py  # A2's page — Pages serves it at /covered-call/
+pytest                        # 587 tests in tests/ — all green, no xfail
+reflex run                    # local dev server (FR-1); not what gets published
+
+# Both take `--site DIR` (CI passes `--site _site`): the page lands at DIR/<route> with its
+# cross-page links spelled as routes instead of filenames. Same render either way.
 ```
 
-`reflex export` is **not** part of the build any more — see AD-4. The published site is the
-single self-contained page `build_preview.py` writes, rendered from the committed pickle at
-build time by `.github/workflows/pages.yml`.
+`reflex export` is **not** part of the build any more — see AD-4. The published site is one
+self-contained page per route, written by `build_preview.py` and `build_covered_call.py` from
+the committed pickle and the committed tape at build time by `.github/workflows/pages.yml`.
+Both render `options_surface_lab/page_shell.py`'s chrome (T-79).
 
 Current state (2026-09-01): FR-1 package layout landed (`options_surface_lab/` package,
 `rxconfig.py`, entry shim, `__file__`-anchored cache paths — imports verified, preview builds
@@ -323,10 +328,11 @@ refuses a strike, and fails only if the fixture has none anywhere. The fixture i
 is still calendar-dependent — OQ-6's `end_date` parameter is the root fix and needs PO
 sign-off.
 
-**Next up (2026-09-16):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST.** The first live
-entry is **booked** — see T-78 below. ~~T-56~~, ~~T-77~~, ~~T-57~~ and ~~T-58~~ are done — **the tape is
-pulled, the book runs and the fill assumption is measured** — so the critical path is now
-**T-79/T-59** (the page), T-60 (the PO's write-up), then T-71/T-72 to ship. **T-66 (notebook 03
+**Next up (2026-09-17):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST.** The first live
+entry is **booked** — see T-78 below. ~~T-56~~, ~~T-77~~, ~~T-57~~, ~~T-58~~ and ~~T-79~~ are done — **the tape is
+pulled, the book runs, the fill assumption is measured and the page has a route** — so the
+critical path is now **T-68/T-69/T-59** (the panels), T-60 (the PO's write-up), then
+T-71/T-72 to ship. **T-66 (notebook 03
 §1–§4) is still open**: it was meant to be co-built with T-57 and was not; T-58 created the
 notebook and wrote §5 into it, so T-66 is now a matter of filling in the sections above its own.
 The PO chose **QQQ** (SD-1, 2026-09-12) and the **last
@@ -585,6 +591,46 @@ QQQ's root and RIC format are proven, hourly reaches a contract's whole listed l
   only under the *live* form; the 09-04 ones, nine days out, only under the caret. The pull
   must try both and record the winner (SPEC §3.3) — otherwise recently-expired weeks
   silently log as "no quote".
+**T-79 landed 2026-09-17 (FR-18, AD-11's interim) — the site has a second page.**
+`options_surface_lab/page_shell.py` holds the chrome both builders render (`PageShell` —
+command bar, readout strip, panel, document — plus the routes and the cross-page links), and
+`build_covered_call.py` publishes `/covered-call/`, carrying the book's six headline numbers
+read off `run_backtest` over the committed tape. Each builder now takes `--site DIR` and
+writes its own route, so CI copies nothing. **38 new tests, 13 of 13 injected defects caught;
+587 green, no xfail.** Driven in a real Chromium: **0 defects across 2 pages x 14 widths**,
+zero console errors. **There is still no registry and no template engine** — a third
+assignment would mean a third builder, which is exactly what T-51 is for. Five things worth
+carrying:
+
+- **"Emitted plotly.js yet?" could not stay a module global.** CI builds both pages in one
+  job, so a process-wide flag hands the **second** page "already included" from the first and
+  publishes it with no library at all — and CSS and JS both fail open, so it renders as a
+  column of empty panel frames with nothing in the HTML to say why. It is a `PageShell`
+  attribute now, and a test builds two pages in one process to prove it. *Lifting shared code
+  out of a single-consumer module turns its module state into a cross-consumer bug.*
+- **A cross-page link is spelled twice, from one render.** The same page is written into
+  `_site/<route>/index.html` and as a root artifact opened from the filesystem; a shell that
+  hardcoded routes would give the local copy dead links, which nothing but clicking reveals.
+  `nav_for(page, site=)` owns both spellings, and the site one is **relative** — an absolute
+  `/covered-call/` is right on a user site and wrong on a project site served from
+  `/options-surface-lab/`.
+- **The committed tape cannot tell a read-off number from a lucky one.** All ten of its weeks
+  trade, so `entries` and `weeks` are the same integer and the premium sum equals any literal
+  someone types — two mutants survived the headline guard for precisely that reason, and the
+  guard looked airtight. The synthetic tape skips five weeks, which separates them. T-57's
+  rule met again in a new place: *a fixture that never reaches a branch is a branch with no
+  test, however many tests name it.*
+- **One synthetic marker per page** (`synthetic panel` / `synthetic tape`). Shared, one page's
+  fabrication passes the other's check — and 1.1's fallback panel and a synthetic covered-call
+  tape are different fabrications. The routes and every builder invocation are pinned to
+  `pages.yml` by a test, because the guards are greps at hardcoded paths: a builder that stops
+  running leaves its guard reading a file that is not there.
+- **A guard written before its subject cannot fail for the right reason.** SPEC §11's
+  remaining per-page guards — `[unwritten]`, the R² line, a non-empty blotter — are *not* in
+  the workflow yet; they land with the panels they guard (T-59/T-70), and the workflow says so
+  where they will go. Each guard that did land was mutation-checked against the built site
+  before being trusted.
+
 T-58 landed 2026-09-16 (FR-17, **A2-M3**) — **`covered_call/evidence.py`**, plus
 `notebooks/03_covered_call.ipynb` §5 and `Params.ntm_band` (5%) in `rules`, so FR-14 prints
 the sample the R² was measured on. It shipped inside `rules.py` — beside the `valid_mid` it
@@ -649,13 +695,13 @@ tests, 33 of 33 injected defects caught; 547 green, no xfail.** What to carry:
   strike ladder can land on to the last bit). They are **named in the module** rather than left
   to reappear as survivors — T-57's precedent.
 
-AD-10 / AD-11 are approved but **not landed and nothing in the code has moved**; with eight
-days left the session recommends deferring the whole M5 restructure until after the
-submission and building A2 on the current builder (BACKLOG-2 T-79) — PO to confirm. The
-order that fits the calendar is at the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions →
-T-78's entry → T-56 → T-57 → T-58~~ (all landed) → **T-79/T-59** → T-60 → ship, with T-78's
-settlement leg on Friday 09-18. 1.1's brief is archived at
-`docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open. **547 tests green, no xfail** (2026-09-16, full run).
+AD-10 is approved and **not landed**; **AD-11's interim landed 2026-09-17 (T-79)** while its
+registry and templates stay deferred. The whole M5 restructure is deferred until after the
+submission — PO to confirm the standing recommendation. The order that fits the calendar is at
+the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions → T-78's entry → T-56 → T-57 → T-58 →
+T-79~~ (all landed) → **T-68/T-69/T-59** → T-60 → ship, with T-78's settlement leg on Friday
+09-18. 1.1's brief is archived at `docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open.
+**587 tests green, no xfail** (2026-09-17, full run).
 Update this paragraph as things land (lockstep rule).
 
 **T-57 landed 2026-09-15 — `covered_call/engine.py`, so the book runs** (FR-15, FR-16, NFR-6).
@@ -765,8 +811,8 @@ never commit it, never print its contents, never copy it into anything that ship
   announces the pull before it blocks — an invisible one read as a failed load for ~90 s on
   2026-08-30 (RUNBOOK §4). `OSL_OFFLINE=1` forces the synthetic path for CI/export (NFR-4).
   `fetch_from_lseg()` refuses to overwrite an existing cache.
-- **The published site is one static `index.html`.** Built by `build_preview.py` in CI from
-  the committed pickle at *build* time; no backend, no run-time pickle read. The revised README
+- **The published site is one static HTML file per page.** Built in CI from the committed
+  pickle and tape at *build* time; no backend, no run-time pickle read. The revised README
   sanctions this ("you can serve it as an html file … probably simplest"). Consequence: no
   Reflex event handler runs in production, so **every published interaction must be
   Plotly-native** (AD-5, T-15 — currently unmet and on the critical path).
@@ -777,7 +823,8 @@ never commit it, never print its contents, never copy it into anything that ship
   label interpolation as interpolation; never extrapolate; holes render as holes and never
   vanish (AD-9).
 - **No visual literals outside `theme.py`** (AD-6, FR-8 — landed 2026-09-02). Enforced by
-  `tests/test_theme.py`, not by review. Read [docs/DESIGN-BRIEF.md](docs/DESIGN-BRIEF.md)
+  `tests/test_theme.py`'s `THEMED_SOURCES`, not by review — and a module that emits markup
+  and is not on that list is a module free to hold a colour. Read [docs/DESIGN-BRIEF.md](docs/DESIGN-BRIEF.md)
   before re-toning anything; the cyan-mark / magenta-print encoding is fixed by the README.
 - **Anchor paths to `__file__`, never CWD.**
 - **Tests before refactoring** (NFR-2, ENGINEERING-PRINCIPLES) — the pure functions in

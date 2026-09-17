@@ -40,10 +40,17 @@ python -m pip install pytest ipykernel nbformat    # with algo active (tests + n
 Run everything **from the repo root**.
 
 ```bash
-python build_preview.py    # static HTML preview → options_surface_preview.html (verified)
-python -m pytest tests/ -q # test suite
-reflex run                 # local dev server — see §4 for first-run expectations
+python build_preview.py       # 1.1's page → options_surface_preview.html (verified)
+python build_covered_call.py  # A2's page  → covered_call_preview.html
+python -m pytest tests/ -q    # test suite
+reflex run                    # local dev server — see §4 for first-run expectations
 ```
+
+Each builder also takes `--site DIR`, which is what CI passes: the page then lands at
+`DIR/<route>` (`_site/index.html`, `_site/covered-call/index.html`) with its cross-page links
+spelled as **routes** rather than as filenames. Run with no argument for the root artifact
+you can open from the filesystem — same render, different hrefs. Both pages must be rebuilt
+and committed alongside anything that changes what they say (§5).
 
 **Editing the three sentences (FR-7).** They live in `options_surface_lab/commentary.py` and
 nowhere else — fill in `SENTENCES`, then `python build_preview.py` to see them on the page.
@@ -187,28 +194,38 @@ download blocked by firewall → rerun on a different network; anything importin
 **https://jason-dorman.github.io/options-surface-lab/** — published by
 `.github/workflows/pages.yml` on every push to `main`.
 
-The published site is **one self-contained `index.html`**, written by `build_preview.py`.
-Python reads the committed pickle *at build time* in CI, renders the Plotly figures, and
-embeds their data as JSON. The browser never reads a pickle; there is no server at run time.
-The revised README sanctions this directly: *"you can serve it as an html file … probably
-simplest."*
+The published site is **one self-contained HTML file per page** — 1.1 at `/`, the
+covered-call book at `/covered-call/` since T-79. Python reads the committed pickle and the
+committed tape *at build time* in CI, renders the figures, and embeds their data as JSON. The
+browser never reads a pickle or a parquet; there is no server at run time. The revised README
+sanctions this directly: *"you can serve it as an html file … probably simplest."*
 
 ```
 push to main
   → pytest in a clean container, no credentials      (proves NFR-4)
-  → python build_preview.py → _site/index.html
-  → guards: refuse a synthetic build; refuse < 7 figures;
-            refuse an IV panel with no assumptions caption;
-            refuse an unwritten FR-7 sentence
+  → python build_preview.py       --site _site  → _site/index.html
+  → python build_covered_call.py  --site _site  → _site/covered-call/index.html
+  → guards, PER PAGE:
+      every page  — non-empty; links to the rest of the site
+      /           — refuse a synthetic build; refuse < 7 figures;
+                    refuse an IV panel with no assumptions caption;
+                    refuse an unwritten FR-7 sentence; require the as-of listener
+      /covered-call/ — refuse a synthetic TAPE (its own marker); require a non-empty book
   → deploy-pages
 ```
 
-- **`options_surface_preview.html` is a committed artifact — rebuild it in the same commit as
-  anything that changes what the page says.** The tests read that file, so a source change
-  without a rebuild fails CI on the *old* page. This bit on 2026-09-06: FR-7's three sentences
-  were written into `commentary.py` and committed, the page was not rebuilt, and the Actions
-  run failed on a page still reading `[unwritten]`. `python build_preview.py`, then commit
-  both.
+The two synthetic markers are deliberately different strings. Shared, one page's fabrication
+would pass the other's check — and 1.1's fallback panel and a synthetic covered-call tape are
+different fabrications. `tests/test_pages.py` pins every route and every builder invocation to
+this workflow, so the build step and the guards cannot drift from where the pages land.
+
+- **The root artifacts are committed — rebuild them in the same commit as anything that
+  changes what a page says.** The tests read those files, so a source change without a
+  rebuild fails CI on the *old* page. This bit on 2026-09-06: FR-7's three sentences were
+  written into `commentary.py` and committed, the page was not rebuilt, and the Actions run
+  failed on a page still reading `[unwritten]`. Run the builder for **every** page a change
+  can reach — a change to `page_shell.py` or `theme.PAGE_CSS` reaches all of them — then
+  commit the artifacts with the source.
 
 - **`reflex export` is not used.** Its bundle bakes `ws://localhost:8000/_event` and needs a
   live Python backend; on Pages hydration fails and the page renders blank. Measured

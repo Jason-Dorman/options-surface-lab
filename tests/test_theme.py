@@ -37,11 +37,15 @@ def asof(wide):
     """The busiest date — the one both the app and the published page open on."""
     return wide.groupby(wide["date"].dt.normalize()).size().idxmax()
 
-# The modules FR-8 names: the figure builders and both pages (Reflex + static builder).
+# The modules FR-8 names: the figure builders, the Reflex app, and every static builder —
+# plus the shell they share, which is where the panel chrome actually lives from T-79. A
+# module that emits markup and is not on this list is a module free to hold a colour.
 THEMED_SOURCES = [
     ROOT / "options_surface_lab" / "option_surface_plot.py",
     ROOT / "options_surface_lab" / "options_surface_app.py",
+    ROOT / "options_surface_lab" / "page_shell.py",
     ROOT / "build_preview.py",
+    ROOT / "build_covered_call.py",
 ]
 
 HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")

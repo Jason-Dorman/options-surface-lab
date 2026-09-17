@@ -16,8 +16,9 @@
 
 The structure below is **current** as of 2026-09-02. The FR-1 restructure, the CI workflow
 (FR-9) and `theme.py` (FR-8) have all landed; every module named below exists.
-**AD-10 and AD-11 (approved 2026-09-12) have not landed yet** — §1–§4 still describe the
-tree as it is; they change once T-48 / T-51 land (lockstep rule).
+**AD-10 has not landed; AD-11's interim landed 2026-09-17 (T-79)** — §1–§4 describe the
+tree as it is, including `page_shell.py` and the second builder. AD-11's registry and
+templates still change §4 once T-51 lands (lockstep rule).
 
 ---
 
@@ -61,7 +62,7 @@ flowchart TB
     end
     subgraph delivery["Delivery"]
         local["reflex run — full backend"]
-        static["build_preview.py → single HTML → GitHub Pages"]
+        static["build_preview.py / build_covered_call.py → one HTML per page → GitHub Pages"]
     end
 
     lseg --> cache
@@ -106,9 +107,11 @@ flowchart LR
         b2["Interactivity: Plotly legend + updatemenus, client-side only"]
         b1 --> b2
     end
-    subgraph fb["Fallback — preview"]
+    subgraph fb["The published site — one file per page"]
         direction TB
-        c1["build_preview.py → one HTML file, no Reflex at all"]
+        c1["build_preview.py → / · build_covered_call.py → /covered-call/"]
+        c2["page_shell.PageShell — the chrome both render"]
+        c2 --> c1
     end
 ```
 
@@ -178,13 +181,37 @@ to the one piece of content a session may not author (T-12).
 *Does not belong here:* anything computed. A number in a sentence is typed by its author,
 because a number the page derives is a *readout* and belongs in the strip.
 
-**`build_preview.py`** (repo root) — **the deliverable**
+**`options_surface_lab/page_shell.py`** — the chrome both builders render *(landed
+2026-09-17, T-79)*
+`PageShell` — command bar, readout strip, panel, document — plus the site's page table
+(`SITE_PATHS` / `LOCAL_PATHS` / `NAV_LABELS`, and `nav_for`, which spells a cross-page link
+for wherever the page is being written). AD-11's interim: the registry and the Jinja2
+templates land with T-51 after the 09-20 submission, so what moved here is only the chrome —
+enough that two builders cannot come to disagree about what a panel looks like, which is
+this project's most-repeated defect class. **The "have I emitted plotly.js" flag is per
+`PageShell`, not per process:** as a module global it would hand the second page built in a
+CI job "already included" from the first and publish it with no library at all.
+*Does not belong here:* anything a page decides — its figures, its content, or its scripts
+(AD-11: a page owns its script, which is why HW1's as-of listener stays in `build_preview`).
+
+**`build_preview.py`** (repo root) — **Assignment 1.1's deliverable**
 Assembles the figures, the terminal chrome and the as-of payload into the single
-self-contained HTML file GitHub Pages serves. CI runs it on every push. *(This entry used to
-call it a "delivery fallback … emergency Pages artifact" — true until T-41 resolved the
-deployment model to a static page on 2026-09-01, after which `reflex export` left the build
-entirely. AD-4.)*
-*Does not belong here:* figure construction (→ plot), colours/fonts/measurements (→ theme).
+self-contained HTML file GitHub Pages serves at `/`. CI runs it on every push with
+`--site _site`; with no argument it writes the root artifact `options_surface_preview.html`.
+*(This entry used to call it a "delivery fallback … emergency Pages artifact" — true until
+T-41 resolved the deployment model to a static page on 2026-09-01, after which
+`reflex export` left the build entirely. AD-4.)*
+*Does not belong here:* figure construction (→ plot), colours/fonts/measurements (→ theme),
+panel chrome (→ `page_shell`).
+
+**`build_covered_call.py`** (repo root) — **Assignment 2's deliverable** *(landed
+2026-09-17, T-79)*
+The site's second page, at `/covered-call/`. Same shape as `build_preview.py` and the same
+`--site` flag. It runs `run_backtest` over the committed tape at build time and renders the
+book's headline; SPEC §11's panels arrive with T-69/T-59/T-70, so for now the page carries
+its frame and the six numbers, and says so.
+*Does not belong here:* the same exclusions as `build_preview.py`, plus the strategy itself
+(→ `covered_call/rules.py`) and the book (→ `covered_call/engine.py`).
 
 **`options_surface_lab/covered_call/`** — *AD-12, **accepted 2026-09-14** (T-74); `rules.py`
 and `live.py` landed 2026-09-13, `writeup.py` and `tape.py` 2026-09-14, **`engine.py` 2026-09-15 (T-57)**; `plots.py` and `page.py` still to come.* Assignment 2's subpackage: `tape.py`, `rules.py`, `engine.py`, `plots.py`,
@@ -227,7 +254,11 @@ verbatim port of `engine`'s substring ban list matches none of `from .engine imp
 **`tests/`** — mirrors the transform core first, then everything a defect could reach the
 published page through. Uses the seeded synthetic panel as its fixture (AD-7), exposed as the
 session-scoped `synthetic_payload` / `synthetic_wide` fixtures in `tests/conftest.py`.
-**547 green, no xfail (2026-09-16):** `tests/covered_call/` mirrors A2's subpackage (AD-12) —
+**587 green, no xfail (2026-09-17):** `test_page_shell` covers the chrome both builders
+render, `test_pages` asserts of **every** page what is true of any page — self-contained,
+classes that resolve, reachable from its siblings — parametrized off `page_shell.LOCAL_PATHS`
+so a page added without a guard is impossible, and `test_build_covered_call` pins A2's page to
+its book (T-79). `tests/covered_call/` mirrors A2's subpackage (AD-12) —
 `test_engine.py` carries the I-1…I-12 invariant suite over both books and `test_evidence.py`
 FR-17's fit, its named refusals and the AD-12 layering guards;
 `test_rules.py` carries I-9 as a seeded property plus the closing-bar group that pins the T-62
@@ -240,7 +271,9 @@ FR-11 — the Black-Scholes round trip and, at equal weight, every path on which
 must refuse; `test_app_figures` pins the app→plot call sites, the published hero's controls,
 FR-10's axis modes and the IV panel's trace-order contract; `test_theme` makes FR-8 mechanical
 (no colour/font literals, WCAG AA, marker identity); `test_build_preview` asserts against the
-**built artifact** because that is the only place the page's wiring exists.
+**built artifact** because that is the only place the page's wiring exists. Helpers shared by
+the page suites live in `tests/pagelib.py` — not a test module, and deliberately one
+implementation: two copies of a guard is how the second page ends up with the weaker one.
 *Known blind spot:* nothing here can click. Browser verification of the published page is a
 manual procedure in [RUNBOOK](RUNBOOK.md) §5, not a test.
 
@@ -479,10 +512,10 @@ page); a JS front end (fits Pages exactly, discards 1,193 lines of tested figure
 the analysis language out of Python).
 
 **AD-11 — The static builder is a small site generator.**
-*(**Approved by the PO 2026-09-12.** Not yet landed. Lands with T-51 / T-52. Assignment 2's due
-date — 09-20 — arrived after approval; the session recommends an **interim**: a second output
-file from the current builder sharing its chrome helpers (BACKLOG-2 T-79), with the registry
-and templates landing after the submission. PO to confirm.)*
+*(**Approved by the PO 2026-09-12.** The **interim landed 2026-09-17 (T-79)**: a second
+builder sharing the chrome, not a registry. The registry and the Jinja2 templates still land
+with T-51 / T-52, after the 09-20 submission. What the interim actually delivers, and what it
+deliberately does not, is recorded at the foot of this entry.)*
 *Context:* `build_preview.py` writes one file by f-string assembly and `pages.yml` copies it to
 `_site/index.html`. HW2 needs a second page — blotter, ledger, NAV path, mid-vs-print scatter,
 write-up — and every later assignment another. The brief's URL example
@@ -504,6 +537,23 @@ as-of listener (`_asof_script`) is HW1's, not the generator's — a page owns it
 top-level landing page is deferred: nobody grades it this week. The repo's name is a PO
 decision (T-53) — renaming changes the Pages URL, which is cheaper now than after more
 submissions point at it.
+*The interim, as landed (T-79, 2026-09-17):* `options_surface_lab/page_shell.py` holds the
+chrome — `PageShell.command_bar` / `readouts` / `panel` / `figure_panel` / `document` — and
+both builders render it. Each builder takes `--site DIR` and writes into `DIR/<route>`
+itself, so CI no longer copies a root artifact into place; the routes are
+`page_shell.SITE_PATHS`, pinned to `pages.yml` by a test so the build step and the guards
+cannot drift from where the pages land. The publish guards are per page, with a per-page
+synthetic marker: shared, one page's fabrication would pass the other's check. A command-bar
+nav links the pages, spelled two ways (`nav_for`) because the same render is written both
+into `_site/<route>/index.html` and as a root artifact opened from the filesystem — a shell
+that hardcoded routes would give the local artifact dead links, which only clicking reveals.
+**What this is not:** there is no registry, no template engine, and no Jinja2 dependency; a
+page is still assembled in Python by its own builder, and a third assignment would add a
+third builder. That is T-51's to fix. The one thing the interim had to get right that a
+registry would have got for free is **per-page state** — the plotly-include flag is an
+instance attribute, because a module global would publish the second page of a CI job with
+no library at all, and CSS-and-JS failing open means it would render as empty panel frames
+with nothing in the HTML to say why.
 
 **AD-12 — One subpackage per assignment, layered inside.**
 *(Proposed 2026-09-12. **Accepted — PO, 2026-09-14 (T-74), amended on two points that T-80
@@ -545,12 +595,13 @@ architecture change (§5, §6 first).
 | I want to… | Touch | Must not touch |
 |---|---|---|
 | Change colors / fonts / look | `theme.py` only | figure builders, app |
-| Change the page arrangement | `theme.PAGE_CSS` + the width/height tokens + the two `_panel()` composers (app, builder) | figure builders |
+| Change the page arrangement | `theme.PAGE_CSS` + the width/height tokens + `page_shell.PageShell.panel` and the app's mirror of it | figure builders |
+| Add a page for a new assignment | a `build_<name>.py` at the root + an entry in `page_shell.SITE_PATHS` / `LOCAL_PATHS` / `NAV_LABELS` + its build and guard steps in `pages.yml` (`test_pages.py` pins all three) | the other pages' builders; `page_shell`'s chrome, unless every page wants the change |
 | Change the three sentences under the plot (FR-7) | `options_surface_lab/commentary.py` — **PO only** | both renderers: neither may restate the text |
-| Add a figure to a panel | the builder, then `as_panel_figure()` at **both** call sites (app + `build_preview`) | the height tokens — a figure taller than its panel overflows it |
+| Add a figure to a panel | the builder, then `as_panel_figure()` at **both** call sites (app + the page's builder) | the height tokens — a figure taller than its panel overflows it |
 | Add or modify a figure | `option_surface_plot.py` (+ page slot in app) | utils internals |
 | Add a derived column / stat / model (e.g. IV) | `option_surface_utils.py` + tests | plot, app |
-| Add a page for a new assignment | new module + `app.add_page` | existing page, utils |
+| Add that page to the local Reflex app too | new module + `app.add_page` | existing page, utils |
 | Add a control / interaction | app (local) **and** its Plotly-native equivalent (production, AD-5). Two Plotly controls acting on the **same figure** must write **disjoint properties** — on the hero the as-of slider owns `visible` and FR-10's axis menu owns `x` — or they silently undo each other (T-15, T-16). A control reaching a **different** panel goes through the one inline listener, and there the rule is inverted: the listener must be the **sole writer** of any property it touches, holding whatever state the controls select between. That is how the slider and the axis menu both drive the smile's `x` without fighting (T-43) — the payload carries a complete variant per `(date, mode)` pair | a second writer of a property the listener owns |
 | Add an axis mode / change what an axis means | `X_MODES` + `X_AXIS_TITLE` + `X_MODE_LABEL` in `option_surface_plot.py`, then both hero builders and the app's select | `z` / `y` / trace names / marker styling — a mode is a ruler, not a transform (FR-10) |
 | Pull different/more data | acquisition function + additive payload keys | payload's existing keys (§5) |
@@ -560,7 +611,7 @@ architecture change (§5, §6 first).
 | **(A2)** Add or change a strategy rule or parameter | `covered_call/rules.py` + `Params`, its test, and the page's rule sentence (FR-14 pins them) | the engine's loop — a rule *selects*, the engine *books* |
 | **(A2)** Add or change a statistic *about the tape* (FR-17's fit, a spread measure) | `covered_call/evidence.py` + its test + the notebook section (AD-3 co-build); a new *parameter* for it goes in `rules.Params` so FR-14 prints it | `engine.py` — the book is derived from the blotter, the evidence from the tape, and neither may read the other |
 | **(A2)** Change how a fill, a skip or an expiry is booked | `covered_call/engine.py` **and** the invariant suite (SPEC-COVERED-CALL §12). A booking change that breaks an invariant is a domain-rule change — PRD §14 first | the ledger's identities (I-1, I-2, I-11) |
-| **(A2)** Add a figure or table to the covered-call page | `covered_call/plots.py` → `covered_call/page.py`; tables through the generator's templates | 1.1's page; the theme, except through T-68 |
+| **(A2)** Add a figure or table to the covered-call page | `covered_call/plots.py` → `covered_call/page.py`; tables as HTML rendered by the builder and styled by `theme.PAGE_CSS` (T-68) — the generator's templates are T-51, after 09-20 | 1.1's page; the theme, except through T-68 |
 | **(A2)** Pull or re-shape the hourly tape | `covered_call/tape.py` only; additive payload keys | `option_pipeline_data.pkl`, ever |
 
 ## 8. Cross-cutting posture

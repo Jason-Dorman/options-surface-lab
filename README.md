@@ -15,25 +15,28 @@ under [docs/](docs/) are. Keep it current (the lockstep rule in [CLAUDE.md](CLAU
 | Page | Assignment | State |
 |---|---|---|
 | `/` — **the options surface** | [Assignment 1.1](docs/archive/ASSIGNMENT-1.md): expired-options sparsity on UUUU, the mark (`MID_PRICE`) against the print (`TRDPRC_1`) | **Live.** Seven panels: a 3D price surface with an as-of slider over 53 trading days that drives the whole page, the underlying, an implied-vol smile, mark-vs-print, spread, and two occupancy grids. Headline: **1,601 of 7,458 listed contract-days (21.5%) carry a mark with no trade.** |
-| `/covered-call/` — **covered call backtest** | [Assignment 2](docs/ASSIGNMENT-2-COVERED-CALL.md): long 100 shares, short 1 weekly call; blotter, ledger, Reg T account, NAV path, mid-vs-print R², write-up | **In build — due Sunday 2026-09-20.** Underlying QQQ; the first live entry is booked Monday 2026-09-14. The tape and the **backtest engine** are in (2026-09-15): 10 weeks, 6 assigned, final NAV $76,243.50 on $75,000. The **mid-vs-print evidence** followed (2026-09-16): across the window the print is centred on the mid (`0.9979 × mid + 0.0104`, **R² = 0.9962**), and at the ten bars the book actually filled on the median gap is **3.75 cents** — about one half-spread, and worth **$49.50** over the whole window if every call had been sold at the bid instead. The page itself is next. Board: [BACKLOG-2](docs/BACKLOG-2.md). |
+| `/covered-call/` — **covered call backtest** | [Assignment 2](docs/ASSIGNMENT-2-COVERED-CALL.md): long 100 shares, short 1 weekly call; blotter, ledger, Reg T account, NAV path, mid-vs-print R², write-up | **Live, and filling in — due Sunday 2026-09-20.** Underlying QQQ; the first live entry is booked Monday 2026-09-14. The tape and the **backtest engine** are in (2026-09-15): 10 weeks, 6 assigned, final NAV $76,243.50 on $75,000. The **mid-vs-print evidence** followed (2026-09-16): across the window the print is centred on the mid (`0.9979 × mid + 0.0104`, **R² = 0.9962**), and at the ten bars the book actually filled on the median gap is **3.75 cents** — about one half-spread, and worth **$49.50** over the whole window if every call had been sold at the bid instead. The **route went live 2026-09-17**, carrying the book's headline; its panels — NAV path, blotter, ledger, mid-vs-print, write-up — are next. Board: [BACKLOG-2](docs/BACKLOG-2.md). |
 
 ## How it works
 
 Market data is pulled from LSEG **once**, at development time, and committed as a cache
 (`option_pipeline_data.pkl`). Everything downstream is pure Python: pandas transforms → Plotly
-figures → one self-contained HTML page, rendered **at build time** by `build_preview.py` in
-CI and published to Pages. The browser never reads the cache and there is no backend, so every
-published interaction is Plotly-native — slider, legend, axis menu — plus one small inline
-listener that lets the hero's slider drive the other panels.
+figures → one self-contained HTML page **per route**, rendered **at build time** by
+`build_preview.py` and `build_covered_call.py` in CI and published to Pages. The browser never
+reads the cache and there is no backend, so every published interaction is Plotly-native —
+slider, legend, axis menu — plus one small inline listener that lets the hero's slider drive
+the other panels.
 
-Two things about the tree as it stands (2026-09-12):
+Two things about the tree as it stands (2026-09-17):
 
 - A Reflex app (`options_surface_lab/options_surface_app.py`, `reflex run`) still exists as a
   local viewer. **Its retirement is approved** — it was a second renderer of a page the static
   builder already produces — and lands with [BACKLOG M5](docs/BACKLOG.md) (ARCHITECTURE
   AD-10). Until then it runs, but nothing on the published site depends on it.
-- `build_preview.py` writes one page. Making it a multi-page generator (AD-11) is the same
-  milestone, and is what `/covered-call/` waits on.
+- Each page has its own builder, sharing the chrome in `options_surface_lab/page_shell.py`
+  and the routes in its page table. That is AD-11's **interim** (T-79): the registry and the
+  Jinja2 templates the decision actually calls for land with M5, after the submission, at
+  which point a third assignment stops meaning a third builder.
 
 ## Run it
 
@@ -42,9 +45,14 @@ Python is the conda env **`algo`** (3.12). Commands are Git Bash syntax, from th
 ```bash
 source /c/Users/rjd61/anaconda3/etc/profile.d/conda.sh && conda activate algo
 
-python build_preview.py     # THE DELIVERABLE — writes options_surface_preview.html (~32 s)
-python -m pytest tests/ -q  # 547 tests, all green, no xfail
-reflex run                  # local Reflex viewer (being retired — AD-10)
+python build_preview.py        # 1.1's page  → options_surface_preview.html (~32 s)
+python build_covered_call.py   # A2's page   → covered_call_preview.html
+python -m pytest tests/ -q     # 587 tests, all green, no xfail
+reflex run                     # local Reflex viewer (being retired — AD-10)
+
+# Both builders take `--site DIR`, which is what CI passes: the page lands at DIR/<route>
+# with its cross-page links spelled as routes. Rebuild and commit every page a change
+# reaches — page_shell.py and theme.PAGE_CSS reach all of them.
 ```
 
 Everything runs **offline** off the committed cache; with no cache present, a seeded synthetic
@@ -60,9 +68,10 @@ never commit `lseg-data.config.json` (the app-key; gitignored).
 | `options_surface_lab/option_surface_plot.py` | One builder per figure, plus the published page's per-date payload. |
 | `options_surface_lab/theme.py` | Every colour, font and layout token; the one stylesheet. No visual literal lives anywhere else (tested). |
 | `options_surface_lab/commentary.py` | The PO's three sentences (FR-7) — prose only. |
-| `build_preview.py` | The static page builder. CI runs it. |
+| `options_surface_lab/page_shell.py` | The chrome both page builders render — command bar, readouts, panels, document — and the site's routes. |
+| `build_preview.py` · `build_covered_call.py` | One static page builder per route. CI runs both. |
 | `option_pipeline_data.pkl` | The committed LSEG cache: 296 series × 53 days. A frozen artifact. |
-| `tests/` | 547 tests; the pure functions first, then everything a defect could reach the page through. |
+| `tests/` | 587 tests; the pure functions first, then everything a defect could reach a page through. |
 | `notebooks/` | Exploration and evidence, numbered by assignment. Consume the package; never a dependency. |
 | `.github/workflows/pages.yml` | pytest in a clean container with no credentials → build → guards → Pages. |
 

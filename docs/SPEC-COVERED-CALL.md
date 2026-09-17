@@ -601,8 +601,12 @@ and it rests on the $49.50, not on the R².
 
 ## 11. The page
 
-Registered at `/covered-call/` with the generator (AD-11); built by
-`covered_call/page.py: build_page(tape, params) -> Page` (NFR-5). Panels, in reading order:
+Published at `/covered-call/` by **`build_covered_call.py`** (repo root), which renders the
+chrome `build_preview.py` renders — `page_shell.PageShell` — and will compose
+`covered_call/page.py: build_page(tape, params) -> Page` (NFR-5) when T-59 lands. *(This said
+"registered with the generator"; AD-11's registry and templates are deferred past the 09-20
+submission, and T-79's interim is a second builder, not a registry. Corrected 2026-09-17.)*
+Panels, in reading order:
 
 1. **The strategy** — `Params` rendered as prose + a table (FR-14), and the rule ids the
    blotter's notes cite.
@@ -620,6 +624,14 @@ templates, styled by `theme.PAGE_CSS` (the table rules are new — T-68, PO tast
 **CI guards, per page:** refuse a page built from the synthetic tape; refuse `[unwritten]`;
 require the R² line; require at least one `BUY` and one `EXPIRE`/`ASSIGN` in the blotter (a
 page with an empty book renders plausibly and is wrong).
+
+*Landed 2026-09-17 (T-79):* the synthetic refusal — on **`synthetic tape`**, a marker of this
+page's own, because a marker shared with 1.1's `synthetic panel` would let one page's
+fabrication pass the other's check — plus a non-empty page, a non-empty readout strip, and a
+link to the rest of the site (a page nothing links to is published and invisible, which no
+render can show). The `[unwritten]`, R² and blotter guards land **with the panels they
+guard**: a guard written before its subject cannot fail for the right reason, and one written
+for a subject that never arrives fails the deploy for the wrong one.
 
 ## 12. Invariants — the executable definition of "logically consistent" (NFR-6)
 

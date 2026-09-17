@@ -1,0 +1,188 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>Covered call · Options Surface Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:#060B16; color:#E8E3D9;
+    font-family:'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif; font-size:13px; padding:14px;
+  }
+
+  /* ---- command bar: wordmark left, instrument identity right ---- */
+  .osl-bar {
+    display:flex; align-items:baseline; justify-content:space-between; gap:16px;
+    flex-wrap:wrap; background:#0C1526; border:1px solid #1B2A44;
+    padding:10px 14px;
+  }
+  .osl-wordmark {
+    font-family:'Space Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; font-weight:700; font-size:19px;
+    letter-spacing:2px; color:#FFB000; text-transform:uppercase;
+  }
+  .osl-ident {
+    font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace; font-size:12px; color:#94897A;
+    letter-spacing:0.5px; text-align:right;
+  }
+  .osl-ident b { color:#E8E3D9; font-weight:700; }
+
+  /* ---- site navigation: the course site's other pages (T-79) ----
+     The brief's own URL example is a course-level site each homework adds a page to, so
+     from HW2 onward a page that cannot be reached from its sibling is a dead end. No new
+     token: muted like a panel label at rest, amber on hover, because a link is chrome
+     (DESIGN-BRIEF §3 rule 2 — amber is type, never data). */
+  .osl-nav {
+    font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace; font-size:11px; letter-spacing:1px; text-transform:uppercase;
+    white-space:nowrap;
+  }
+  .osl-nav a {
+    color:#94897A; text-decoration:none;
+    border-bottom:1px solid #1B2A44; padding-bottom:2px;
+  }
+  .osl-nav a:hover { color:#FFB000; border-bottom-color:#FFB000; }
+  .osl-nav a + a { margin-left:14px; }
+
+  /* ---- readout strip: KPIs butted together under the bar ---- */
+  .osl-readouts {
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(158px, 1fr));
+    gap:1px; background:#1B2A44; border:1px solid #1B2A44; border-top:0;
+    margin-bottom:10px;
+  }
+  .osl-readout { background:#0C1526; padding:9px 12px 10px 12px; }
+  .osl-readout-label {
+    color:#94897A; font-size:10px; letter-spacing:1.2px; text-transform:uppercase;
+    /* Wraps rather than truncating: "Median |mark - trade|" was being cut to "Median |mark"
+       below 1024px, which reads as a different statistic. The strip is a grid, so a
+       two-line label lifts every cell in the row together and nothing goes ragged. */
+    overflow-wrap:anywhere;
+  }
+  .osl-readout-value {
+    color:#FFB000; font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace; font-size:20px; font-weight:700;
+    margin-top:3px; line-height:1.15;
+  }
+
+  /* ---- the panel grid: 10 columns, so 7+3 and 5+5 both divide cleanly ---- */
+  .osl-grid {
+    display:grid; grid-template-columns:repeat(10, minmax(0, 1fr)); gap:10px;
+    /* Never stretch a panel to its row's height: a panel taller than its figure is dead
+       navy under a chart, which reads as a rendering fault rather than as spacing. */
+    align-items:start;
+  }
+  .osl-w1 { grid-column:span 1; }
+  .osl-w2 { grid-column:span 2; }
+  .osl-w3 { grid-column:span 3; }
+  .osl-w4 { grid-column:span 4; }
+  .osl-w5 { grid-column:span 5; }
+  .osl-w6 { grid-column:span 6; }
+  .osl-w7 { grid-column:span 7; }
+  .osl-w8 { grid-column:span 8; }
+  .osl-w9 { grid-column:span 9; }
+  .osl-w10 { grid-column:span 10; }
+  /* The hero names itself rather than being recognised by its span, because the span changes
+     between bands and the identity does not. Defined at BASE level, not only inside a media
+     query: a class that exists only in an override is how `.osl-w6` went missing from the
+     published page while the Reflex app looked perfect. */
+  .osl-hero { grid-column:span 6; }
+  /* Two equal columns: the hero goes full width and everything else pairs off, so the
+     occupancy grids — the one pair whose whole point is being compared — stay side by side.
+     Without this band a 1366px laptop kept the 6+4 split and crowded every panel in it. */
+  @media (max-width: 1399px) and (min-width: 1101px) {
+    .osl-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .osl-w1, .osl-w2, .osl-w3, .osl-w4, .osl-w5, .osl-w6, .osl-w7, .osl-w8, .osl-w9, .osl-w10 { grid-column:span 1; }
+    /* The hero, its sidecar and the full-width panel each take the whole row, which leaves
+       the two genuine PAIRS -- smile beside mark-vs-print, and the two occupancy grids --
+       side by side, where comparing them is the entire reason both are shown. Pairing the
+       sidecar with a tile instead put a 600px candlestick beside a 360px one and left 224px
+       of dead navy under the short one. */
+    .osl-hero, .osl-w4, .osl-w10 { grid-column:span 2; }
+    /* Half a 1280px screen is narrow enough that FR-11's assumptions line wraps to three
+       rows while its row-mate's caption still fits two, which put the pair 16px apart.
+       Reserve the taller here rather than everywhere: at full width two lines is the most
+       any caption needs, and 16px of dead navy under all seven panels to fix a band 300px
+       wide is a bad trade. */
+    .osl-panel .osl-caption { min-height:calc(3 * 1.45em + 8px); }
+  }
+  /* Below this the adjacency is not worth the squeeze — everything goes full width. */
+  @media (max-width: 1100px) {
+    .osl-grid { grid-template-columns:minmax(0, 1fr); }
+    .osl-w1, .osl-w2, .osl-w3, .osl-w4, .osl-w5, .osl-w6, .osl-w7, .osl-w8, .osl-w9, .osl-w10, .osl-hero { grid-column:span 1; }
+  }
+
+  .osl-panel { background:#0C1526; border:1px solid #1B2A44; min-width:0; }
+  .osl-panel-head {
+    display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+    background:#111E33; border-bottom:1px solid #1B2A44; padding:7px 12px;
+  }
+  .osl-panel-n {
+    color:#FFB000; font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace; font-size:11px; font-weight:700;
+    margin-right:8px;
+  }
+  .osl-panel-name {
+    font-family:'Space Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; font-weight:500; font-size:12px;
+    letter-spacing:1.4px; text-transform:uppercase; color:#E8E3D9;
+  }
+  .osl-panel-note {
+    font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace; font-size:10px; color:#94897A; text-align:right;
+    /* One line, always. A wrapped note makes its panel taller than the one beside it, and
+       on a hairline grid where panels deliberately do not stretch, 17px of that reads as a
+       rendering fault. It truncates instead; the caption below carries the same ground. */
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
+  }
+  .osl-panel-head > div:first-child { white-space:nowrap; }
+
+  /* ---- the caption: the "how to read this" line, in HTML so it can WRAP ---- */
+  .osl-caption {
+    color:#94897A; font-family:'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif; font-size:11px;
+    line-height:1.45; padding:8px 12px 0 12px;
+    /* Two lines' worth, always. FR-11's panel carries two caption lines and its row-mate
+       carries one, so without this the pair sat 16px apart -- and on a hairline grid where
+       panels deliberately do not stretch, a small mismatch between two panels that should
+       match reads as a rendering fault. Reserving the taller of the two keeps every row
+       level; a caption that wraps further still grows, which is the correct trade. */
+    min-height:calc(2 * 1.45em + 8px);
+  }
+  .osl-caption-line { display:block; }
+
+  /* Below the floor the panel scrolls rather than squeezing a figure into a shape where its
+     own legend and slider collide. See FIGURE_MIN_WIDTH. */
+  .osl-panel-body { padding:10px 12px 12px 12px; overflow-x:auto; }
+  .osl-figure { min-width:520px; }
+  .osl-figure-hero { min-width:680px; }
+
+  /* ---- FR-7's commentary: prose in a panel, one column per question (T-12) ----
+     Three columns on a wide screen, one on a phone. A 12.5px sentence run across all ten
+     columns is a ~1300px measure, which is unreadable in a way a figure is not — and unlike
+     `.osl-figure` this block needs no width floor, because prose reflows instead of
+     colliding with its own chrome. */
+  .osl-commentary {
+    padding:10px 12px 12px 12px;
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:14px;
+  }
+  /* A grid item that will not blow its track out: `min-width:0` for the same reason
+     `.osl-panel` carries it — a long unbroken token otherwise widens the column. */
+  .osl-commentary-item { min-width:0; }
+  /* The assignment's question, above the answer, so a reader who has never seen the brief
+     knows what is being answered. Same treatment as a readout's label. */
+  .osl-commentary-q {
+    font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace; font-size:10px; letter-spacing:1.2px; text-transform:uppercase;
+    color:#94897A; margin-bottom:5px;
+  }
+  /* The sentence itself. `<b>` is how its author lifts a number out of it — amber as
+     emphasis in prose, which is chrome, not a data channel (DESIGN-BRIEF section 6 rule 2). */
+  .osl-note { color:#E8E3D9; font-size:12.5px; line-height:1.55; }
+  .osl-note b { color:#FFB000; font-weight:600; }
+  /* An unwritten sentence is LOUD. This is the one requirement on the page with no figure
+     to prove it is there, so its absence must not look like a design choice. */
+  .osl-commentary-todo { color:#FF4D6D; font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace; font-weight:700; }
+
+  .osl-warn {
+    background:rgba(255,77,109,0.14); border:1px solid #FF4D6D; color:#FF4D6D;
+    padding:10px 14px; margin-bottom:10px; font-weight:600;
+    font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace; font-size:12px;
+  }
+</style></head><body>
+<div class="osl-bar"><div class="osl-wordmark">Options Surface Lab</div><div class="osl-nav"><a href="options_surface_preview.html">Surface lab (1.1)</a></div><div class="osl-ident"><b>QQQ</b> covered call &nbsp;·&nbsp; weekly &nbsp;·&nbsp; <b>2026-07-06 → 2026-09-11</b> &nbsp;·&nbsp; hourly bars &nbsp;·&nbsp; 10 weeks</div></div>
+<div class="osl-readouts"><div class="osl-readout"><div class="osl-readout-label">Weeks in window</div><div class="osl-readout-value" data-osl-readout="0">10</div></div><div class="osl-readout"><div class="osl-readout-label">Entries booked</div><div class="osl-readout-value" data-osl-readout="1">10 of 10</div></div><div class="osl-readout"><div class="osl-readout-label">Assigned at expiry</div><div class="osl-readout-value" data-osl-readout="2">6 of 10</div></div><div class="osl-readout"><div class="osl-readout-label">Premium collected</div><div class="osl-readout-value" data-osl-readout="3">$6,657.50</div></div><div class="osl-readout"><div class="osl-readout-label">Final NAV</div><div class="osl-readout-value" data-osl-readout="4">$76,243.50</div></div><div class="osl-readout"><div class="osl-readout-label">Return on start cash</div><div class="osl-readout-value" data-osl-readout="5">+1.66%</div></div></div>
+<div class="osl-grid">
+<div class="osl-panel osl-w10"><div class="osl-panel-head"><div><span class="osl-panel-name">Covered call · scope</span></div><div class="osl-panel-note">interim — the book's panels follow</div></div><div class="osl-commentary"><div class="osl-commentary-item"><div class="osl-commentary-q">What the numbers above are</div><div class="osl-note">One covered call a week on <b>QQQ</b>, bought and written at the hourly bar the rule names, held through expiry, over <b>2026-07-06 → 2026-09-11</b> on <b>$75,000</b> of starting cash. Write the call at the lowest listed strike at or above the spot print at the entry bar — at the money if spot sits exactly on a strike. They come from the same backtest the panels will draw, run over the committed tape.</div></div><div class="osl-commentary-item"><div class="osl-commentary-q">What is still to come</div><div class="osl-note">This page is the site's second output and carries its frame only. Still to land: the NAV / initial-margin / maintenance-margin path, the blotter and the skip log, the daily ledger, mark-versus-print, with the fit the fill assumption rests on, the write-up. Assignment 1.1's page is unchanged and linked from the bar above.</div></div></div></div>
+</div>
+</body></html>

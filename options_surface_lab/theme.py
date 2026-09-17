@@ -517,6 +517,22 @@ PAGE_CSS = f"""
   }}
   .osl-ident b {{ color:{TEXT}; font-weight:700; }}
 
+  /* ---- site navigation: the course site's other pages (T-79) ----
+     The brief's own URL example is a course-level site each homework adds a page to, so
+     from HW2 onward a page that cannot be reached from its sibling is a dead end. No new
+     token: muted like a panel label at rest, amber on hover, because a link is chrome
+     (DESIGN-BRIEF §3 rule 2 — amber is type, never data). */
+  .osl-nav {{
+    font-family:{FONT_MONO}; font-size:11px; letter-spacing:1px; text-transform:uppercase;
+    white-space:nowrap;
+  }}
+  .osl-nav a {{
+    color:{TEXT_MUTED}; text-decoration:none;
+    border-bottom:1px solid {BORDER}; padding-bottom:2px;
+  }}
+  .osl-nav a:hover {{ color:{ACCENT}; border-bottom-color:{ACCENT}; }}
+  .osl-nav a + a {{ margin-left:14px; }}
+
   /* ---- readout strip: KPIs butted together under the bar ---- */
   .osl-readouts {{
     display:grid; grid-template-columns:repeat(auto-fit, minmax(158px, 1fr));
