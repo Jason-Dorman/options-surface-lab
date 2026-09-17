@@ -7,7 +7,14 @@ No I/O, no network, no plotly, no theme (AD-12). Everything here is specified:
 * ``select_strike``                   — SPEC §5, SD-5
 * ``is_itm``                          — SPEC §7, SD-6
 * ``valid_mid``                       — SPEC §6.1, DR-1
+* ``require_matching_underlying``     — T-82's guard, shared with ``evidence``
 * ``BlotterRow`` and its constructors — SPEC §8, DR-3, DR-8
+
+FR-17's evidence transform lived here until 2026-09-16 and is now ``evidence.py``
+(PO's call): a module that decides the strategy and a module that measures the tape
+are two responsibilities, however neatly the second reads beside ``valid_mid``.
+``Params.ntm_band`` stays, because ``Params`` is the whole strategy record the page
+prints (FR-14) — the parameter belongs to the decisions, the statistic does not.
 
 **Why the blotter constructors live here and not in ``live.py``.** T-80 asked for
 them in the live module so T-57's engine could reuse them, but that would have the
@@ -28,9 +35,12 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
-from typing import Iterable, Literal
+from typing import TYPE_CHECKING, Iterable, Literal
 
 import pandas as pd
+
+if TYPE_CHECKING:  # pragma: no cover - type-only; `tape` imports `rules`, never back
+    from .tape import Tape
 
 # --- SPEC §3.2 item 4 — which hourly bar is "the close" ---------------------
 #: ET start-hour of the regular session's closing bar (the 15:00-16:00 ET bar).
@@ -41,6 +51,11 @@ OPENING_BAR_HOUR_ET = 9
 EXCHANGE_TZ = "America/New_York"
 #: A trading week needs an entry session and an expiry session (SPEC §3.2 rule 2).
 MIN_SESSIONS_PER_WEEK = 2
+
+#: Half-width of the near-the-money band FR-17's evidence is drawn from, as a
+#: fraction of that bar's spot. SPEC §10. It is a ``Params`` field so the page
+#: prints it (FR-14): "R² = 0.99" says nothing without the sample it was fitted on.
+NTM_BAND_DEFAULT = 0.05
 
 
 @dataclass(frozen=True)
@@ -62,6 +77,7 @@ class Params:
     itm_rule: Literal["strict"] = "strict"                        # SD-6
     shares: int = 100                                             # S-1, the brief
     contracts: int = 1                                            # S-1, the brief
+    ntm_band: float = NTM_BAND_DEFAULT                            # SPEC §10, FR-17
     tz: str = EXCHANGE_TZ                                         # S-8
 
     def __post_init__(self) -> None:
@@ -85,6 +101,11 @@ class Params:
             raise ValueError("shares and contracts must be positive (S-1: 100 and 1)")
         if self.start_cash <= 0:
             raise ValueError("start_cash must be positive (SD-3)")
+        if not 0 < self.ntm_band <= 1:
+            raise ValueError(
+                f"ntm_band is a fraction of spot in (0, 1], got {self.ntm_band!r} "
+                "(SPEC §10 — 0.05 is 5% either side)"
+            )
 
     @property
     def root(self) -> str:
@@ -268,6 +289,37 @@ def closing_bar_ts(
     the asymmetry between entry and exit is explicit rather than implied.
     """
     return _bar_at_hour(index, day, CLOSING_BAR_HOUR_ET, params)
+
+
+# --------------------------------------------------------------------------
+# Is this tape this strategy's tape? — T-82's guard, shared
+# --------------------------------------------------------------------------
+def require_matching_underlying(tape: "Tape", params: Params) -> None:
+    """Refuse a tape for a different name than ``Params`` describes.
+
+    ``Tape.stock`` selects on ``kind == "stock"``, never on the RIC, so handing any
+    consumer somebody else's tape produces a complete, plausible, entirely wrong
+    answer — a book priced off one underlying and written against another's chain
+    (T-82), or an FR-17 headline measured on one name and printed beside another's
+    ``Params`` (T-83). It is exactly the failure that renders without erroring, so
+    it is refused at the door.
+
+    It lives here rather than in either caller because it is a pure statement about
+    a tape and a ``Params``, and because the alternative was a second copy: the
+    review that found ``evidence`` missing this guard would have found the copy next.
+    """
+    stock = tape.stock
+    if stock.empty:
+        raise ValueError(
+            f"the tape carries no stock bars for {params.underlying}; the calendar "
+            "(SPEC §3.2) has nothing to come from."
+        )
+    names = sorted(set(stock["ric"]))
+    if names != [params.underlying]:
+        raise ValueError(
+            f"this tape's stock is {names}, but Params.underlying is "
+            f"{params.underlying!r}. Pass the tape pulled for this name (RUNBOOK §8)."
+        )
 
 
 # --------------------------------------------------------------------------

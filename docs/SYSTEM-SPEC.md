@@ -132,6 +132,8 @@ flowchart TD
 | `options_surface_app.py` | reflex, utils, plot, theme | — | State, events, page composition |
 | `build_preview.py` | utils, plot | reflex | Static HTML assembly |
 | `covered_call/rules.py` | pandas (stdlib `datetime`) | reflex, plotly, theme, lseg | A2's strategy: `Params`, strike choice, the ITM test, the calendar and the *closing bar*, the blotter rows |
+| `covered_call/engine.py` | rules, utils, pandas, numpy | reflex, plotly, theme, lseg, `evidence` | A2's book: `run_backtest`, the weekly loop, the blotter, the skip log, the Reg T ledger |
+| `covered_call/evidence.py` | rules, pandas, numpy | reflex, plotly, theme, lseg, **`engine`** | FR-17's statement about the tape: `mid_vs_print`, the `MidVsPrint` record, the named refusals |
 | `covered_call/live.py` | rules, utils, pandas, **lseg** | reflex, plotly, theme | FR-21's forward run: `capture` (the only network), the entry/settlement planners, the CLI |
 | `covered_call/tape.py` | rules, utils, pandas, numpy, pyarrow, **lseg** | reflex, plotly, theme, `option_pipeline_data.pkl` | FR-13's hourly tape: `fetch_tape` (the only network, human-invoked), `load_tape` (never), the `Tape` record, the chain band |
 

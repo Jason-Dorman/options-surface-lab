@@ -667,6 +667,29 @@ quote and a print: the scatter, the OLS fit, `y = x`, and `n`, slope, intercept,
 |print − mid| in $ and %. The non-simultaneity caveat printed under it (SPEC §10).
 *Accepted when:* the numbers on the page equal the transform's output on the committed tape
 (I-13); a synthetic tape with planted noise recovers the planted slope within tolerance.
+**◐ 2026-09-16 (T-58, corrected the same day by T-83's review):** the transform is in —
+`covered_call/evidence.py` — with notebook 03 §5 and **51 tests, 33 of 33 injected defects
+caught** (two further mutants are equivalent on every reachable input and are named in the
+module rather than left as silent survivors). On the committed tape: **n = 16,626** of 37,073
+option bars in the window — 74.7% of the 22,262 near-the-money regular-session call bars —
+`print = 0.9979 × mid + 0.0104`, **R² = 0.9962**, median |print − mid| **$0.035**, median of
+|print − mid| / mid **1.89%**. All **ten** of the book's fills are in the sample, pinned
+contract by contract, and there the median gap is **$0.0375** (0.67%), about $3.75 a contract
+against a median premium of $644.50. `ntm_band` (5%) is a `Params` field so FR-14 prints the
+sample beside the R².
+
+The planted-slope criterion is met twice over, and the second time is the one that counts: the
+fixture's own line is `y = x`, so a slope **hardcoded to 1.0 passes it**. The test with teeth
+plants `0.6 × mid + 1.25`, a line the generator never produced.
+
+**The review moved the headline and the framing.** The sample had silently included the 16:00
+ET post-close bar (9.3% of the points, the tightest cohort in it) and had never enforced
+"calls"; the published band-sweep R² floor was wrong; and six analytical findings now sit in
+SPEC §10.2 for FR-19 to use — chiefly that **$0.035 is exactly one median half-spread** (only
+30.4% of prints land strictly inside the quoted bid/ask), that the fit adds nothing to `y = x`,
+and that the bound worth quoting is the priced worst case: selling all ten calls at the **bid**
+instead of the mid costs **$49.50**, moving the window return from 1.658% to 1.592%. The
+**figure** (T-69) and the **page** (T-59) are what remain.
 
 **FR-18 — The page at `/covered-call/`.** Built by `build_page(tape, params)` and registered
 with the generator (AD-11); panels in SPEC §11's order; blotter, skip log and ledger as HTML
@@ -731,7 +754,7 @@ NFR-1 … NFR-5 apply unchanged. Added:
 | A2-M0 | Governance and decisions | — | This part; T-62 spike; SD-1…SD-6 decided; ~~AD-12 signed~~ **✅ 2026-09-14, amended (T-74)**. Remaining: FR-14 prints the decisions on the page |
 | A2-M1 | The tape | A2-M0 | FR-13, synthetic tape, the one-time pull committed. **complete 2026-09-15**: `tape.py` (T-56), the committed pull (T-77 — 37,857 bars over 10 weeks, verified against T-65's independent run), the synthetic tape and its fixtures (T-63), and the tape suite (T-64) |
 | A2-M2 | The engine | A2-M1 | FR-14, FR-15, FR-16, the invariant suite, notebook 03 |
-| A2-M3 | The evidence | A2-M1 | FR-17 |
+| A2-M3 | The evidence | A2-M1 | FR-17. **◐ 2026-09-16:** the transform and notebook 03 §5 landed (T-58); the figure is T-69 and the panel T-59, both inside A2-M4 |
 | A2-M4 | The page | **T-79** (a second output from the current builder) + A2-M2/M3 | FR-18, FR-21's live panel, theme additions |
 | A2-M5 | Write-up and ship | A2-M4 | FR-19, browser drive, incognito, Canvas |
 | P1 | Comparison variant | every P0 green | FR-20 |

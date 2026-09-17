@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft v1 — 2026-09-12. **§2–§9 and §12 are now the code's behaviour, not a target** (T-65, T-80, T-56, T-63, T-81, and **T-57 2026-09-15**: the weekly loop, fills, settlement, the blotter, the skip log, the ledger and the I-1…I-12 suite). §10, §11 and I-13 remain targets until T-58 / T-79 / T-59 land (lockstep rule). |
+| Status | Draft v1 — 2026-09-12. **§2–§10 and §12 are now the code's behaviour, not a target** (T-65, T-80, T-56, T-63, T-81, T-57 2026-09-15, and **T-58 2026-09-16**: the weekly loop, fills, settlement, the blotter, the skip log, the ledger, the I-1…I-12 suite and the mid-vs-print evidence). §11 and I-13 remain targets until T-79 / T-59 land (lockstep rule). §10 was **corrected 2026-09-16 by T-83's review** — the sample now excludes the post-close bar and the headline moved. |
 | Scope | The book: tape → rules → engine → blotter + ledger + Reg T account → page. Schemas, the weekly algorithm, fills, settlement, edge cases, the invariant suite. |
 | Companion | Requirements: [PRD.md Part B](PRD.md) (§13–§20) · Board: [BACKLOG-2.md](BACKLOG-2.md) · Brief: [ASSIGNMENT-2-COVERED-CALL.md](ASSIGNMENT-2-COVERED-CALL.md) · Shared machinery: [SYSTEM-SPEC.md](SYSTEM-SPEC.md) §6 (RIC grammar), §5 (cache-first) · Structure: [ARCHITECTURE.md](ARCHITECTURE.md) AD-12 |
 
@@ -40,6 +40,7 @@ the whole thing (FR-14) so the strategy a reader sees is the one the engine ran.
 | `delta_target` | `float`, P1 only | For `strike_rule == "delta"` | SD-5 |
 | `itm_rule` | `"strict"` | ITM iff settlement print `> K`; equality is OTM (§7) | SD-6 |
 | `shares`, `contracts` | `100`, `1` | Fixed by the brief | S-1 |
+| `ntm_band` | `float`, `0.05` | Half-width of FR-17's near-the-money sample, as a fraction of that bar's spot (§10). A `Params` field rather than a constant so the page prints it — an R² without its sample is not a number a reader can check | §10 |
 | `tz` | `"America/New_York"` | Every timestamp on the page is exchange time (§3.1) | S-8 |
 
 ## 3. The tape
@@ -458,18 +459,145 @@ never arises, and if it does not, the write-up says so.
 
 ## 10. Mid-vs-print evidence (FR-17)
 
-The justification for filling at mid, done the way the brief prescribes:
+The justification for filling at mid, done the way the brief prescribes. **Landed 2026-09-16
+(T-58)** as `covered_call/evidence.py` — `mid_vs_print(tape, params, *, band=None) ->
+MidVsPrint` — with `notebooks/03_covered_call.ipynb` §5 as its companion, and **corrected the
+same day by T-83's adversarial review**, which moved the headline. It is **its own module**
+(AD-12, amended by the PO): `rules` decides, `engine` books, `evidence` measures, and
+`evidence` may not import `engine` — a fit computed from the book would restate the fill
+assumption rather than check it. Only the *parameter* stays in `rules`: `Params.ntm_band`,
+because FR-14 prints the strategy record whole.
 
-- **Sample:** every option bar in the window with a valid quote (§6.1) **and** a `trdprc_1`,
-  restricted to near-the-money calls — strikes within `±band` of that bar's spot (default
-  band `params.ntm_band = 5%`; printed).
+- **Sample:** every **call** bar of the **regular session** (ET start ≤ `CLOSING_BAR_HOUR_ET`)
+  in the window that carries a valid quote (§6.1) **and** a `trdprc_1`, with a strike within
+  `±band` of that bar's spot (default `params.ntm_band = 5%`; printed). Spot is the stock's
+  print **at that same bar**, never interpolated: a bar whose underlying did not print has no
+  moneyness, so it is refused rather than banded against a spot borrowed from elsewhere
+  (AD-9, DR-1).
 - **Fit:** OLS of `trdprc_1` on `mid`. Report `n`, slope, intercept, **R²**, and the median
-  `|trdprc_1 − mid|` in dollars and as a percentage of the mid. The figure draws the points,
-  the fit, and `y = x`.
+  `|trdprc_1 − mid|` in dollars **and**, as a separate statistic, the median of
+  `|trdprc_1 − mid| / mid`. The figure draws the points, the fit, and `y = x`.
 - **Stated caveat on the page:** within an hourly bar the print is the *last* trade and the
-  quote is the bar's snapshot, so the pair is not simultaneous; the scatter is the honest
-  measure of how far a mid can be from a real print at hourly resolution, which is the
-  resolution the backtest fills at.
+  quote is the last bid and ask reported in it, so the pair is not simultaneous; the scatter is
+  the honest measure of how far a mid can be from a real print at hourly resolution, which is
+  the resolution the backtest fills at. The wording lives in
+  `evidence.NON_SIMULTANEITY_CAVEAT` so the page and the notebook cannot state it differently.
+
+**Every word of "near-the-money regular-session calls" is enforced, not inherited.** T-83 found
+three of them true only by accident of the tape: nothing filtered `cp`, nothing excluded the
+**16:00 ET post-close bar** (9.3% of the published sample, and the *tightest* cohort in it — a
+stub on a fifth of the volume, banded against an extended-hours spot, flattering the number it
+was offered as evidence for), and nothing refused a tape pulled for another underlying — the
+guard `engine` has had since T-82, which now lives in `rules.require_matching_underlying` and
+is called by both.
+
+**The refusals are half the claim.** Every option bar the window holds is either in the sample
+or in exactly one named bucket, and `n` plus the buckets reconciles against the bars
+considered — a count that does not add up is indistinguishable from a sample quietly dropping
+rows, and it reaches a doc as a number an operator then "checks" (T-77). Attribution order is
+**structure, then market**: `not_a_call → no_strike → post_close → no_spot → outside_band →
+no_quote → no_print`. Structure first because a bucket must never name a fact that is not true
+of the row it counts — a strikeless bar was filed under `outside_band`, i.e. reported as having
+sat outside a band it had no position relative to. Among the market buckets the band comes
+first because it is the sample *universe*: ordered the other way, `no_print` counts every
+deep-OTM contract nobody was ever going to trade and answers nothing.
+
+**No fit is a valid answer.** Below `MIN_FIT_POINTS = 3` **distinct** mids, slope, intercept
+and R² are `NaN`, `fitted` is False and `fit_y` returns nothing to draw — FR-11's `iv_refusal`
+posture applied to a regression. Three guards were written here before one was right:
+`sxx <= 0` fails because the mean of N identical floats is not exactly that float (2,251 copies
+of 12.34 leave `sxx` ≈ 1e-27 and a confident garbage slope); `x.max() == x.min()` then fails on
+its own neighbour (2,250 identical mids plus **one** other has a spread, passes, and reports
+`slope = 6.0000, R² = 1.0000` off two points); the distinct count closes both, and subsumes a
+separate point-count guard that the mutation run showed could never fire.
+
+**`median_gap` is not the fit's residual.** It measures `|print − mid|`, the distance from
+`y = x`, because that is the error the book books when it fills at the mid. A sample sitting
+exactly on `print = 0.6 × mid + 1.25` would have R² = 1 and a median gap over a dollar.
+
+**The dollar and the percentage are two medians of two different variables.** The page prints
+them as separate statistics rather than "$0.035 (1.89% of the mid)", which invites the reader
+to divide and infer a median mid of $1.85. The real median mid is **$4.75**.
+
+### 10.1 What the committed tape says
+
+`covered_call_tape.parquet`, pulled 2026-09-15. Of **37,073** option bars in the window:
+
+| Bucket | Bars |
+|---|---|
+| `not_a_call` | 0 |
+| `no_strike` | 0 |
+| `post_close` (16:00 ET stub) | 4,633 |
+| `no_spot` | 0 |
+| `outside_band` (beyond ±5%) | 10,178 |
+| `no_quote` (§6.1 refuses it) | 1,492 |
+| `no_print` (quoted, nobody traded) | 4,144 |
+| **in the sample** | **16,626** |
+
+So of the **22,262** near-the-money regular-session call bars, **74.7%** carried both a valid
+quote and a print; of the quoted ones, **80.1%** traded. On that sample:
+
+**`print = 0.9979 × mid + 0.0104`, R² = 0.9962, median `|print − mid|` = $0.035, median
+`|print − mid| / mid` = 1.89%.**
+
+**Robustness.** Swept from ±1% to ±25% of spot, the slope stays within **0.9978 – 1.0020** and
+R² within **0.9948 – 0.9979**, dipping to its floor at **±2%** rather than moving monotonically.
+Above **±14%** the band stops binding — the sample saturates at n = 18,712 — so the top of that
+range is the same measurement repeated. *(The floor was published as 0.9960 until T-83: a
+number read off the wrong row of the notebook's own five-point grid, in a commit whose stored
+output already printed 0.994843. Four review lenses found it independently. The sweep's
+min, max and saturation point are pinned by a test now.)*
+
+**The ten fills.** All ten calls the book wrote are in the sample — pinned contract by
+contract, not by timestamp, so a band or a window that quietly excluded a fill fails rather
+than flatters. At those bars the median `|print − mid|` is **$0.0375**, 0.67% of the mid, worst
+case $0.145: about **$3.75 a contract** against a median premium of $644.50.
+
+### 10.2 What the evidence will not support — read before writing FR-19
+
+T-83's review produced six findings that change how this number should be described. They
+belong in the write-up rather than in a reader's discovery.
+
+1. **$0.035 is exactly one half-spread.** Measured per row, the median `|print − mid|` divided
+   by that bar's own half-spread is **1.000** — at the fills too. Only **30.4%** of prints land
+   strictly inside the quoted bid/ask; **28.3%** land exactly on an edge and **41.3%** outside
+   it. So the honest statement is not "the print is near the mid" but *the print is typically a
+   full half-spread away, i.e. at a quote edge* — which is what makes the spread, not the gap,
+   the scale that matters. The mid is unbiased, not accurate.
+2. **The fit adds nothing to the identity line.** The fitted R² is 0.996214; the R² of `y = x`
+   with no fitting at all is 0.996209. They differ in the sixth decimal. The OLS is worth
+   reporting because the brief asks for it, but the claim it supports is "the print is centred
+   on the mid", and the slope and the median gap say that better than R² does. R² over an `x`
+   spanning two orders of magnitude is easy to make large — ±5% of a $720 underlying is ±$36,
+   so the sample reaches contracts more than thirty dollars in the money whose mid is nearly
+   all intrinsic.
+3. **The fit is carried by contracts the book never writes.** Bars with mid > $10 are **34.1%**
+   of the sample and **68.5%** of the regression's leverage; the $5.00–$9.50 band where all ten
+   fills actually sat is 13.6% of the rows and **0.5%** of the leverage.
+4. **The entry bar is the worst hour of the session, not the average.** Pooled over the day the
+   median gap is $0.035 (1.89%); at the 15:00 ET bar the rule fills at it is **$0.060 (2.25%)**.
+   Split further: the 1,937 entry-session 15:00 bars run $0.045 (2.19%), and the 294
+   **expiry-session** 15:00 bars run **$0.305** — 8.7× the sample, and a bar no entry ever
+   reads, because settlement takes the *stock* print.
+5. **Selection bias is real but concentrated where the rule does not write.** The 4,144
+   unprinted bars are **95.4% in the money**, median mid $26.68, median half-spread $0.310
+   against $0.025 for the bars that printed — so the censoring is a deep-ITM phenomenon, not a
+   general "the quiet ones are missing". In the ±1% band the rule actually writes in, **99.9%**
+   of quoted bars printed. The measured gap is a floor on the error *for deep-ITM contracts*
+   and very nearly the whole truth near the money.
+6. **`n` is not 16,626 independent observations.** The sample is a panel: **766 contracts**
+   across **343 bars**, the same contract reappearing dozens of times and every contract in one
+   bar sharing one spot and one market state. Quote R² accordingly; "a slope indistinguishable
+   from one" is an inferential claim this sample rejects (t = −5.6 naive, −3.4 clustered by
+   contract). The defensible statement is the *size* of the deviation — 0.21%, under a cent
+   near the money — not its significance.
+
+**The bound that actually matters, and it is small.** The signed gap has mean −$0.0078 and
+median $0.000 (t = −1.72): no economically meaningful bias against the seller. And the
+worst case can be priced outright — selling all ten calls at the **bid** instead of the mid
+costs **$49.50** over the window, moving the return from **1.658% to 1.592%**. Whatever moves
+this backtest's result, it is not the fill rule. That sentence is the one FR-19 should make,
+and it rests on the $49.50, not on the R².
 
 ## 11. The page
 
@@ -519,7 +647,7 @@ waits on the page (T-59).
 | I-10 | **Skips are real:** every week without an entry appears in the skip log with a reason the tape supports (no print / no strike / no valid quote / short week), and no week appears in both. |
 | I-11 | **Reg T arithmetic:** `IM == 0.5 × LMV`, `MM == 0.25 × LMV`, `available == NAV − IM`, `excess == NAV − MM`; all zero when flat. |
 | I-12 | **Determinism:** the same tape and `Params` produce a byte-identical blotter. |
-| I-13 | **The page says what the book says:** the blotter and the R² rendered into the built page equal the engine's outputs for the committed tape (the T-44 lesson, applied to tables). |
+| I-13 | **The page says what its sources say:** the blotter rendered into the built page equals `run_backtest`'s output for the committed tape, and the R² equals `evidence.mid_vs_print`'s (the T-44 lesson, applied to tables). *Corrected 2026-09-16 (T-83): this said "the engine's outputs" for both, written before T-58 moved the R² out of the engine's reach — and `evidence` may not import `engine`, so taken literally it asked for a comparison the package's own layering forbids. Amending a spec means re-reading the invariants that quote it; T-82 recorded that lesson eight lines above the section T-58 edited.* |
 
 ## 13. Edge cases (AD-9 applied)
 

@@ -191,7 +191,18 @@ and `live.py` landed 2026-09-13, `writeup.py` and `tape.py` 2026-09-14, **`engin
 `page.py`, `writeup.py`, layered as §2 prescribes. `rules.py` is the transform core's pure
 half — `Params` (the SD-x decisions as a frozen record), `select_strike`, `is_itm`, `valid_mid`,
 the blotter-row constructors, and the calendar helpers that own SPEC §3.2 item 4's **closing
-bar**, the one place allowed to decide which hourly bar is "the close". **`live.py` landed the
+bar**, the one place allowed to decide which hourly bar is "the close".
+**`evidence.py` landed 2026-09-16** (T-58, FR-17): `mid_vs_print` and the `MidVsPrint` record
+— SPEC §10's near-the-money sample, its OLS fit and its named refusals. It was written inside
+`rules.py`, beside the `valid_mid` it justifies, and **the PO had it lifted out the same day**:
+cohesion there was real but it gave `rules` two reasons to change, a strategy decision and a
+statistic. The three transform-core modules now have one responsibility each — `rules` is what
+the strategy **decides**, `engine` is the book those decisions **produce**, `evidence` is what
+the tape **says**. `evidence` imports `rules` (for `Params` and the money rounding) and
+**never imports `engine`**: the book is derived from the blotter and the evidence from the
+tape, which is what makes the fit a check on the fill assumption rather than a restatement of
+it. `Params.ntm_band` stays in `rules` — the parameter belongs to the decisions the page
+prints (FR-14), the statistic does not. **`live.py` landed the
 same day** (T-80): FR-21's forward run, whose `capture()` is its only network and whose
 planners are pure functions of a captured payload, so the leg that books a real trade is
 tested offline. The blotter constructors sit in `rules.py` rather than `live.py` as T-80's
@@ -204,13 +215,21 @@ acquisition modules share lives in `rules.to_exchange_time`, so the OQ-11 conven
 applied one way in the backtest and another in the live leg. **AD-7's fallback for A2 is
 `tape.synthesize_tape` (T-63)** — the seeded tape that backs both the fixtures and a
 tape-less machine, with an explicit `end_date` so it can never report on the calendar, and
-one named pathology per skip reason the engine can log. **`engine.py` landed 2026-09-15** (T-57): `run_backtest(tape, params) -> Book` is the whole of FR-15/FR-16 and is pure — it takes a `Tape` as a *parameter*, so its only import of the acquisition half is a `TYPE_CHECKING` one, and a test checks that structurally rather than by grep. Every number it returns beyond the blotter — the skip log, the per-bar ledger, the weekly table — is a **projection** of the blotter over the tape, never a second place a number is decided (SPEC §1). Specified in [SPEC-COVERED-CALL.md](SPEC-COVERED-CALL.md).
+one named pathology per skip reason the engine can log. **`evidence.py` landed 2026-09-16** (T-58/T-83): FR-17's statement *about the tape* —
+`mid_vs_print`, the `MidVsPrint` record and its named refusals. It may import `rules` and
+**never `engine`**: the book is derived from the blotter and the evidence from the tape, so a
+fit that could read the book would restate the fill assumption instead of checking it. Two
+structural tests enforce that, and the second exists because the obvious one does not: a
+verbatim port of `engine`'s substring ban list matches none of `from .engine import …`.
+**`engine.py` landed 2026-09-15** (T-57): `run_backtest(tape, params) -> Book` is the whole of FR-15/FR-16 and is pure — it takes a `Tape` as a *parameter*, so its only import of the acquisition half is a `TYPE_CHECKING` one, and a test checks that structurally rather than by grep. Every number it returns beyond the blotter — the skip log, the per-bar ledger, the weekly table — is a **projection** of the blotter over the tape, never a second place a number is decided (SPEC §1). Specified in [SPEC-COVERED-CALL.md](SPEC-COVERED-CALL.md).
 *Does not belong here:* the RIC/OCC grammar (→ `option_surface_utils`), any token (→ `theme`).
 
 **`tests/`** — mirrors the transform core first, then everything a defect could reach the
 published page through. Uses the seeded synthetic panel as its fixture (AD-7), exposed as the
 session-scoped `synthetic_payload` / `synthetic_wide` fixtures in `tests/conftest.py`.
-**496 green, no xfail (2026-09-15):** `tests/covered_call/` mirrors A2's subpackage (AD-12) —
+**547 green, no xfail (2026-09-16):** `tests/covered_call/` mirrors A2's subpackage (AD-12) —
+`test_engine.py` carries the I-1…I-12 invariant suite over both books and `test_evidence.py`
+FR-17's fit, its named refusals and the AD-12 layering guards;
 `test_rules.py` carries I-9 as a seeded property plus the closing-bar group that pins the T-62
 trap, `test_live.py` covers FR-21's forward run and `test_tape.py` the whole pull path, both by
 faking the single LSEG seam so the code that books trades and writes the tape is exercised with
@@ -491,15 +510,19 @@ submissions point at it.
 established after the proposal was written:** `live.py` joins the module list, and the
 blotter-row constructors are pinned to `rules.py`. `rules.py` and `live.py` had already
 landed 2026-09-13 under T-65/T-80, because those tasks name those paths and Monday's live
-entry depended on them; the sign-off ratifies where they sit.)*
+entry depended on them; the sign-off ratifies where they sit. **Amended again — PO,
+2026-09-16 (T-58): `evidence.py` joins the transform core.** T-58 had put `mid_vs_print` in
+`rules.py` on the grounds that the module list was signed and CLAUDE.md prefers editing an
+existing module; the PO overruled it — *"we're following best engineering SOLID practices, not
+what CLAUDE.md prefers"*. The list is a decision about responsibilities, not a budget.)*
 *Context:* Assignment 1.1's flat module set (`*utils.py` / `*plot.py` / `*app.py`) was the
 brief's file-layout rule, released with AD-10. A second assignment adds acquisition, a
 transform core (rules, engine), presentation and a page of its own; by the fourth, a flat set
 is unreadable, and AD-11's generator wants one page module per assignment anyway.
 *Decision:* `options_surface_lab/covered_call/` — `tape.py` (acquisition + parquet cache),
-`live.py` (FR-21's forward run — acquisition too, and the CLI), `rules.py` + `engine.py`
-(transform core: no plotly, no theme), `plots.py` (presentation), `page.py` (application: the
-builder the generator registers), `writeup.py` (the PO's prose). §2's layer rules apply
+`live.py` (FR-21's forward run — acquisition too, and the CLI), `rules.py` + `engine.py` +
+`evidence.py` (transform core: no plotly, no theme), `plots.py` (presentation), `page.py`
+(application: the builder the generator registers), `writeup.py` (the PO's prose). §2's layer rules apply
 *inside* the subpackage; `tests/covered_call/` mirrors it. **The network lives only in the
 acquisition pair**, and in each it is one seam — `live.py` imports `lseg.data` inside
 `lseg_session()` and nowhere else, which is what lets the leg that books a real trade be
@@ -535,6 +558,7 @@ architecture change (§5, §6 first).
 | Speed up the LSEG pull | acquisition only (banding, batching) | transforms |
 | Explore / eyeball the data | `notebooks/` (consume the package) | forked transform logic — graduate it to `utils` + test |
 | **(A2)** Add or change a strategy rule or parameter | `covered_call/rules.py` + `Params`, its test, and the page's rule sentence (FR-14 pins them) | the engine's loop — a rule *selects*, the engine *books* |
+| **(A2)** Add or change a statistic *about the tape* (FR-17's fit, a spread measure) | `covered_call/evidence.py` + its test + the notebook section (AD-3 co-build); a new *parameter* for it goes in `rules.Params` so FR-14 prints it | `engine.py` — the book is derived from the blotter, the evidence from the tape, and neither may read the other |
 | **(A2)** Change how a fill, a skip or an expiry is booked | `covered_call/engine.py` **and** the invariant suite (SPEC-COVERED-CALL §12). A booking change that breaks an invariant is a domain-rule change — PRD §14 first | the ledger's identities (I-1, I-2, I-11) |
 | **(A2)** Add a figure or table to the covered-call page | `covered_call/plots.py` → `covered_call/page.py`; tables through the generator's templates | 1.1's page; the theme, except through T-68 |
 | **(A2)** Pull or re-shape the hourly tape | `covered_call/tape.py` only; additive payload keys | `option_pipeline_data.pkl`, ever |

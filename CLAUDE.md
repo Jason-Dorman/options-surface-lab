@@ -74,7 +74,7 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 
 ```bash
 python build_preview.py    # THE DELIVERABLE — builds the static index.html that Pages serves
-pytest                     # 496 tests in tests/ — all green, no xfail
+pytest                     # 547 tests in tests/ — all green, no xfail
 reflex run                 # local dev server (FR-1); not what gets published
 ```
 
@@ -323,11 +323,13 @@ refuses a strike, and fails only if the fixture has none anywhere. The fixture i
 is still calendar-dependent — OQ-6's `end_date` parameter is the root fix and needs PO
 sign-off.
 
-**Next up (2026-09-15):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST.** The first live
-entry is **booked** — see T-78 below. ~~T-56~~, ~~T-77~~ and ~~T-57~~ are done — **the tape is pulled and
-the book runs** — so the critical path is **T-58** (the mid-vs-print evidence),
-T-79/T-59 (the page), T-60 (the PO's write-up), then T-71/T-72 to ship. **T-66 (notebook 03) was
-meant to be co-built with T-57 and was not** — it is still open. The PO chose **QQQ** (SD-1, 2026-09-12) and the **last
+**Next up (2026-09-16):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST.** The first live
+entry is **booked** — see T-78 below. ~~T-56~~, ~~T-77~~, ~~T-57~~ and ~~T-58~~ are done — **the tape is
+pulled, the book runs and the fill assumption is measured** — so the critical path is now
+**T-79/T-59** (the page), T-60 (the PO's write-up), then T-71/T-72 to ship. **T-66 (notebook 03
+§1–§4) is still open**: it was meant to be co-built with T-57 and was not; T-58 created the
+notebook and wrote §5 into it, so T-66 is now a matter of filling in the sections above its own.
+The PO chose **QQQ** (SD-1, 2026-09-12) and the **last
 hourly bar of the week's first session** as the entry bar (SD-4, 2026-09-13). The close is where
 the mid is most defensible, which is the whole fill assumption; it also makes OQ-11 load-bearing
 (a bar's `ts` convention decides which bar "last" is) and OQ-13 live (does the brief's "Monday
@@ -583,13 +585,77 @@ QQQ's root and RIC format are proven, hourly reaches a contract's whole listed l
   only under the *live* form; the 09-04 ones, nine days out, only under the caret. The pull
   must try both and record the winner (SPEC §3.3) — otherwise recently-expired weeks
   silently log as "no quote".
+T-58 landed 2026-09-16 (FR-17, **A2-M3**) — **`covered_call/evidence.py`**, plus
+`notebooks/03_covered_call.ipynb` §5 and `Params.ntm_band` (5%) in `rules`, so FR-14 prints
+the sample the R² was measured on. It shipped inside `rules.py` — beside the `valid_mid` it
+justifies — and **the PO had it split out the same day**: *"we're following best engineering
+SOLID practices, not what CLAUDE.md prefers."* The cohesion argument was real and still lost,
+because it gave `rules` two reasons to change. **AD-12 is amended**: the transform core is
+`rules` (what the strategy *decides*) + `engine` (the book those decisions *produce*) +
+`evidence` (what the tape *says*), and `evidence` may never import `engine` — a fit computed
+from the book would restate the fill assumption instead of checking it. *The standing lesson:
+"prefer editing existing modules" is a tie-breaker, not a reason to give a module a second
+responsibility.*
+
+**T-83 reviewed it the same day (13-agent workflow): 39 rulings — 32 confirmed, 7 partial,
+0 refuted — plus ~20 defects the skeptics hit while attacking and 7 from a completeness
+critic. Two moved a published number.** The corrected headline on the committed tape is
+**n = 16,626 of 37,073** option bars (74.7% of the 22,262 near-the-money regular-session call
+bars), `print = 0.9979 × mid + 0.0104`, **R² = 0.9962**, median |print − mid| **$0.035**,
+median ratio 1.89%; at the book's ten fills **$0.0375** (0.67%, worst $0.145). **51 evidence
+tests, 33 of 33 injected defects caught; 547 green, no xfail.** What to carry:
+
+- **Three of the words in "near-the-money regular-session calls" were true only by accident of
+  the tape.** Nothing filtered `cp`; nothing refused a tape pulled for another underlying (the
+  guard `engine` has had since T-82 — now shared as `rules.require_matching_underlying`); and
+  nothing excluded the **16:00 ET post-close bar**, which was 9.3% of the sample and the
+  *tightest* cohort in it — a stub on a fifth of the volume, banded against an extended-hours
+  spot, flattering the number it was offered as evidence for. `rules.CLOSING_BAR_HOUR_ET`
+  exists for exactly this and `Book.daily_ledger` already filtered on it. **A rule the package
+  has decided is not applied until every module applies it.**
+- **A number can be wrong in a commit whose own artifact prints the right one.** The published
+  band-sweep floor was R² 0.9960; the true floor is **0.9948** at ±2%, and the notebook's
+  stored output in the same commit already printed 0.994843. It came from reading the wrong row
+  of a five-point grid. Four lenses found it independently. *The lockstep rule is not only
+  "update the doc" — it is "derive the doc's number from the artifact, then pin it."*
+- **`$0.035` is exactly one median half-spread**, per row, at the fills too. Only **30.4%** of
+  prints land strictly inside the quoted bid/ask; 28.3% land on an edge and **41.3%** outside.
+  So the mid is *unbiased*, not *accurate*, and the scale that makes the gap meaningful is the
+  spread — which nothing had quoted. The fitted R² also differs from `y = x`'s in the **sixth
+  decimal**, so the fit adds nothing to the identity line. Six findings of this kind are in
+  SPEC §10.2 for T-60, including the one number that actually bounds the result: selling all
+  ten calls at the **bid** instead of the mid costs **$49.50** — 1.658% → 1.592%.
+- **A degeneracy guard took three attempts, and each failed for a different reason.**
+  `sxx <= 0` (the mean of N identical floats is not that float: `sxx` ≈ 1e-27 and a confident
+  garbage slope) → `x.max() == x.min()` (N−1 identical plus **one** other has a spread, passes,
+  and reports slope 6.0000, R² 1.0000 off two points) → the count of **distinct** x, which also
+  subsumed a point-count guard the mutation run proved could never fire. *Dead code that looks
+  like a safety check is worse than no check.*
+- **A guard copied from a sibling can be blind to the thing it was copied for.** The obvious
+  way to enforce "evidence never imports engine" is to port `test_engine.py`'s substring ban
+  list — which matches none of `from .engine import run_backtest`. One of the skeptics found
+  that in the *proposed fix* before it was written. The guard is structural (AST) and names
+  `engine` explicitly.
+- **My mutation harness was worthless twice before it was right, and neither time was about the
+  code.** A killed run left an injected defect (`spot = spot.ffill().bfill()`) in the tree and
+  the next run read the poisoned file as its **baseline**, reporting a meaningless 22/22 — my
+  integrity check had grepped for the correct line and found it, confirming the presence of
+  right code rather than the absence of wrong code. Then a review subagent, told to use "the
+  system temp directory", overwrote the harness itself in the shared scratchpad. The harness now
+  rewrites both files from its snapshot and verifies before **every** mutant, and lives in its
+  own directory. *A harness that cannot prove its own baseline is measuring nothing.*
+- **Two mutants are equivalent on every reachable input** (`~(<= band)` vs `> band`, now that
+  `no_strike` refuses a NaN moneyness upstream; and `<=` vs `<` on the band edge, which no $1
+  strike ladder can land on to the last bit). They are **named in the module** rather than left
+  to reappear as survivors — T-57's precedent.
+
 AD-10 / AD-11 are approved but **not landed and nothing in the code has moved**; with eight
 days left the session recommends deferring the whole M5 restructure until after the
 submission and building A2 on the current builder (BACKLOG-2 T-79) — PO to confirm. The
 order that fits the calendar is at the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions →
-T-78's entry~~ (all landed) → **T-56** → T-57 → T-58 → T-79/T-59 → T-60 → ship, with T-78's
+T-78's entry → T-56 → T-57 → T-58~~ (all landed) → **T-79/T-59** → T-60 → ship, with T-78's
 settlement leg on Friday 09-18. 1.1's brief is archived at
-`docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open. **496 tests green, no xfail** (2026-09-15, full run).
+`docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open. **547 tests green, no xfail** (2026-09-16, full run).
 Update this paragraph as things land (lockstep rule).
 
 **T-57 landed 2026-09-15 — `covered_call/engine.py`, so the book runs** (FR-15, FR-16, NFR-6).

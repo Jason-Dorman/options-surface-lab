@@ -60,6 +60,7 @@ from .rules import (
     entry_call_row,
     expire_row,
     is_itm,
+    require_matching_underlying,
     select_strike,
 )
 
@@ -186,23 +187,12 @@ class Book:
 def _require_matching_underlying(tape: "Tape", params: Params) -> None:
     """Refuse a tape for a different name than ``Params`` describes.
 
-    ``tape.stock`` selects on ``kind == "stock"``, never on the RIC, so handing the
-    engine somebody else's tape produces a complete, plausible, entirely wrong book
-    — priced off one underlying and written against another's chain. It is exactly
-    the failure that renders without erroring, so it is refused at the door.
+    The check itself is :func:`rules.require_matching_underlying`. It moved there in
+    T-83, when the adversarial review found ``evidence.mid_vs_print`` missing the
+    same guard: two copies of one rule is how they drift, and the second consumer
+    proved there would be more than one.
     """
-    stock = tape.stock
-    if stock.empty:
-        raise ValueError(
-            f"the tape carries no stock bars for {params.underlying}; the calendar "
-            "(SPEC §3.2) has nothing to come from."
-        )
-    names = sorted(set(stock["ric"]))
-    if names != [params.underlying]:
-        raise ValueError(
-            f"this tape's stock is {names}, but Params.underlying is "
-            f"{params.underlying!r}. Pass the tape pulled for this name (RUNBOOK §8)."
-        )
+    require_matching_underlying(tape, params)
 
 
 def window_weeks(tape: "Tape", params: Params) -> list[Week]:
