@@ -51,6 +51,17 @@ One long table, one row per (bar, instrument). Parquet, not pickle (AD-11): insp
 the pandas-version fragility that already broke `option_pipeline_data.synthetic.pkl` does not
 apply.
 
+**The dtypes below are declared, not inherited, and `tape._normalise_dtypes` is the one place
+that applies them** — `load_tape` and `synthesize_tape` both pass through it. An inherited
+dtype is one the *pandas version* decides: pandas 2 forces every datetime to nanoseconds while
+pandas 3 infers microseconds from a python `datetime`, and pandas 3 reads a parquet string
+column back as its new `str` dtype rather than `object`. Either difference makes the schema a
+function of which pandas wrote or read the file — the same class of silent, environment-
+dependent difference as §3.3's two RIC forms, and it is why `ts`'s unit (`tape.TS_UNIT`) and
+the python-valued columns (`tape._OBJECT_COLUMNS`) are pinned rather than assumed. *Recorded
+2026-09-17, after CI went red on pandas 3.0 against a suite that was green on this machine's
+pandas 2 every time.*
+
 | Column | Type | Notes |
 |---|---|---|
 | `ts` | `datetime64[ns, America/New_York]` | Bar timestamp, tz-aware, **stamped at the bar's START**. LSEG returns it tz-naive in **UTC**, start-stamped (T-62, 2026-09-13: `O_SEC_OFST` = 0 and `C_SEC_OFST` = 3599 on essentially every bar). Localise to UTC, convert to `America/New_York`, store converted. **Never hardcode a UTC hour** — 15:00 ET is 19:00 UTC under EDT and 20:00 UTC under EST, and the A2 window is entirely EDT. |

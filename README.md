@@ -47,7 +47,7 @@ source /c/Users/rjd61/anaconda3/etc/profile.d/conda.sh && conda activate algo
 
 python build_preview.py        # 1.1's page  → options_surface_preview.html (~32 s)
 python build_covered_call.py   # A2's page   → covered_call_preview.html
-python -m pytest tests/ -q     # 587 tests, all green, no xfail
+python -m pytest tests/ -q     # 588 tests, all green, no xfail
 reflex run                     # local Reflex viewer (being retired — AD-10)
 
 # Both builders take `--site DIR`, which is what CI passes: the page lands at DIR/<route>
@@ -71,7 +71,7 @@ never commit `lseg-data.config.json` (the app-key; gitignored).
 | `options_surface_lab/page_shell.py` | The chrome both page builders render — command bar, readouts, panels, document — and the site's routes. |
 | `build_preview.py` · `build_covered_call.py` | One static page builder per route. CI runs both. |
 | `option_pipeline_data.pkl` | The committed LSEG cache: 296 series × 53 days. A frozen artifact. |
-| `tests/` | 587 tests; the pure functions first, then everything a defect could reach a page through. |
+| `tests/` | 588 tests; the pure functions first, then everything a defect could reach a page through. |
 | `notebooks/` | Exploration and evidence, numbered by assignment. Consume the package; never a dependency. |
 | `.github/workflows/pages.yml` | pytest in a clean container with no credentials → build → guards → Pages. |
 

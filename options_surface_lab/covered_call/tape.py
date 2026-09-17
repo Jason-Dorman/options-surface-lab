@@ -89,6 +89,18 @@ BAR_COLUMNS = [
 ]
 _NUMERIC_COLUMNS = ["strike", "bid", "ask", "trdprc_1", "open", "high", "low",
                     "volume", "num_moves"]
+#: Columns holding python values rather than a pandas scalar type: a RIC string, the
+#: `stock`/`option` tag, `C`/`P`, and a `datetime.date`. Declared `object`, and **pinned**
+#: there by `_normalise_dtypes` — pandas 3 reads a parquet string column back as the new
+#: `str` dtype, so without this a tape read off disk has a different schema from the one
+#: held in memory, on the same code, purely by pandas version.
+_OBJECT_COLUMNS = ["ric", "kind", "cp", "expiry"]
+#: The resolution `ts` is stored and compared at. Declared, not inherited: pandas 2 forced
+#: every datetime to nanoseconds, pandas 3 infers microseconds from a python `datetime`, so
+#: an undeclared unit makes the stored schema a function of the pandas version that happened
+#: to write it — the same class of silent, pull-dependent difference as SPEC §3.3's two RIC
+#: forms. Nanoseconds because that is what the committed parquet already holds.
+TS_UNIT = "ns"
 
 #: T-62, 2026-09-13: every integer strike 710..721 returned data on QQQ weeklies;
 #: 712.50 and 717.50 returned none. **Measured once, by the spike — not by the pull.**
@@ -224,13 +236,29 @@ def _normalise_dtypes(bars: pd.DataFrame, tz: str = EXCHANGE_TZ) -> pd.DataFrame
 
     ``ts`` is read through UTC and converted, so a file written by some other tool
     with naive timestamps is treated as UTC — LSEG's convention — rather than being
-    quietly relabelled as exchange time, which would move every bar four hours.
+    quietly relabelled as exchange time, which would move every bar four hours. Its
+    **unit** is pinned to :data:`TS_UNIT` and the python-valued columns to `object`,
+    for the same reason the timezone is: an inherited dtype is one the pandas version
+    decides. Under pandas 3 a `datetime` becomes microseconds and a parquet string
+    column reads back as `str`, so without these two lines the synthetic tape and a
+    tape off disk carry different schemas — which is exactly what SPEC §3.4 forbids,
+    and which CI caught on 2026-09-17 while this machine's pandas 2 could not see it.
+
+    This is the **one** place the stored schema is applied. `load_tape` and
+    `synthesize_tape` both pass through here, which is what lets AD-7's fallback be
+    indistinguishable from a pull by construction rather than by inspection.
     """
     out = bars.copy()
-    out["ts"] = pd.to_datetime(out["ts"], utc=True).dt.tz_convert(tz)
+    out["ts"] = pd.to_datetime(out["ts"], utc=True).dt.tz_convert(tz).dt.as_unit(TS_UNIT)
     for column in _NUMERIC_COLUMNS:
         out[column] = pd.to_numeric(out[column], errors="coerce")
     out["expiry"] = [None if pd.isna(v) else _as_date(v) for v in out["expiry"]]
+    for column in _OBJECT_COLUMNS:
+        # `.astype(object)` alone is not enough: pandas 3's string dtype carries `nan`
+        # for a missing value, so a stock row's `cp` would come back as a float where
+        # the in-memory tape holds `None`. Missing means None here, as `expiry` above.
+        values = out[column]
+        out[column] = values.astype(object).where(values.notna(), None)
     return out[BAR_COLUMNS].sort_values(["ts", "ric"]).reset_index(drop=True)
 
 
@@ -242,8 +270,8 @@ def _as_date(value) -> dt.date:
 def empty_bars() -> pd.DataFrame:
     """An empty table in the stored schema — what a failed pull returns (DR-10)."""
     frame = pd.DataFrame({c: pd.Series(dtype="float64") for c in _NUMERIC_COLUMNS})
-    frame["ts"] = pd.Series(dtype=f"datetime64[ns, {EXCHANGE_TZ}]")
-    for column in ("ric", "kind", "cp", "expiry"):
+    frame["ts"] = pd.Series(dtype=f"datetime64[{TS_UNIT}, {EXCHANGE_TZ}]")
+    for column in _OBJECT_COLUMNS:
         frame[column] = pd.Series(dtype="object")
     return frame[BAR_COLUMNS]
 

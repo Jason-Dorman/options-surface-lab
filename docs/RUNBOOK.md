@@ -315,6 +315,37 @@ this workflow, so the build step and the guards cannot drift from where the page
 | `pytest` can't import the package | Run from repo root (root `conftest.py` provides the path) |
 | Empty figures on the deployed site | Base path wrong, or import-time baking (T-14) not in place |
 | Pull returns almost nothing | Workspace not running/logged in; or split (T-6); or wrong root |
+| **`pytest` green here, red in Actions** | The two environments are not the same one → §6.1 |
+
+### 6.1 Green locally, red in CI
+
+This happened on three consecutive commits (2026-09-16/17, T-84) and cost a day before it was
+even looked at, because "it passes on my machine" was true every time.
+
+`requirements.txt` is **pinned** now, to the versions `algo` runs, so this should not recur —
+but the pin only binds what CI installs, not what `algo` drifts to. When the two disagree, no
+amount of re-running the suite locally will show you anything.
+
+**Reproduce what CI runs, on Linux, in a clean venv.** Ubuntu is already on this machine under
+WSL:
+
+```bash
+wsl -d Ubuntu-24.04
+git clone /mnt/c/Users/rjd61/Documents/.../options_surface_lab ~/osl_ci && cd ~/osl_ci
+python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -c 'import pandas; print(pandas.__version__)'   # compare with `algo`
+OSL_OFFLINE=1 .venv/bin/python -m pytest tests/ -q
+```
+
+The clone matters as much as the venv: it carries only what is **committed**, so it also
+catches a test leaning on a file that exists locally and was never added. Check the installed
+versions against `algo`'s before reading the failures — a dtype or formatting difference
+between two pandas majors reads like a code defect and is not one.
+
+*Getting the failure text out of Actions needs auth (`gh run view --log`), but the run list and
+the job/step conclusions are public on `api.github.com` — enough to see **which step** failed
+and **which commit** it started on. That last one is the useful signal: a failure that starts
+on a commit which did not touch the failing area is usually the environment, not the commit.*
 
 ## 7. The live leg — Monday's entry and Friday's settlement (FR-21, T-78/T-80)
 

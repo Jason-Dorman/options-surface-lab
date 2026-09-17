@@ -75,7 +75,7 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 ```bash
 python build_preview.py       # 1.1's page — the static index.html Pages serves at /
 python build_covered_call.py  # A2's page — Pages serves it at /covered-call/
-pytest                        # 587 tests in tests/ — all green, no xfail
+pytest                        # 588 tests in tests/ — all green, no xfail
 reflex run                    # local dev server (FR-1); not what gets published
 
 # Both take `--site DIR` (CI passes `--site _site`): the page lands at DIR/<route> with its
@@ -591,13 +591,39 @@ QQQ's root and RIC format are proven, hourly reaches a contract's whole listed l
   only under the *live* form; the 09-04 ones, nine days out, only under the caret. The pull
   must try both and record the winner (SPEC §3.3) — otherwise recently-expired weeks
   silently log as "no quote".
+**T-84 — CI was red on three consecutive commits while the suite was green here every time
+(2026-09-17).** Two causes. **`requirements.txt` was unpinned**, so CI resolved whatever PyPI
+held that morning — **pandas 3.0.5** — while `algo` kept August's **2.3.3**; every version is
+pinned now, to what `algo` runs. And **the tape's stored schema was inherited rather than
+declared**, which pandas 3 decided differently: `ts` came out `datetime64[us]` from a python
+`datetime` where pandas 2 forces `ns`, and a parquet string column read back as the new `str`
+dtype rather than `object` — so the synthetic tape and a tape off disk carried different
+schemas on the same code, which SPEC §3.4 forbids. `TS_UNIT` and `_OBJECT_COLUMNS` are pinned
+by `_normalise_dtypes`, the one place `load_tape` and `synthesize_tape` both pass through.
+Verified in a clean Linux venv **both ways — 588 green on pandas 2.3.3 and on 3.0.5** — so the
+fix is version-agnostic and the pin is for reproducibility, not for hiding. Three things to
+carry:
+
+- **The guard that failed had been exempting the columns that broke.** The schema test did
+  `continue` past `ric`/`kind`/`cp`/`expiry` — "object columns carry python values, not
+  dtypes" — and that exemption is exactly where the schema drifted. *A column a schema test
+  skips is a column with no schema test.*
+- **Its reference could only ever catch half the failure.** It compared the generator against
+  `empty_bars()`, which the generator was written against; the drift that reached CI was on
+  the **loader** side. The new test's reference is a tape that has actually been through a
+  file — T-46's rule, applied to a schema.
+- **A green local suite says nothing about CI while the two environments are not pinned to
+  each other.** Three commits' worth of "it passes here" was true and irrelevant. Reproducing
+  it took a clean Linux venv built from `requirements.txt`, which is the only thing that ever
+  ran what CI runs.
+
 **T-79 landed 2026-09-17 (FR-18, AD-11's interim) — the site has a second page.**
 `options_surface_lab/page_shell.py` holds the chrome both builders render (`PageShell` —
 command bar, readout strip, panel, document — plus the routes and the cross-page links), and
 `build_covered_call.py` publishes `/covered-call/`, carrying the book's six headline numbers
 read off `run_backtest` over the committed tape. Each builder now takes `--site DIR` and
 writes its own route, so CI copies nothing. **38 new tests, 13 of 13 injected defects caught;
-587 green, no xfail.** Driven in a real Chromium: **0 defects across 2 pages x 14 widths**,
+588 green, no xfail.** Driven in a real Chromium: **0 defects across 2 pages x 14 widths**,
 zero console errors. **There is still no registry and no template engine** — a third
 assignment would mean a third builder, which is exactly what T-51 is for. Five things worth
 carrying:
@@ -701,7 +727,7 @@ submission — PO to confirm the standing recommendation. The order that fits th
 the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions → T-78's entry → T-56 → T-57 → T-58 →
 T-79~~ (all landed) → **T-68/T-69/T-59** → T-60 → ship, with T-78's settlement leg on Friday
 09-18. 1.1's brief is archived at `docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open.
-**587 tests green, no xfail** (2026-09-17, full run).
+**588 tests green, no xfail** (2026-09-17, full run; verified in a clean Linux venv on the pinned versions *and* on pandas 3).
 Update this paragraph as things land (lockstep rule).
 
 **T-57 landed 2026-09-15 — `covered_call/engine.py`, so the book runs** (FR-15, FR-16, NFR-6).

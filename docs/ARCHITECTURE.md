@@ -254,7 +254,7 @@ verbatim port of `engine`'s substring ban list matches none of `from .engine imp
 **`tests/`** — mirrors the transform core first, then everything a defect could reach the
 published page through. Uses the seeded synthetic panel as its fixture (AD-7), exposed as the
 session-scoped `synthetic_payload` / `synthetic_wide` fixtures in `tests/conftest.py`.
-**587 green, no xfail (2026-09-17):** `test_page_shell` covers the chrome both builders
+**588 green, no xfail (2026-09-17):** `test_page_shell` covers the chrome both builders
 render, `test_pages` asserts of **every** page what is true of any page — self-contained,
 classes that resolve, reachable from its siblings — parametrized off `page_shell.LOCAL_PATHS`
 so a page added without a guard is impossible, and `test_build_covered_call` pins A2's page to

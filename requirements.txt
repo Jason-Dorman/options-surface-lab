@@ -1,16 +1,29 @@
 # Options Surface Lab — dependencies
 # Course environment: conda env `algo` (Python 3.12)
-reflex
-pandas
-numpy
-scipy
-plotly
-pyarrow     # Assignment 2's tape is parquet, not pickle (AD-11, SPEC-COVERED-CALL §3.1)
+#
+# PINNED, deliberately (2026-09-17). These were floating, so CI resolved whatever PyPI
+# had that morning while this machine kept what conda installed in August — and on
+# 2026-09-16 pandas 3.0 shipped and three commits went red on a suite that was green
+# locally every time. A graded artifact whose build can break on someone else's release
+# is not reproducible; the pins are the version `algo` actually runs, so the suite CI
+# runs is the suite the PO ran. Raise one deliberately, re-run the suite, commit the
+# bump — never let it happen by itself.
+#
+# The code is version-agnostic where it can be: the tape's stored schema is pinned by
+# `covered_call/tape.py: _normalise_dtypes` and passes on both pandas 2.3 and 3.0
+# (verified 2026-09-17 in a clean Linux venv). The pin is about reproducibility, not
+# about hiding from pandas 3.
+reflex==0.9.8
+pandas==2.3.3
+numpy==2.5.2
+scipy==1.18.1
+plotly==7.0.0
+pyarrow==25.0.1     # Assignment 2's tape is parquet, not pickle (AD-11, SPEC-COVERED-CALL §3.1)
 
 # Dev / test
-pytest
-ipykernel   # run notebooks/ in VS Code
-nbformat    # plotly inline rendering inside notebooks
+pytest==9.1.1
+ipykernel           # run notebooks/ in VS Code — not imported by the suite
+nbformat            # plotly inline rendering inside notebooks
 
 # Data acquisition only (dev-time, requires LSEG Workspace running locally;
 # app-key lives in lseg-data.config.json, which is gitignored)

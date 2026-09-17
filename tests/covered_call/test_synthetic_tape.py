@@ -72,14 +72,41 @@ def _entry(tape, week, params):
 # It is a tape
 # --------------------------------------------------------------------------
 def test_the_schema_is_indistinguishable_from_a_pulled_tape(synthetic_tape):
+    """**Every** column, including the ones that hold python values.
+
+    This used to `continue` past `ric`/`kind`/`cp`/`expiry` — "object columns carry
+    python values, not dtypes" — and that exemption is precisely where the schema
+    then drifted: under pandas 3 a parquet string column reads back as the new `str`
+    dtype, so a tape off disk and a tape in memory had different dtypes on the same
+    code. Local pandas 2 could not see it and CI went red on 2026-09-17. *A column a
+    schema test skips is a column with no schema test.*
+    """
     assert list(synthetic_tape.bars.columns) == BAR_COLUMNS + ["mid"]
     reference = empty_bars()
     for column in BAR_COLUMNS:
         got, want = synthetic_tape.bars[column].dtype, reference[column].dtype
-        if column in ("ric", "kind", "cp", "expiry"):
-            continue                       # object columns carry python values, not dtypes
         assert got == want, f"{column}: {got} is not a pulled tape's {want}"
     assert str(synthetic_tape.bars["ts"].dt.tz) == Params().tz
+    # Declared, not inherited: pandas 2 forced ns, pandas 3 infers us from a datetime.
+    assert synthetic_tape.bars["ts"].dt.unit == tape_mod.TS_UNIT
+
+
+def test_a_tape_off_disk_and_a_tape_in_memory_carry_one_schema(synthetic_tape, tmp_path):
+    """SPEC §3.4's claim, asserted against the **loader** rather than the generator.
+
+    `empty_bars()` is what the generator was written against, so comparing to it alone
+    can only catch the generator drifting. The failure that reached CI was the other
+    side — the parquet round trip — so the reference here is a tape that has actually
+    been through a file (T-46: compare a thing against something it did not produce).
+    """
+    path = tmp_path / "schema.parquet"
+    synthetic_tape.bars[BAR_COLUMNS].to_parquet(path, index=False)
+    reloaded = load_tape(path)
+    assert reloaded.bars.dtypes.to_dict() == synthetic_tape.bars.dtypes.to_dict()
+    # A stock row has no right; "missing" must be None on both sides, not None on one
+    # and a float nan on the other — which is what `.astype(object)` alone would give.
+    assert reloaded.bars.loc[reloaded.bars["kind"] == "stock", "cp"].isna().all()
+    assert set(reloaded.bars.loc[reloaded.bars["kind"] == "stock", "cp"]) == {None}
 
 
 def test_it_says_it_is_synthetic_in_the_place_the_page_reads(synthetic_tape):
