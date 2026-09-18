@@ -121,31 +121,53 @@ def test_the_blotter_marker_cannot_pass_on_a_page_with_an_empty_book():
         )
 
 
-def test_the_write_up_guard_refuses_the_page_until_the_po_has_written_it(html):
-    """FR-19's half of the FR-7 mechanism, asserted from both ends.
+def test_the_write_up_guard_is_as_strict_as_the_write_up_is_finished(html):
+    """FR-19's half of the FR-7 mechanism — and the expiry date on the PO's waiver.
 
-    The workflow must carry the refusal, and the page must be consistent with
-    `writeup.ANSWERS`: while a slot is unwritten the marker is present *and* CI is right to
-    refuse the deploy. When T-60 lands, the marker leaves the page and this test tracks it
-    instead of having to be remembered.
+    The guard was a hard refusal on 2026-09-17 and blocked the deploy, which is what it is
+    for. The PO waived it to **a warning** on 09-18 in order to look at the page, and a
+    waiver that cannot expire is a deleted guard with extra steps. So the posture is pinned
+    to `writeup.ANSWERS`:
+
+    * while any answer is `[unwritten]` — the workflow must **warn** and let the page
+      publish, and the page must still carry the marker (in red);
+    * once every answer is written — the workflow must be back to `::error::` + `exit 1`,
+      and this test fails until it is.
+
+    Pinned to the covered-call guard's **own** line, not to the bare marker. Both pages
+    refuse `[unwritten]` — FR-7's and FR-19's — so asserting the string alone passes while
+    this page's guard is deleted, on the strength of the other page's. The mutation run
+    found exactly that.
     """
     from options_surface_lab.covered_call import writeup
 
-    # Pinned to the covered-call guard's OWN error message, not to the marker. Both pages
-    # refuse `[unwritten]` — FR-7's and FR-19's — so asserting the bare string passes while
-    # this page's refusal is deleted, on the strength of the other page's. The mutation run
-    # found exactly that.
     workflow = read(WORKFLOW)
-    assert workflow.count("[unwritten]") >= 2, "one page lost its unwritten refusal"
-    assert "covered_call/writeup.py" in workflow, (
-        "the covered-call page's FR-19 refusal is gone from the workflow"
+    assert workflow.count("[unwritten]") >= 2, "one page lost its unwritten guard"
+    fr19 = [ln for ln in workflow.splitlines() if "covered_call/writeup.py" in ln]
+    assert len(fr19) == 1, (
+        f"expected exactly one FR-19 guard line in the workflow, found {len(fr19)}"
     )
+    line = fr19[0]
 
     unwritten = any(a == writeup.UNWRITTEN for a in writeup.ANSWERS)
     assert (writeup.UNWRITTEN in html) is unwritten, (
         "the page and writeup.py disagree about whether the write-up is finished — "
         "the page was not rebuilt after the prose changed (the lockstep rule)"
     )
+
+    if unwritten:
+        assert "::warning::" in line, (
+            "the write-up is unfinished and the guard is not the PO's waiver — either "
+            "restore `::warning::` or write the answers"
+        )
+        assert "NOT SUBMITTABLE" in line, (
+            "the waiver must say what it is waiving — a bare warning reads as noise"
+        )
+    else:
+        assert "::error::" in line and "exit 1" in workflow.split(line)[1][:200], (
+            "the write-up is finished, so FR-19's guard must go back to refusing the "
+            "deploy — the PO's 09-18 waiver has expired (see pages.yml)"
+        )
 
 
 def test_the_two_pages_do_not_share_a_synthetic_marker():

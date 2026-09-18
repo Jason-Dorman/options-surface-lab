@@ -725,9 +725,10 @@ its own numbers); the guard passes.
 **◐ 2026-09-17 (T-70 + T-59): the mechanism is complete and the prose is not.** The PO's
 methodology block — the Rule / Fill / Stock / Audit / Limitation hierarchy, the
 observation-point paragraph, the synchronisation caveat and the midpoint example — is on the
-page. The five answers are still `[unwritten]`: they render in red, `test_an_unwritten_answer_is_loud`
-fails, and the Pages workflow **refuses to deploy**. All three guards are live, so the
-remaining work is the PO's alone (T-60).
+page. The five answers are still `[unwritten]`: they render in red and
+`test_an_unwritten_answer_is_loud` fails. The Pages workflow refused the deploy on 09-17 as
+specified; **the PO waived it to a warning on 09-18** so the page could be seen before the
+prose exists. **PO waiver, 2026-09-18:** FR-19's refusal is a **warning** while the answers are unwritten, so the page can be looked at before the prose exists — it blocked the deploy on 09-17 exactly as specified, and "I cannot see the page" is the worse failure three days out. The slots still render in red, the test still fails, and the waiver **expires by itself**: `test_the_write_up_guard_is_as_strict_as_the_write_up_is_finished` reads the workflow's own line and goes red the moment `writeup.ANSWERS` is complete and the guard is still a warning. A waiver that cannot expire is a deleted guard with extra steps. The remaining work is the PO's alone (T-60).
 
 **FR-21 — The live book from Monday 2026-09-14.** *(PO, 2026-09-12: "Monday this system
 needs to have everything in place to purchase the shares, write the call and fill out the

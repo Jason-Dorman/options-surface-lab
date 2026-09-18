@@ -331,9 +331,9 @@ sign-off.
 **Next up (2026-09-17):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST.** The first live
 entry is **booked** — see T-78 below. **A2-M4 is complete.** ~~T-56~~, ~~T-77~~, ~~T-57~~, ~~T-58~~, ~~T-79~~, ~~T-68~~, ~~T-69~~
 and ~~T-59~~ are done — the tape is pulled, the book runs, the fill assumption is measured and
-**the page carries all seven panels**. The critical path is now **T-60 (the PO's write-up) —
-and CI is red until it lands**, because FR-19's `[unwritten]` refusal is live and doing its
-job — then T-71/T-72 to ship, with T-78's settlement leg on Friday 09-18. **T-66 (notebook 03
+**the page carries all seven panels**. The site deploys again as of 09-18 (FR-19's refusal is
+a warning until T-60 — see below). The critical path is **T-60 (the PO's write-up)**, then
+T-71/T-72 to ship, with T-78's settlement leg **today, Friday 09-18**. **T-66 (notebook 03
 §1–§4) is still open**: it was meant to be co-built with T-57 and was not; T-58 created the
 notebook and wrote §5 into it, so T-66 is now a matter of filling in the sections above its own.
 The PO chose **QQQ** (SD-1, 2026-09-12) and the **last
@@ -624,12 +624,17 @@ strategy, Reg T account, blotter + skip log, daily ledger, mid vs print, live bo
 plus `PageShell.table` for the HTML tables and every remaining publish guard in `pages.yml`.
 **27 new tests; 25 of 25 injected defects caught; 684 green, no xfail.**
 
-**CI IS RED ON PURPOSE UNTIL T-60 LANDS.** FR-19's `[unwritten]` refusal is live: the five
-write-up answers are still the PO's to write, they render in red, the test fails and the Pages
-workflow refuses to deploy. That is the FR-7 mechanism working exactly as specified — the page
-has one graded element with no figure behind it, so its absence has to be loud. **Nothing else
-fails.** Every other guard on both pages passes; the deploy unblocks the moment the prose is
-written and the page is rebuilt in the same commit.
+**FR-19's refusal fired on 09-17 and was waived to a warning on 09-18** (PO: *"i know i
+dont have the write ups yet but i need to see the page"*). It did exactly what it is for —
+the five write-up answers are still the PO's to write, they render in red and
+`test_an_unwritten_answer_is_loud` fails — but a guard that stops the PO looking at the
+artifact three days from the deadline is solving a smaller problem than it causes. **The
+waiver expires by itself:** `test_the_write_up_guard_is_as_strict_as_the_write_up_is_finished`
+reads the workflow's own FR-19 line and goes red the moment `writeup.ANSWERS` is complete
+while the guard is still `::warning::`. *A waiver that cannot expire is a deleted guard with
+extra steps* — and the alternative, deleting the check "for now", is how FR-7's would have
+been lost. Every other guard on both pages is still a refusal, and the whole block was run
+locally against the built `_site` to prove it exits 0.
 
 Six things worth carrying:
 

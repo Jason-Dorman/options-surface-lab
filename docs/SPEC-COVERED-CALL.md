@@ -675,7 +675,9 @@ link to the rest of the site (a page nothing links to is published and invisible
 render can show).
 
 *The rest landed with their panels (T-59, 2026-09-17):* two figures, `<td>BUY</td>`, one of
-`<td>EXPIRE</td>` / `<td>ASSIGN</td>`, `Fill assumption:`, and `[unwritten]`. Three things the
+`<td>EXPIRE</td>` / `<td>ASSIGN</td>`, `Fill assumption:`, and `[unwritten]`.
+
+**PO waiver, 2026-09-18:** FR-19's refusal is a **warning** while the answers are unwritten, so the page can be looked at before the prose exists — it blocked the deploy on 09-17 exactly as specified, and "I cannot see the page" is the worse failure three days out. The slots still render in red, the test still fails, and the waiver **expires by itself**: `test_the_write_up_guard_is_as_strict_as_the_write_up_is_finished` reads the workflow's own line and goes red the moment `writeup.ANSWERS` is complete and the guard is still a warning. A waiver that cannot expire is a deleted guard with extra steps. Every other guard on both pages stays a refusal. Three things the
 mutation run forced. **A blotter guard must grep a blotter cell, not a rule id** — the rule
 ids are printed in the strategy panel's key too, so `grep R-ENTRY-STOCK` passes on a page
 whose blotter is empty, which is the one failure it exists for. **Both pages refuse
