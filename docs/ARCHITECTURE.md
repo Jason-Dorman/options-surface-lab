@@ -186,10 +186,11 @@ because a number the page derives is a *readout* and belongs in the strip.
 `PageShell` — command bar, readout strip, panel, document — plus the site's page table
 (`SITE_PATHS` / `LOCAL_PATHS` / `NAV_LABELS`, and `nav_for`, which spells a cross-page link
 for wherever the page is being written), `table()` for the HTML tables Assignment 2's page
-is half made of (T-59 — a cell is text or `(text, class)`, the caller decides meaning and
-`theme.PAGE_CSS` decides appearance, and every cell is escaped with its runs of spaces
-preserved because the OCC symbol's padding is grammar), and, since **T-69**, the *figure* side
-of the same contract: `with_caption` / `figure_caption` / `as_panel_figure`. Those three lived in
+is half made of (T-59 — a cell is text, `(text, class)`, or a `Stacked` pair that renders a
+quieter second line inside one cell; the caller decides meaning and `theme.PAGE_CSS` decides
+appearance, and every cell is escaped with its runs of spaces preserved because the OCC
+symbol's padding is grammar), and, since **T-69**, the *figure* side of the same contract:
+`with_caption` / `figure_caption` / `as_panel_figure`. Those three lived in
 `option_surface_plot.py` until Assignment 2's figures needed them and were forbidden to reach
 into 1.1 (AD-12). The move **removed** a dependency rather than adding one — `page_shell` had
 been importing `figure_caption` back out of `option_surface_plot` through a deferred local

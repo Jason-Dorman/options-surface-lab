@@ -703,10 +703,12 @@ instead of the mid costs **$49.50**, moving the window return from 1.658% to 1.5
 run per page with a marker each. **The identity the content needs is in (T-68,
 2026-09-17)** — `NAV_LINE` / `MARGIN_IM` / `MARGIN_MM` behind `theme.account_line()`,
 FR-17's `FIT_LINE` and the shared `IDENTITY_LINE`, and the `.osl-table*` family, recorded in
-DESIGN-BRIEF §9. **The content landed 2026-09-17 (T-69, T-59):** `covered_call/page.py` composes SPEC
-§11's seven panels — the strategy, the Reg T account, the blotter with its skip log, the
-daily ledger, mid-vs-print, the live book and the write-up — with the blotter, ledger, skip
-log and parameter tables as HTML that scrolls below `TABLE_MIN_WIDTH` rather than deforming.
+DESIGN-BRIEF §9. **The content landed 2026-09-17 (T-69, T-59) and was reshaped 2026-09-18** to the
+assignment's own example page, at the PO's direction: `covered_call/page.py` composes the two
+charts, the blotter, the event ledger, the rules and write-up, the contracts queried, and the
+live book last — above them the **Reg T account cards**, which replaced six summary statistics
+about the backtest. Tables are HTML that scrolls below `TABLE_MIN_WIDTH` rather than
+deforming.
 AD-11's registry and templates are deferred past 09-20 (T-51), so the page is assembled in
 Python by its own builder rather than by a generator. **Every per-page CI guard is now in**:
 the synthetic refusal, a non-empty readout strip, two figures, a `BUY` and a resolved week in

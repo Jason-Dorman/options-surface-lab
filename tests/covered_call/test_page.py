@@ -20,7 +20,12 @@ import pytest
 from options_surface_lab import theme as T
 from options_surface_lab.covered_call import page as page_mod
 from options_surface_lab.covered_call import writeup
-from options_surface_lab.covered_call.engine import BLOTTER_COLUMNS, run_backtest
+from options_surface_lab.covered_call.engine import (
+    BLOTTER_COLUMNS,
+    FLAG_NEG_AVAILABLE,
+    LEDGER_COLUMNS,
+    run_backtest,
+)
 from options_surface_lab.covered_call.evidence import mid_vs_print
 from options_surface_lab.covered_call.rules import Params
 from options_surface_lab.page_shell import PageShell
@@ -45,58 +50,66 @@ def _html(page) -> str:
     return "\n".join(page.panels)
 
 
-def _table_headers(markup: str, first_header: str) -> list:
-    """The column names of the one table whose first column header is `first_header`."""
+def _find_table(markup: str, want) -> tuple:
+    """`(headers, rows)` of the one table matching `want`.
+
+    `want` is either the **full** header list, matched exactly, or a single string matched
+    against the first column. The exact form exists because the blotter and the ledger now
+    share a first header — both start with `Time`, since both are keyed on a bar — so
+    matching on column one alone silently handed back the blotter when the ledger was
+    asked for. Here that surfaced as `33 == 49`; a subtler change would have found a table
+    of the right shape carrying the wrong contents, which is the whole class I-13 is for.
+    """
+    exact = not isinstance(want, str)
     for table in re.findall(r"<table[^>]*>.*?</table>", markup, re.S):
         heads = [html.unescape(h) for h in re.findall(r"<th>(.*?)</th>", table, re.S)]
-        if heads and heads[0] == first_header:
-            return heads
-    raise AssertionError(f"no table whose first column is {first_header!r}")
-
-
-def _table_rows(markup: str, first_header: str) -> list:
-    """Rows of the one table whose first column header is `first_header`, as text cells.
-
-    Parsed back out of the rendered markup rather than read off the frame the page was
-    handed — that is the whole point of I-13. A test that asserts against the DataFrame it
-    also passed in proves the DataFrame equals itself.
-    """
-    for table in re.findall(r"<table[^>]*>.*?</table>", markup, re.S):
-        heads = re.findall(r"<th>(.*?)</th>", table, re.S)
-        if heads and html.unescape(heads[0]) == first_header:
-            return [
+        if not heads:
+            continue
+        if (heads == list(want)) if exact else (heads[0] == want):
+            rows = [
                 [html.unescape(re.sub(r"<[^>]+>", "", c)).replace("\xa0", " ")
                  for c in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)]
                 for row in re.findall(r"<tr>(.*?)</tr>", table, re.S)[1:]
             ]
-    raise AssertionError(f"no table on the page whose first column is {first_header!r}")
+            return heads, rows
+    raise AssertionError(f"no table on the page matching {want!r}")
+
+
+def _table_headers(markup: str, want) -> list:
+    return _find_table(markup, want)[0]
+
+
+def _table_rows(markup: str, want) -> list:
+    """Parsed back out of the rendered markup rather than read off the frame the page was
+    handed — that is the whole point of I-13. A test that asserts against the DataFrame it
+    also passed in proves the DataFrame equals itself."""
+    return _find_table(markup, want)[1]
 
 
 # --------------------------------------------------------------------------
 # The shape of the page — SPEC §11
 # --------------------------------------------------------------------------
+
 def test_the_page_carries_every_panel_the_spec_orders(page):
-    """Seven panels, in SPEC §11's order, with the live book at [6].
+    """Seven panels in the order the assignment's example page uses (SPEC §11, reworked
+    2026-09-18): the two charts, the blotter, the ledger, the rules and write-up, the
+    contracts queried, and the live book last.
 
     Pinned as a list rather than a count: a panel dropped and another duplicated keeps the
     count, and the page would be missing a graded requirement while looking complete.
     """
-    names = re.findall(r'osl-panel-name">(.*?)<', _html(page))
-    assert names == [
-        "Strategy",
-        "Reg T account",
-        "Blotter and skip log",
-        "Ledger — daily",
-        "Mid vs print",
+    markup = _html(page)
+    assert re.findall(r'osl-panel-name">(.*?)<', markup) == [
+        "Growth of the book",
+        "Midpoint assumption",
+        "Trades you actually made",
+        "Position, cash, and margin over time",
+        "Covered-call rules and write-up",
+        "Expired contracts this book queried",
         "Live book",
-        "Write-up",
     ]
-    assert len(re.findall(r'class="osl-panel ', _html(page))) == 7
-
-    # The indices, too. SPEC §11 numbers these panels and a reader navigates by them; a
-    # panel that quietly loses its `[n]` renumbers every panel after it in the reader's
-    # head while the page still renders perfectly.
-    assert [int(n) for n in re.findall(r'osl-panel-n">\[(\d+)\]', _html(page))] == [
+    assert len(re.findall(r'class="osl-panel ', markup)) == 7
+    assert [int(n) for n in re.findall(r'osl-panel-n">\[(\d+)\]', markup)] == [
         1, 2, 3, 4, 5, 6, 7
     ]
 
@@ -110,31 +123,42 @@ def test_every_panel_declares_a_width_the_grid_defines(page):
         assert f".osl-w{width} {{" in T.PAGE_CSS, f".osl-w{width} has no rule"
 
 
+
 def test_the_two_figures_are_the_ones_plots_builds(page):
-    """FR-16 and FR-17 come from `plots`, not from a figure this module assembles."""
+    """FR-16 and FR-17 come from `plots`, not from a figure this module assembles, and they
+    open the page together — the example leads with both charts, above the tables."""
     markup = _html(page)
     assert markup.count("plotly-graph-div") == 2
-    assert 'id="osl-fig-2"' in markup and 'id="osl-fig-5"' in markup
+    assert 'id="osl-fig-1"' in markup and 'id="osl-fig-2"' in markup
 
 
 # --------------------------------------------------------------------------
 # I-13 — the page says what its sources say
 # --------------------------------------------------------------------------
+
 def test_i13_the_rendered_blotter_is_the_engines_blotter(real_page):
     """SPEC §12, I-13: the blotter *in the built page* equals `run_backtest`'s.
 
     Every cell, every row, in order — re-parsed out of the HTML. The T-44 lesson applied to
     a table: a panel can be right in its geometry and wrong in every value it states, and
     nothing about the render says which.
+
+    The **OCC rides inside Instrument** as the brief's column description asks, so that cell
+    carries two values and is checked for both.
     """
-    rendered = _table_rows(_html(real_page), BLOTTER_COLUMNS[0])
+    rendered = _table_rows(_html(real_page), list(page_mod._BLOTTER_HEADERS))
     expected = real_page.book.blotter.to_dict("records")
     assert len(rendered) == len(expected), "the page and the engine disagree on row count"
 
     for row, record in zip(rendered, expected):
-        assert len(row) == len(BLOTTER_COLUMNS)
-        for cell, column in zip(row, BLOTTER_COLUMNS):
-            _assert_cell_is(cell, record[column], column)
+        assert len(row) == len(page_mod._BLOTTER_RENDERED)
+        for cell, column in zip(row, page_mod._BLOTTER_RENDERED):
+            if column == "instrument":
+                assert record["instrument"] in cell
+                occ = str(record.get("occ") or "").strip()
+                assert (occ in cell) if occ else True, "the OCC subtitle is missing"
+            else:
+                _assert_cell_is(cell, record[column], column)
 
 
 def _assert_cell_is(cell: str, value, column: str) -> None:
@@ -160,14 +184,15 @@ def _assert_cell_is(cell: str, value, column: str) -> None:
         assert cell == expected, f"{column}: page says {cell!r}, the engine says {value!r}"
 
 
+
 def test_a_money_cell_keeps_its_cents(real_page):
     """Two decimal places, because a covered call's premium lives in them.
 
     A blotter rounded to whole dollars reconciles against nothing — the mid of 6.01/6.08 is
     6.045, and a page printing `6` for it describes a trade that was never booked.
     """
-    fills = [row[BLOTTER_COLUMNS.index("fill")]
-             for row in _table_rows(_html(real_page), BLOTTER_COLUMNS[0])]
+    at = page_mod._BLOTTER_RENDERED.index("fill")
+    fills = [row[at] for row in _table_rows(_html(real_page), list(page_mod._BLOTTER_HEADERS))]
     assert any("." in cell and cell.split(".")[-1] != "00" for cell in fills), (
         "no fill on the page carries cents — has the money format been rounded?"
     )
@@ -180,52 +205,156 @@ def test_i13_the_page_prints_the_r_squared_the_evidence_measured(real_page):
     assert f"R² = {real_page.evidence.r2:.4f}" in markup
 
 
-def test_the_headline_numbers_are_the_books_own(page):
-    """The readout strip is six numbers, and every one is read off `book`.
 
-    The synthetic tape is what makes this a test: it skips weeks, so `entries` and `weeks`
-    are different integers and the premium is not the sum of every week. On the committed
-    tape all ten weeks trade, and a retyped number would agree with the book by accident.
+def test_the_cards_are_the_reg_t_account_at_the_last_booked_bar(real_page):
+    """FR-16 is *"used like an account"*, so the strip is the account (2026-09-18).
+
+    It carried six statistics about the backtest — weeks, entries, premium, return — which
+    is a summary of a study. Every card is now a cell of the last `event_ledger` row, and
+    this is I-13 extended to the strip: the cards say what the ledger says.
+
+    Read against the **event** ledger, never `ledger.iloc[-1]`: the last hourly row is a
+    post-close stub, which is T-62's trap and the reason `final_nav` exists.
     """
-    readouts = dict(page.readouts)
-    book = page.book
-    assert readouts["Weeks in window"] == len(book.weekly)
-    assert readouts["Entries booked"] == f"{page_mod.entries(book)} of {len(book.weekly)}"
-    assert page_mod.entries(book) < len(book.weekly), "the fixture skips no week"
-    assert readouts["Final NAV"] == f"${book.final_nav:,.2f}"
-    assert readouts["Return on start cash"] == f"{book.total_return:+.2%}"
+    last = real_page.book.event_ledger().iloc[-1]
+    cards = {label: value for label, value, *_ in real_page.readouts}
+
+    assert list(cards) == [
+        "Cash", "Stock LMV", "Short option", "NAV / equity",
+        "Initial margin", "Maintenance", "Available funds", "Excess equity",
+    ]
+    for label, column in (
+        ("Cash", "cash"), ("Stock LMV", "lmv"), ("Short option", "option_mv"),
+        ("NAV / equity", "nav"), ("Initial margin", "im"), ("Maintenance", "mm"),
+        ("Available funds", "available"), ("Excess equity", "excess"),
+    ):
+        shown = float(cards[label].replace("$", "").replace(",", "").replace("\u2212", "-"))
+        assert shown == pytest.approx(float(last[column]), abs=5e-3), label
 
 
-def test_the_headline_tracks_a_changed_window_rather_than_a_remembered_number(real_tape):
+def test_every_card_says_where_its_number_comes_from(real_page):
+    """A Reg T figure a reader cannot check is a figure they have to take on trust, and the
+    rates in the hints are read from the engine so the words cannot outlive the ledger."""
+    from options_surface_lab.covered_call.engine import IM_RATE, MM_RATE
+
+    hints = {label: (rest[0] if rest else "") for label, _value, *rest in real_page.readouts}
+    assert all(hints.values()), f"a card has no hint: {hints}"
+    assert f"{IM_RATE:.0%}" in hints["Initial margin"]
+    assert f"{MM_RATE:.0%}" in hints["Maintenance"]
+    assert "NAV − initial" in hints["Available funds"]
+    assert "NAV − maintenance" in hints["Excess equity"]
+
+
+
+def test_the_cards_track_a_changed_input_rather_than_a_remembered_number(real_tape):
     """Varying the input is what tells a read-off number from a lucky one.
 
-    Both tapes happen to hold ten weeks, so a hardcoded `10` agrees with the book on every
-    fixture this suite has — the same trap T-79 hit when `entries` and `weeks` were the
-    same integer. A shorter window is the cheapest input that cannot be guessed.
+    Both tapes hold ten weeks and the same $75,000, so a hardcoded figure agrees with the
+    book on every fixture this suite has — the trap T-79 hit when `entries` and `weeks`
+    were the same integer. Funding the account differently is the cheapest input that
+    cannot be guessed, and it has to move cash and NAV together.
     """
-    short = Params(start=dt.date(2026, 8, 3), end=dt.date(2026, 9, 11))
-    page = page_mod.build_page(real_tape, short, shell=PageShell("t"))
-    weeks = len(page.book.weekly)
-    assert weeks < 10, "the shortened window is not shorter — the fixture cannot tell"
-    assert dict(page.readouts)["Weeks in window"] == weeks
+    poorer = Params(start_cash=50_000.0)
+    page = page_mod.build_page(real_tape, poorer, shell=PageShell("t"))
+    cards = {label: value for label, value, *_ in page.readouts}
+    last = page.book.event_ledger().iloc[-1]
+
+    assert cards["NAV / equity"] == f"${float(last['nav']):,.2f}"
+    assert cards["NAV / equity"] != f"${75_000.0:,.2f}"
 
 
-def test_the_ledger_table_is_the_daily_roll_up_whole(real_page):
-    """Every column and every session (SPEC §9). A roll-up with columns quietly dropped
-    invites the question of what else was dropped, and the width floor exists so it does
-    not have to be."""
-    from options_surface_lab.covered_call.engine import LEDGER_COLUMNS
 
+def test_the_ledger_table_is_one_row_per_booked_event(real_page):
+    """SPEC §9 as amended 2026-09-18: keyed on the blotter's bars, not on sessions.
+
+    A reader checking the book by hand checks it against the blotter, so the two tables
+    have to read straight across. Every column the page promises is present, and the row
+    count is the engine's selection — not a number this test remembers.
+    """
     markup = _html(real_page)
-    rendered = _table_rows(markup, LEDGER_COLUMNS[0])
-    daily = real_page.book.daily_ledger()
-    assert len(rendered) == len(daily)
-    assert all(len(row) == len(LEDGER_COLUMNS) for row in rendered)
+    expected = list(LEDGER_HEADERS)
+    assert [h for _, h in page_mod.PAGE_LEDGER_COLUMNS] == expected, (
+        "PAGE_LEDGER_COLUMNS no longer matches the eleven columns the assignment's example "
+        "prints — see LEDGER_HEADERS"
+    )
+    rendered = _table_rows(markup, expected)
 
-    # The header as well as the cells. Checking row width alone let a mutant that
-    # truncated the *header* through — the table then renders twenty cells under nineteen
-    # names, which silently relabels every column after the missing one.
-    assert _table_headers(markup, LEDGER_COLUMNS[0]) == list(LEDGER_COLUMNS)
+    events = real_page.book.event_ledger()
+    assert len(rendered) == len(events)
+    assert len(events) < len(real_page.book.daily_ledger()), (
+        "the event ledger is no smaller than the daily one — the fixture cannot tell them apart"
+    )
+    assert all(len(row) == len(expected) for row in rendered)
+    assert _table_headers(markup, expected) == expected
+
+
+def test_the_short_call_cell_names_the_contract_the_blotter_wrote(real_page):
+    """Three ledger columns folded into one cell, so the cell has to carry all three.
+
+    `short_calls`, `call_strike` and `call_expiry` became **Short call** to reach the
+    example's eleven columns. A fold that lost the strike would print "1 × C 07-10" on every
+    covered row and read as perfectly reasonable.
+    """
+    rows = real_page.book.event_ledger()
+    covered = rows[rows["short_calls"] > 0]
+    assert len(covered), "no covered row in the fixture"
+
+    at = [name for name, _ in page_mod.PAGE_LEDGER_COLUMNS].index("short_call")
+    cells = [row[at] for row in _table_rows(_html(real_page), list(LEDGER_HEADERS))]
+    for _, record in covered.iterrows():
+        strike = f"{float(record['call_strike']):g}"
+        expiry = str(record["call_expiry"])[5:10]
+        assert any(strike in c and expiry in c for c in cells), (
+            f"no Short call cell names the {strike} call expiring {expiry}"
+        )
+    assert any(c == "flat" for c in cells), "a flat row must say so, not print an empty cell"
+
+
+def test_a_breached_account_is_flagged_beside_the_row(real_tape):
+    """FR-16: *"you could not have put the trade on — say so"*, on the table as well as the
+    caption.
+
+    `NEG_AVAILABLE` never fires under SD-3's funding, so this builds the case rather than
+    hunting for it — the same reason `test_engine.py` funds an account at $1,000. A branch
+    no fixture reaches is a branch with no test, however many tests name it (T-57).
+    """
+    poor = Params(start_cash=1_000.0)
+    page = page_mod.build_page(real_tape, poor, shell=PageShell("t"))
+    assert (page.book.ledger["flag"] == FLAG_NEG_AVAILABLE).any(), "the flag never fired"
+
+    at = [name for name, _ in page_mod.PAGE_LEDGER_COLUMNS].index("available")
+    cells = [row[at] for row in _table_rows(_html(page), list(LEDGER_HEADERS))]
+    assert any(FLAG_NEG_AVAILABLE in c for c in cells), (
+        "a row the engine flagged is printed as an ordinary number"
+    )
+    assert "osl-flag" in _html(page), "the flagged cell is not rendered loudly"
+
+
+def test_the_contracts_table_reads_its_rics_off_the_blotter(real_page):
+    """T-82's defect, in a new place: which form an expired contract answers under depends
+    on how long ago it expired, so a table that *rebuilt* the RIC could name a contract that
+    returned no bars — and it would look entirely plausible.
+
+    Compared against the blotter's own strings, which is the only source that can be right.
+    """
+    booked = {
+        str(r["instrument"]) for r in real_page.book.blotter.to_dict("records")
+        if str(r["instrument"]) != real_page.params.underlying
+    }
+    assert booked, "no option was written in the fixture"
+
+    listed = {row[1] for row in _table_rows(_html(real_page), ["Contract", "RIC"])}
+    assert listed == booked, (
+        f"the contracts table and the blotter disagree: {listed ^ booked}"
+    )
+
+
+def test_every_ledger_row_is_a_row_the_chart_draws(real_page):
+    """*"A selection, never a re-aggregation"* (SPEC §1). Each row exists in the hourly
+    frame, which is what lets a number in the table be a number on the line above it."""
+    hourly = {str(ts) for ts in real_page.book.ledger["ts"]}
+    for ts in real_page.book.event_ledger()["ts"]:
+        assert str(ts) in hourly, f"{ts} is in the table and not in the chart"
 
 
 def test_a_missing_value_prints_as_an_absence_not_as_nan(real_page):
@@ -237,11 +366,103 @@ def test_a_missing_value_prints_as_an_absence_not_as_nan(real_page):
     assert page_mod._ABSENT in markup, "nothing is ever absent — is the guard reaching cells?"
 
 
+BRIEF = Path(__file__).resolve().parents[2] / "docs" / "ASSIGNMENT-2-COVERED-CALL.md"
+
+#: The ledger as the assignment's example page prints it. Written out here rather than read
+#: from `page.PAGE_LEDGER_COLUMNS`, which is the thing under test: deriving the expectation
+#: from the constant means deleting a column changes the page *and* the expectation together
+#: and the suite stays green. That is T-46's guard-that-reads-back-its-own-effect, and it
+#: survived a mutant here before this list existed.
+LEDGER_HEADERS = (
+    "Date", "Cash", "Shares", "Short call", "Spot", "LMV", "Opt MV", "NAV",
+    "Initial", "Maint", "Available",
+)
+
+
+
+def test_the_blotter_headers_are_exactly_the_ones_the_brief_names(real_page):
+    """*"Blotter (non-negotiable)"* — the brief names these columns, so the page uses them
+    and **only** them.
+
+    Read out of **the brief file**, not out of `COLUMN_LABELS`: a test comparing the page
+    to the page's own dict proves the dict equals itself, and what is asserted here is
+    conformance to a precedence-1 document. Equality, not containment — the OCC was a ninth
+    column until 2026-09-18, which says the same thing in a shape the brief does not ask
+    for. It is a subtitle inside Instrument now, which is what the brief's own column
+    description says.
+    """
+    table = (
+        BRIEF.read_text(encoding="utf-8")
+        .split("## Blotter (non-negotiable)", 1)[1]
+        .split("##", 1)[0]
+    )
+    named = [
+        row.split("|")[1].strip()
+        for row in table.splitlines()
+        if row.startswith("|") and "---" not in row
+    ][1:]
+    assert named, "the brief's blotter table could not be read — has its shape changed?"
+
+    rendered = _table_headers(_html(real_page), list(page_mod._BLOTTER_HEADERS))
+    assert rendered == named, (
+        f"the brief names {named} and the page renders {rendered}"
+    )
+
+
+def test_the_occ_is_a_subtitle_inside_instrument(real_page):
+    """The brief: *"Stock or option RIC; OCC as a subtitle"*. One cell, two lines."""
+    markup = _html(real_page)
+    assert "OCC" not in page_mod._BLOTTER_HEADERS, "the OCC is a column again"
+
+    option = next(r for r in real_page.book.blotter.to_dict("records") if r["occ"])
+    assert f'{option["instrument"]}<div class="osl-subcell">' in markup, (
+        "the RIC and its OCC are not in one cell"
+    )
+
+
+
+def test_no_table_header_is_an_engine_key(real_page):
+    """SPEC §9: *"Column names are lower case in the code ...; the page title-cases them."*
+
+    A snake_case header on a graded page is a DataFrame leaking through the presentation
+    layer. Checked over every header the page renders, so a column added later cannot slip
+    through un-labelled.
+    """
+    markup = _html(real_page)
+    for want in (
+        list(page_mod._BLOTTER_HEADERS),
+        [header for _, header in page_mod.PAGE_LEDGER_COLUMNS],
+    ):
+        for header in _table_headers(markup, want):
+            assert "_" not in header, f"{header!r} is an engine key, not a column name"
+            assert header[0].isupper(), f"{header!r} is not title-cased"
+
+
+
+def test_every_engine_column_has_a_label(real_page):
+    """A column the engine adds and `COLUMN_LABELS` does not know renders as its raw key.
+
+    `labels()` fails soft on purpose — an unfinished column should look unfinished rather
+    than take the page down — which is exactly why the completeness check belongs here.
+    The ledger is exempt: the page renders eleven columns of its own choosing, and
+    `PAGE_LEDGER_COLUMNS` carries their headers.
+    """
+    from options_surface_lab.covered_call.engine import SKIP_COLUMNS
+
+    for columns in (BLOTTER_COLUMNS, SKIP_COLUMNS):
+        missing = [c for c in columns if c not in page_mod.COLUMN_LABELS]
+        assert not missing, f"no header label for: {missing}"
+
+
 # --------------------------------------------------------------------------
 # FR-14 — the sentence is pinned to the params
 # --------------------------------------------------------------------------
-def test_the_strategy_panel_prints_every_field_of_params(page):
-    """FR-14's acceptance, literally: *"the strategy panel prints every field of `Params`"*.
+def test_the_write_up_prints_every_field_of_params(page):
+    """FR-14's acceptance: *"the strategy panel prints every field of `Params`"*.
+
+    The strategy stopped being a panel of its own on 2026-09-18 — it folds into the
+    write-up, where the example page keeps its rules — so this now asserts of the page what
+    it used to assert of one panel. The requirement is that the fields are *printed*.
 
     Walked with `dataclasses.fields`, so a parameter added to `Params` and not to the page
     fails here — a listed set silently stops being complete, and the page would then

@@ -38,7 +38,11 @@ from options_surface_lab.page_shell import with_caption
 #: listener started restyling it by position (T-42). Nothing restyles this figure today;
 #: the order is pinned anyway, because the cost of pinning it is a constant and the cost of
 #: discovering it was not pinned is a silently re-coloured chart.
-ACCOUNT_TRACES = ("NAV", "IM", "MM")
+#: Named as the account names them, not as the ledger columns do. "IM" and "MM" are
+#: the engine's vocabulary; a reader meets these words on the Reg T cards above the
+#: chart and in the brief itself ("Initial margin", "Maintenance margin"), so the
+#: legend uses those and the ledger keeps its keys (T-59, 2026-09-18).
+ACCOUNT_TRACES = ("NAV", "Initial", "Maintenance")
 
 #: FR-17's, likewise. Points first so the two reference lines draw *over* the cloud rather
 #: than under 16,000 markers.
@@ -101,11 +105,7 @@ def account_figure(book, *, height: int | None = None) -> go.Figure:
         )
 
     fig = go.Figure()
-    for name, column, role in (
-        ("NAV", "nav", "nav"),
-        ("IM", "im", "im"),
-        ("MM", "mm", "mm"),
-    ):
+    for name, column, role in zip(ACCOUNT_TRACES, ("nav", "im", "mm"), ("nav", "im", "mm")):
         fig.add_trace(
             go.Scatter(
                 x=ledger["ts"],

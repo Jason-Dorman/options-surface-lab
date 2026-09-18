@@ -176,6 +176,33 @@ class Book:
         by_day = pd.DatetimeIndex(eligible["ts"]).date
         return eligible.groupby(by_day, sort=True).tail(1).reset_index(drop=True)
 
+    def event_ledger(self) -> pd.DataFrame:
+        """The ledger at the bars where something was **booked** — the table the page prints.
+
+        SPEC §9, amended 2026-09-18. The roll-up was one row per session; it is now one row
+        per blotter event, which is the selection the assignment's own example page makes.
+        Two reasons beyond resembling it: a reader checking the book by hand checks it
+        *against the blotter*, and a table keyed on the blotter's own bars reads straight
+        across; and forty-nine rows of a mark drifting between events is volume rather than
+        evidence — the NAV chart already draws every hourly bar, which is where the drift
+        belongs.
+
+        **Still a selection, never a re-aggregation** (SPEC §1). Each row is a ledger row
+        that exists, chosen by its ``ts``, so every number here is a number on that chart.
+
+        The row at an entry bar already contains that entry: ``cash`` counts every blotter
+        row at or before the bar, so an entry row shows the position **on**, not the
+        position about to go on. That is what lets the table be checked against the blotter
+        instead of leading it by a line.
+        """
+        if self.ledger.empty or self.blotter.empty:
+            return self.ledger.iloc[0:0].copy()
+        booked = pd.to_datetime(self.blotter["time"])
+        wanted = {(ts.date(), ts.hour) for ts in booked}
+        index = pd.DatetimeIndex(self.ledger["ts"])
+        keep = [(day, hour) in wanted for day, hour in zip(index.date, index.hour)]
+        return self.ledger[keep].reset_index(drop=True)
+
     def blotter_csv(self) -> str:
         """The blotter as bytes, for I-12. Same tape + same ``Params`` -> same string."""
         return self.blotter.to_csv(index=False, lineterminator="\n")

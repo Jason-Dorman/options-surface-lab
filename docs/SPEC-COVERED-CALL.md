@@ -419,6 +419,10 @@ skips** — those go to the skip log (§8.2).
 | `cash_delta` | Signed, in dollars, **the only thing that ever moves cash** |
 | `note` | The rule that fired: `R-ENTRY-STOCK` · `R-ENTRY-CALL` · `R-EXPIRE` · `R-ASSIGN` · `R-ASSIGN-SELL`, plus the one number a reader needs (`K=205 S=204.31 mid=1.325`) |
 
+**The OCC is a subtitle, not a column (2026-09-18).** The brief's Instrument column is *"Stock or option RIC; **OCC as a subtitle**"* — eight columns, with the OCC inside Instrument. It shipped as a ninth column, which says the same thing in a shape the brief does not ask for. `page_shell.Stacked` carries the two lines in one cell; it is a small type rather than a raw-HTML cell because `table()` escapes everything it renders, and one cell allowed to carry markup ends that guarantee for every cell.
+
+**Headers are the reader's, not the engine's (2026-09-18).** The brief NAMES the blotter's columns and calls them non-negotiable — `Cash Δ`, not `cash_delta`; `Notes`, not `note` — and §9 says in as many words that the page title-cases the ledger's. T-59 shipped printing the engine's raw keys, which is drift against precedence 1 and precedence 3 at once, and nothing caught it because nothing had ever compared the page to the brief. Found by reading the instructor's own example page beside ours. `page.COLUMN_LABELS` maps them in the one place that renders; lower case stays in the code, because the invariants quote it. The test reads the column names **out of the brief file**, not out of `COLUMN_LABELS` — a test comparing the page to the page's own dict proves the dict equals itself.
+
 ### 8.2 The skip log
 
 A separate table on the page: `week, reason ∈ {SKIP_NO_STOCK_PRINT, SKIP_NO_STRIKE,
@@ -455,10 +459,23 @@ reader checking NAV by hand against the chart depends on knowing which.
 | `flag` | `NEG_AVAILABLE` when `available < 0` at an entry bar — the brief: *"you could not have put the trade on — say so"*. The trade is still booked (the backtest reports what the rule did) and the page prints the flag beside it. |
 
 When flat, `LMV = IM = MM = 0` and `NAV = cash`. The page plots `NAV`, `IM`, `MM` on one axis
-with hover, and the ledger table below it is the **daily** roll-up (the **closing bar** of each
-session) so a reader can check a week by hand; the hourly frame is what the chart draws. The
-roll-up is a *selection* of hourly rows, never a re-aggregation, so a number in the table is a
-number in the chart.
+with hover — labelled **NAV / Initial / Maintenance**, the account's words rather than the
+engine's keys — and the table below it is the **event** roll-up: one row per *booked* bar
+(`Book.event_ledger`), not one per session.
+
+*Amended 2026-09-18.* It was one row per session close. A reader checking the book by hand
+checks it **against the blotter**, so a table keyed on the blotter's own bars reads straight
+across from it — and forty-nine rows of a mark drifting between events is volume rather than
+evidence, when the chart already draws every hourly bar. `daily_ledger()` remains and is still
+what `final_nav` reads. Either way the roll-up is a *selection* of hourly rows, never a
+re-aggregation, so a number in the table is a number in the chart.
+
+**The page prints eleven of the twenty columns** (`page.PAGE_LEDGER_COLUMNS`): Date, Cash,
+Shares, Short call, Spot, LMV, Opt MV, NAV, Initial, Maint, Available. Three are *folded*
+rather than dropped — `short_calls` / `call_strike` / `call_expiry` become one **Short call**
+cell, and `flag` rides on **Available**, because FR-16 asks for the flag *beside the trade* and
+a column empty on nineteen rows of twenty says it more quietly than a red number does.
+`excess` moves to the account cards.
 
 **A headline figure comes off the close, never off the last row** (T-57). The stock tape runs
 to a 19:00 ET bar, so `ledger.iloc[-1]` is a thin post-close stub — `Book.final_nav` reads the
@@ -619,33 +636,49 @@ chrome `build_preview.py` renders — `page_shell.PageShell` — and composes
 deferred past the 09-20 submission, and T-79's interim is a second builder, not a registry.
 Corrected 2026-09-17.)*
 
-**Panels are numbered 1–7, not only the figures**, and the **live book is [6]** — between the
-evidence and the write-up, because the backtest is the body, the live run is what follows from
-it, and the PO's prose closes the page. That differs from 1.1, where an index names a *figure*
-because the indices are also the as-of listener's addressing scheme (`osl-fig-{n}`, T-12);
-this page cross-filters nothing, so nothing is addressed by number.
+**Panels are numbered 1–7, not only the figures.** That differs from 1.1, where an index
+names a *figure* because the indices are also the as-of listener's addressing scheme
+(`osl-fig-{n}`, T-12); this page cross-filters nothing, so nothing is addressed by number.
+
+**The order follows the assignment's own example page** (`jakevestal.github.io/535_fintech/`,
+which the brief calls a "non-enabling example"), reworked **2026-09-18** at the PO's direction
+after reading the two side by side. The strategy stopped being a panel of its own — first on
+the page, ahead of the book it described — and folds into the write-up, where the example keeps
+its rules; FR-14 still prints every field of `Params`. The **live book is last** (PO): the
+example has no equivalent, so FR-21 closes the page rather than interrupting the graded
+sequence.
 
 Panels, in reading order:
 
-1. **The strategy** — `Params` rendered as prose + a table (FR-14), and the rule ids the
-   blotter's notes cite.
-2. **NAV, IM, MM** over the window with hover (FR-16) — the hero. **Landed 2026-09-17
-   (T-69)** as `plots.account_figure(book)`: the **hourly** ledger on one axis shared with
-   zero, `hovermode="x unified"` so one box carries all three values at a bar, and a caption
-   that quotes the available floor **at an entry bar** — the only bars the flag is checked
-   on, and the number T-82 first published off a thin pre-market bar.
+1. **Growth of the book** — NAV, Initial, Maintenance with hover (FR-16), `plots.account_figure`:
+   the **hourly** ledger on one axis shared with zero, `hovermode="x unified"` so one box
+   carries all three values at a bar, and a caption that quotes the available floor **at an
+   entry bar** — the only bars the flag is checked on, and the number T-82 first published off
+   a thin pre-market bar.
 3. **Blotter** (FR-15) — the full table; below it the **skip log** (§8.2).
 4. **Ledger** — daily roll-up (§9).
-5. **Mid vs print** — scatter, fit, R² (FR-17). **Landed 2026-09-17 (T-69)** as
-   `plots.mid_vs_print_figure(evidence)`: all `n` points (`Scattergl`; a thinned cloud would
-   look tighter or looser than the statistic beside it and nothing would say so), both axes
-   on **one range** so `y = x` is drawn at 45 degrees, and no fit line at all when none was
-   estimated. The caption is `headline()` and `NON_SIMULTANEITY_CAVEAT` verbatim.
-6. **Live book** (FR-21) — the live blotter, the position, and the raw quotes behind the
-   fill. It states which half of the page is historical and which is running forward, and the
-   state sentence is derived, so a settled book stops claiming an open position.
-7. **Write-up** — the PO's prose (FR-19), the FR-7 mechanism: a prose module,
-   `[unwritten]` in red, a test, and a CI guard. All three are live as of T-59.
+2. **Midpoint assumption** — scatter, fit, R² (FR-17), `plots.mid_vs_print_figure`: all `n`
+   points (`Scattergl`; a thinned cloud would look tighter or looser than the statistic beside
+   it and nothing would say so), both axes on **one range and one pixel scale** so `y = x` is
+   drawn at 45 degrees, and no fit line at all when none was estimated. The caption is
+   `headline()` and `NON_SIMULTANEITY_CAVEAT` verbatim. It sits **beside** the NAV path at
+   four columns rather than under it at ten: `scaleanchor` buys a truthful slope at the cost
+   of letterboxing in a wide box, and near-square is what makes that free.
+3. **Trades you actually made** — the blotter (FR-15), the brief's eight columns; the skip log
+   joins it **only when a week was skipped**.
+4. **Position, cash, and margin over time** — the event ledger (§9).
+5. **Covered-call rules and write-up** — `Params` whole, the stated simplifications, the rule
+   ids, and FR-19's five answers.
+6. **Expired contracts this book queried** — every option the blotter wrote, with the RIC it
+   answered under, read off the blotter rather than rebuilt (T-82: which form answers depends
+   on the pull date).
+7. **Live book** (FR-21) — last.
+The **account cards** above the panels are the Reg T account at the last booked bar — cash,
+stock LMV, short option, NAV, initial, maintenance, available, excess — each with the line that
+defines it. They carried six statistics *about* the backtest until 2026-09-18, which is a
+summary of a study rather than an account; FR-16 asks for the account and the rubric gives it
+20 points. Every card is a cell of the last `event_ledger` row, which makes I-13 reach the
+strip as well as the tables.
 
 No listener is needed: nothing cross-filters. Tables are HTML, styled by `theme.PAGE_CSS`
 **(landed 2026-09-17, T-68)**: `.osl-table-scroll` wraps every one of them and owns both

@@ -637,6 +637,13 @@ PAGE_CSS = f"""
     color:{ACCENT}; font-family:{FONT_MONO}; font-size:20px; font-weight:700;
     margin-top:3px; line-height:1.15;
   }}
+  /* Where the number above comes from — "NAV - initial. Room for a new risk." A Reg T
+     figure with no definition beside it is a number a reader has to look up, and the
+     account cards are the one place on the page that has room to say it. */
+  .osl-readout-hint {{
+    color:{TEXT_MUTED}; font-family:{FONT_BODY}; font-size:10px; line-height:1.35;
+    margin-top:4px; overflow-wrap:anywhere;
+  }}
 
   /* ---- the panel grid: 10 columns, so 7+3 and 5+5 both divide cleanly ---- */
   .osl-grid {{
@@ -784,6 +791,12 @@ PAGE_CSS = f"""
   .osl-table .osl-num {{ text-align:right; font-variant-numeric:tabular-nums; }}
   /* A cell that names something rather than measuring it. */
   .osl-table .osl-label {{ color:{TEXT_MUTED}; }}
+  /* The blotter's OCC symbol, under the RIC rather than beside it: the brief's Instrument
+     column is "Stock or option RIC; OCC as a subtitle", which is eight columns and not
+     nine. Quieter than its parent so the RIC still reads as the identifier. */
+  .osl-table .osl-subcell {{
+    color:{TEXT_MUTED}; font-size:9.5px; line-height:1.3; margin-top:1px;
+  }}
 
   /* **Only the exceptions are coloured** (PO, 2026-09-17): a skipped week and a breached
      margin line. A blotter is a list of trades, so BUY / SELL / EXPIRE / ASSIGN all stay

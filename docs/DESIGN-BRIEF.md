@@ -472,6 +472,8 @@ line, and nothing else.
 | Class | Colour | What it marks |
 |---|---|---|
 | `.osl-skip` | `WARN` `#FFB000` | a skip reason in the skip log |
+| `.osl-subcell` | `TEXT_MUTED` 9.5px | a second line inside a cell — the blotter's OCC under its RIC (the brief: *"Stock or option RIC; OCC as a subtitle"*) |
+| `.osl-readout-hint` | `TEXT_MUTED` 10px | the line under a card's number saying where it comes from — *"NAV − initial. Room for a new risk."* A Reg T figure a reader cannot check is one they have to take on trust |
 | `.osl-flag` | `NEGATIVE` `#FF4D6D` | `NEG_AVAILABLE` on a ledger row |
 
 `BUY` / `SELL` / `EXPIRE` / `ASSIGN` all stay `TEXT`. A blotter is a list of trades; colouring

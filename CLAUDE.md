@@ -75,7 +75,7 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 ```bash
 python build_preview.py       # 1.1's page — the static index.html Pages serves at /
 python build_covered_call.py  # A2's page — Pages serves it at /covered-call/
-pytest                        # 684 tests in tests/ — all green, no xfail
+pytest                        # 696 tests in tests/ — all green, no xfail
 reflex run                    # local dev server (FR-1); not what gets published
 
 # Both take `--site DIR` (CI passes `--site _site`): the page lands at DIR/<route> with its
@@ -622,7 +622,55 @@ carry:
 `covered_call/page.py`: `build_page(tape, params) -> Page` and SPEC §11's seven panels —
 strategy, Reg T account, blotter + skip log, daily ledger, mid vs print, live book, write-up —
 plus `PageShell.table` for the HTML tables and every remaining publish guard in `pages.yml`.
-**27 new tests; 25 of 25 injected defects caught; 684 green, no xfail.**
+**30 new tests; 28 of 28 injected defects caught; 687 green, no xfail.**
+
+**The page did not look like the assignment's example page, and nothing had ever compared
+them (2026-09-18, PO).** `jakevestal.github.io/535_fintech/` — which the brief calls a
+*"non-enabling example"* and which says of itself *"numbers here are made up to show the
+shape"* — is the instructor's scaffold, and reading it beside ours found more than the column
+names. **696 green; 18 of 18 injected defects caught.** What changed, and why each was a
+defect rather than a preference:
+
+- **The strip was six statistics about the backtest** — weeks, entries, premium, return. That
+  is a summary of a *study*. FR-16 says the account must be **"used like an account"** and the
+  rubric gives it 20 points, so the strip is now the **Reg T account at the last booked bar**:
+  cash, stock LMV, short option, NAV, initial, maintenance, available, excess, each with the
+  line that defines it (*"NAV − initial. Room for a new risk."*). Every card is a cell of the
+  last `event_ledger` row, which extends I-13 to the strip.
+- **The ledger was 49 sessions in 20 columns**; it is 20 booked events in the example's
+  **11** (`Book.event_ledger`, SPEC §9 amended). A reader checking the book by hand checks it
+  against the blotter, so the table is keyed on the blotter's own bars and reads straight
+  across from it. Three columns are *folded* rather than dropped — `short_calls`/`strike`/
+  `expiry` into one **Short call** cell, and `flag` onto **Available**, because FR-16 wants
+  the flag *beside the trade* and a column empty on 19 rows of 20 says it more quietly.
+- **The OCC was a ninth blotter column.** The brief's Instrument column is *"Stock or option
+  RIC; **OCC as a subtitle**"* — eight columns. `page_shell.Stacked` is a small type rather
+  than a raw-HTML cell, because `table()` escapes everything and one cell allowed to carry
+  markup ends that guarantee for every cell.
+- **The strategy had a panel of its own, first, ahead of the book it described.** It folds
+  into the write-up now, where the example keeps its rules; FR-14 still prints every field.
+  A **contracts queried** panel is added (the RIC read *off the blotter*, never rebuilt —
+  T-82's defect), and the live book goes last.
+
+Two things to carry past this task. **Five of eighteen mutants survived the first pass and the
+worst was mine again:** the ledger test derived its expected headers *from
+`PAGE_LEDGER_COLUMNS`*, so deleting a column moved the page and the expectation together and
+the suite stayed green — T-46's guard-that-reads-back-its-own-effect, for the **third** time in
+this one task. It is pinned to a literal list now. And the general lesson: **every guard on
+this page checks it against its own sources, and the brief is not one of them.** Nothing was
+wrong internally; the page and the book agreed perfectly, about the wrong shape.
+
+**The page printed the engine's column keys, and nothing in this repo had ever compared it
+to the brief (2026-09-18).** `cash_delta` where the brief says **`Cash Δ`**, `note` where it
+says **`Notes`**, and lower-case `lmv` / `nav` / `im` / `mm` where SPEC §9 says in as many
+words that *"the page title-cases them"*. Drift against precedence 1 **and** precedence 3, in
+the shipped artifact, past 687 tests. It was found by reading the instructor's own example
+page — `jakevestal.github.io/535_fintech/`, which the brief calls a *"non-enabling example"*
+— beside ours, which is a comparison no test performs and no document required. Fixed with
+`page.COLUMN_LABELS`, and the test now reads the column names **out of the brief file**
+rather than out of that dict: a test comparing the page to the page's own constants proves
+the constants equal themselves. *The lesson generalises past this defect: every guard on this
+page checks it against its own sources, and the brief is not one of them.*
 
 **FR-19's refusal fired on 09-17 and was waived to a warning on 09-18** (PO: *"i know i
 dont have the write ups yet but i need to see the page"*). It did exactly what it is for —
@@ -855,7 +903,7 @@ submission — PO to confirm the standing recommendation. The order that fits th
 the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions → T-78's entry → T-56 → T-57 → T-58 →
 T-79 → T-68 → T-69 → T-59~~ (all landed) → **T-60** → ship, with T-78's settlement leg on
 Friday 09-18. 1.1's brief is archived at `docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open.
-**684 tests green, no xfail** (2026-09-17, full run; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
+**696 tests green, no xfail** (2026-09-18, full run; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
 Update this paragraph as things land (lockstep rule).
 
 **T-57 landed 2026-09-15 — `covered_call/engine.py`, so the book runs** (FR-15, FR-16, NFR-6).

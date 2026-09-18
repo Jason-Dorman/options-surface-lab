@@ -21,6 +21,7 @@ from options_surface_lab.page_shell import (
     SITE_PATHS,
     WORDMARK,
     PageShell,
+    Stacked,
     nav_for,
 )
 
@@ -211,6 +212,25 @@ def test_a_table_escapes_its_cells():
     markup = PageShell("t").table(("note",), [["<b>R-ENTRY</b> & more"]])
     assert "&lt;b&gt;R-ENTRY&lt;/b&gt; &amp; more" in markup
     assert "<b>R-ENTRY</b>" not in markup
+
+
+def test_a_stacked_cell_escapes_both_of_its_lines():
+    """`Stacked` exists so the blotter's OCC can be a subtitle without opening a raw-HTML
+    hole in `table()`. The moment one line of it is unescaped, that is exactly what it is —
+    and a mutation run found the subtitle going through unescaped while the main line stayed
+    safe, which no test noticed.
+    """
+    markup = PageShell("t").table(("Instrument",), [[Stacked("<b>RIC</b>", "<i>OCC</i>")]])
+    assert "&lt;b&gt;RIC&lt;/b&gt;" in markup
+    assert "&lt;i&gt;OCC&lt;/i&gt;" in markup
+    assert "<b>" not in markup and "<i>" not in markup
+
+
+def test_a_stacked_cell_keeps_the_occ_padding():
+    """Both halves go through the same escaping, so the subtitle keeps its runs of spaces
+    for the same reason the main line does (SPEC §8's fixed-width OCC)."""
+    markup = PageShell("t").table(("x",), [[Stacked("QQQ.O", "QQQ   260918C00710000")]])
+    assert "QQQ&nbsp;&nbsp;&nbsp;260918C00710000" in markup
 
 
 def test_a_table_carries_its_scroll_box():

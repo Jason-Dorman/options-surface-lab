@@ -149,6 +149,28 @@ def as_panel_figure(
 #: One table cell: text, or ``(text, css_class)``. A class is how a cell states what it is.
 Cell = Union[str, tuple]
 
+
+class Stacked:
+    """A cell with a second, quieter line under it — the blotter's OCC symbol.
+
+    The brief's blotter column is *"Stock or option RIC; **OCC as a subtitle**"*: eight
+    columns, with the OCC inside Instrument rather than beside it. A ninth column says the
+    same thing and is not what the brief asks for.
+
+    A small type rather than a raw-HTML cell, deliberately. `table()` escapes everything it
+    renders, and the moment one cell is allowed to carry markup that guarantee is gone for
+    every cell — so the *structure* is declared here and both halves are still escaped.
+    """
+
+    __slots__ = ("main", "sub")
+
+    def __init__(self, main, sub) -> None:
+        self.main, self.sub = main, sub
+
+    def __str__(self) -> str:  # what a test or a log sees
+        return f"{self.main} {self.sub}".strip()
+
+
 _RUN_OF_SPACES = re.compile(r"  +")
 
 
@@ -160,6 +182,13 @@ def _cell_text(value) -> str:
     string from the one the engine produced — silently, and in a table whose whole purpose
     is to show exactly what was booked.
     """
+    if isinstance(value, Stacked):
+        # Both halves go through this function, so the subtitle is escaped and keeps its
+        # padding exactly as the main line does.
+        return (
+            f"{_cell_text(value.main)}"
+            f'<div class="osl-subcell">{_cell_text(value.sub)}</div>'
+        )
     text = escape(str(value))
     return _RUN_OF_SPACES.sub(lambda m: "&nbsp;" * len(m.group(0)), text)
 
@@ -206,24 +235,29 @@ class PageShell:
             "</div>"
         )
 
-    def readouts(self, items: Iterable[tuple[str, object]]) -> str:
+    def readouts(self, items: Iterable[Sequence]) -> str:
         """The KPI strip under the command bar.
+
+        An item is `(label, value)` or `(label, value, hint)`. The hint is a line under the
+        number saying where it comes from — *"NAV − initial. Room for a new risk."* — which
+        is what turns a Reg T card from a figure into a statement a reader can check. The
+        two-element form stays because HW1's strip has no hints and should not grow any.
 
         `data-osl-readout` is a listener's handle on a value: it looks the cells up by
         index and writes the selected date's figures into them (HW1's as-of slider). A page
         with no listener simply never uses them, which costs nothing.
         """
-        return (
-            '<div class="osl-readouts">'
-            + "".join(
+        cells = []
+        for i, item in enumerate(items):
+            label, value, hint = (tuple(item) + ("",))[:3]
+            cells.append(
                 '<div class="osl-readout">'
                 f'<div class="osl-readout-label">{label}</div>'
                 f'<div class="osl-readout-value" data-osl-readout="{i}">{value}</div>'
-                "</div>"
-                for i, (label, value) in enumerate(items)
+                + (f'<div class="osl-readout-hint">{hint}</div>' if hint else "")
+                + "</div>"
             )
-            + "</div>"
-        )
+        return '<div class="osl-readouts">' + "".join(cells) + "</div>"
 
     def table(
         self,

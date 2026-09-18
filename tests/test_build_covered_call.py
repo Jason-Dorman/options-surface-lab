@@ -197,28 +197,29 @@ def test_a_synthetic_book_is_self_identifying(synthetic_tape):
 
 
 # ------------------------------------------------------- the page says what the book says
-def test_the_headline_numbers_come_from_the_engine(html, book):
-    """I-13's shape, applied to the readouts: the page's numbers must be the book's.
+def test_the_account_cards_come_from_the_engine(html, book):
+    """I-13's shape, applied to the strip: the cards must be the ledger's own numbers.
 
-    A number retyped in the builder is the one place on the page that can disagree with the
-    engine, and it would disagree plausibly — the whole reason the ledger, skip log and
-    weekly table are projections of the blotter rather than second sources (SPEC §1).
+    The strip carried six statistics *about* the backtest until 2026-09-18 — weeks,
+    entries, premium, return. FR-16 asks for the account, so it is now the **Reg T account
+    at the last booked bar**, and a card retyped in the builder would be the one place on
+    the page that could disagree with the engine — plausibly, which is the whole reason the
+    ledger, skip log and weekly table are projections of the blotter (SPEC §1).
 
     Read off the **committed** page, so this also fails when the page is older than the
     module that renders it (the 2026-09-06 lesson: anything that changes what the page says
     needs a rebuild in the same commit).
     """
-    assert _readouts(html) == _expected(book)
+    assert _cards(html) == _expected(book)
 
 
-def test_the_headline_holds_on_a_book_with_skipped_weeks(synthetic_tape):
+def test_the_account_cards_hold_on_a_book_with_skipped_weeks(synthetic_tape):
     """**The committed tape cannot tell a read-off number from a lucky one.**
 
-    All ten of its weeks trade, so "entries" and "weeks" are the same integer and the
-    premium sum equals any literal someone types. Both mutants survived the guard above for
-    exactly that reason. The synthetic tape skips five weeks, which separates them — a
-    fixture that never reaches a branch is a branch with no test, however many tests name
-    it (T-57).
+    All ten of its weeks trade and it ends flat, so several of the account's figures
+    collapse to values a literal could match. The synthetic tape skips five weeks and ends
+    on a different footing — a fixture that never reaches a branch is a branch with no
+    test, however many tests name it (T-57).
     """
     book = run_backtest(synthetic_tape, Params())
     weeks, entries = len(book.weekly), int(
@@ -228,28 +229,41 @@ def test_the_headline_holds_on_a_book_with_skipped_weeks(synthetic_tape):
         f"this fixture must skip at least one week for the test to mean anything "
         f"({entries} entries over {weeks} weeks)"
     )
-    assert _readouts(_render(Params(), tape=synthetic_tape)) == _expected(book)
+    assert _cards(_render(Params(), tape=synthetic_tape)) == _expected(book)
 
 
-def _readouts(html: str) -> list[str]:
-    values = re.findall(r'data-osl-readout="\d">([^<]*)</div>', html)
-    assert len(values) == 6, f"six readouts, found {len(values)}: {values}"
+def test_the_cards_are_named_as_the_account_names_them(html):
+    """The labels a reader meets, pinned. These are the Reg T quantities the brief's own
+    table defines, in the order the assignment's example page prints them."""
+    labels = re.findall(r'osl-readout-label">([^<]*)</div>', html)
+    assert labels == [
+        "Cash", "Stock LMV", "Short option", "NAV / equity",
+        "Initial margin", "Maintenance", "Available funds", "Excess equity",
+    ]
+
+
+def _cards(html: str) -> list:
+    values = re.findall(r'data-osl-readout="\d+">([^<]*)</div>', html)
+    assert len(values) == 8, f"eight account cards, found {len(values)}: {values}"
     return values
 
 
-def _expected(book) -> list[str]:
-    """The six headline strings, recomputed from the book's own weekly table."""
-    weekly = book.weekly
-    entries = int(weekly["outcome"].isin(("ASSIGN", "EXPIRE")).sum())
-    assigned = int((weekly["outcome"] == "ASSIGN").sum())
-    premium = float(weekly["premium"].fillna(0).sum())
+def _expected(book) -> list:
+    """The eight card strings, recomputed from the book's **event** ledger.
+
+    Never `ledger.iloc[-1]`: the last hourly row is a post-close stub, which is T-62's trap
+    and the reason `final_nav` exists at all (T-57).
+    """
+    last = book.event_ledger().iloc[-1]
+
+    def money(value):
+        text = f"{float(value):,.2f}"
+        return f"\u2212${text[1:]}" if text.startswith("-") else f"${text}"
+
     return [
-        str(len(weekly)),
-        f"{entries} of {len(weekly)}",
-        f"{assigned} of {entries}" if entries else "0",
-        f"${premium:,.2f}",
-        f"${book.final_nav:,.2f}",
-        f"{book.total_return:+.2%}",
+        money(last["cash"]), money(last["lmv"]), money(last["option_mv"]),
+        money(last["nav"]), money(last["im"]), money(last["mm"]),
+        money(last["available"]), money(last["excess"]),
     ]
 
 
