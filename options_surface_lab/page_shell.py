@@ -19,7 +19,9 @@ greps the builders.
 from __future__ import annotations
 
 import posixpath
-from typing import Iterable, Sequence
+import re
+from html import escape
+from typing import Iterable, Sequence, Union
 
 import plotly.graph_objects as go
 
@@ -144,6 +146,24 @@ def as_panel_figure(
     )
 
 
+#: One table cell: text, or ``(text, css_class)``. A class is how a cell states what it is.
+Cell = Union[str, tuple]
+
+_RUN_OF_SPACES = re.compile(r"  +")
+
+
+def _cell_text(value) -> str:
+    """Escaped, with runs of spaces preserved as non-breaking ones.
+
+    The OCC symbol pads its root to six characters and that padding is part of the grammar
+    (SPEC §8). HTML collapses whitespace, so rendering it plainly prints a *different*
+    string from the one the engine produced — silently, and in a table whose whole purpose
+    is to show exactly what was booked.
+    """
+    text = escape(str(value))
+    return _RUN_OF_SPACES.sub(lambda m: "&nbsp;" * len(m.group(0)), text)
+
+
 #: Stable element ids. The published page's listener addresses panels by these rather than
 #: by Plotly's random uuid — a uuid regenerated on every build makes the wiring
 #: unreproducible — and a caption is HTML now, so it needs an id of its own (T-47).
@@ -203,6 +223,52 @@ class PageShell:
                 for i, (label, value) in enumerate(items)
             )
             + "</div>"
+        )
+
+    def table(
+        self,
+        columns: Sequence[str],
+        rows: Iterable[Sequence["Cell"]],
+        *,
+        kv: bool = False,
+    ) -> str:
+        """An HTML table in the terminal style — the blotter, the ledger, the skip log.
+
+        A cell is either a string or a ``(text, css_class)`` pair; the class is how a cell
+        says what it *is* (``osl-num`` for a figure, ``osl-skip`` for a skip reason,
+        ``osl-flag`` for a breached account), so the caller decides meaning and
+        `theme.PAGE_CSS` decides appearance. There is no formatting here on purpose: this
+        method cannot know that ``cash_delta`` is money and ``reason`` is a label.
+
+        **Everything is escaped**, and a run of spaces is preserved. HTML collapses runs of
+        whitespace, and the blotter's OCC symbol is a *fixed-width* field —
+        ``QQQ   260918C00710000`` — whose padding is part of the grammar (SPEC §8). Losing
+        it would not error and would not look wrong; it would quietly print a different
+        string from the one the engine produced.
+
+        `kv` marks a two-column key/value table, which opts out of the 13-column width
+        floor — a table that already fits does not need a scrollbar (DESIGN-BRIEF §9).
+
+        The wrapper is not decoration: ``position:sticky`` on a header resolves against its
+        nearest scrolling ancestor, so a sticky header with no scroll box of its own simply
+        never sticks, and nothing about the render says why.
+        """
+        head = "".join(f"<th>{escape(str(c))}</th>" for c in columns)
+        body = []
+        for row in rows:
+            cells = []
+            for cell in row:
+                text, css = cell if isinstance(cell, tuple) else (cell, "")
+                klass = f' class="{css}"' if css else ""
+                cells.append(f"<td{klass}>{_cell_text(text)}</td>")
+            body.append("<tr>" + "".join(cells) + "</tr>")
+        klass = "osl-table osl-table-kv" if kv else "osl-table"
+        return (
+            '<div class="osl-table-scroll">'
+            f'<table class="{klass}">'
+            f"<thead><tr>{head}</tr></thead>"
+            f"<tbody>{''.join(body)}</tbody>"
+            "</table></div>"
         )
 
     def warning(self, text: str) -> str:

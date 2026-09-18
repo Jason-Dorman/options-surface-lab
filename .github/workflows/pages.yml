@@ -152,11 +152,33 @@ jobs:
           # run_backtest returned nothing and the page rendered its frame around it.
           grep -q "data-osl-readout" "$page" || {
             echo "::error::the covered-call page carries no readouts — the book is empty"; exit 1; }
-          # SPEC §11's remaining per-page guards — a BUY and a settled week in the blotter,
-          # the R-squared line, and FR-19's `[unwritten]` refusal — land with the panels
-          # they guard (T-59 / T-70). A guard written before its subject cannot fail for
-          # the right reason, and one written for a subject that never arrives fails the
-          # deploy for the wrong one.
+          # SPEC §11's per-page guards, landed with the panels they guard (T-59). The
+          # phrases are pinned to the page by tests/test_build_covered_call.py, because a
+          # grep guard is orphaned by a copy edit and then passes forever (T-45).
+          grep -q "plotly-graph-div" "$page" || {
+            echo "::error::no Plotly figures on the covered-call page"; exit 1; }
+          figs=$(grep -o "plotly-graph-div" "$page" | wc -l)
+          test "$figs" -ge 2 || {
+            echo "::error::expected FR-16's account chart and FR-17's scatter, found $figs"; exit 1; }
+          # A book with no trades renders perfectly and is wrong: every table is present,
+          # every heading is right, and the strategy simply never fired.
+          grep -q "<td>BUY</td>" "$page" || {
+            echo "::error::the blotter booked no entry — the book is empty"; exit 1; }
+          if ! grep -q "<td>EXPIRE</td>" "$page" && ! grep -q "<td>ASSIGN</td>" "$page"; then
+            echo "::error::no week ever resolved — every position is still open"; exit 1
+          fi
+          # FR-17's fit. Plain ASCII with no "/" and no "·" on purpose: the caption exists
+          # twice in the page, once inside the figure's JSON, where Plotly writes a forward
+          # slash as / and would never match a guard spanning one.
+          grep -q "Fill assumption:" "$page" || {
+            echo "::error::FR-17's fit line is missing — the fill assumption is unstated"; exit 1; }
+          # FR-19, the FR-7 mechanism inherited whole: the write-up is the one graded
+          # element on this page with no figure behind it, so an unwritten slot is
+          # invisible on a page that otherwise renders perfectly.
+          if grep -qF "[unwritten]" "$page"; then
+            echo "::error::an FR-19 write-up answer is still unwritten — see options_surface_lab/covered_call/writeup.py (T-60)"
+            exit 1
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:

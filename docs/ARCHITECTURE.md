@@ -185,8 +185,11 @@ because a number the page derives is a *readout* and belongs in the strip.
 2026-09-17, T-79)*
 `PageShell` — command bar, readout strip, panel, document — plus the site's page table
 (`SITE_PATHS` / `LOCAL_PATHS` / `NAV_LABELS`, and `nav_for`, which spells a cross-page link
-for wherever the page is being written) and, since **T-69**, the *figure* side of the same
-contract: `with_caption` / `figure_caption` / `as_panel_figure`. Those three lived in
+for wherever the page is being written), `table()` for the HTML tables Assignment 2's page
+is half made of (T-59 — a cell is text or `(text, class)`, the caller decides meaning and
+`theme.PAGE_CSS` decides appearance, and every cell is escaped with its runs of spaces
+preserved because the OCC symbol's padding is grammar), and, since **T-69**, the *figure* side
+of the same contract: `with_caption` / `figure_caption` / `as_panel_figure`. Those three lived in
 `option_surface_plot.py` until Assignment 2's figures needed them and were forbidden to reach
 into 1.1 (AD-12). The move **removed** a dependency rather than adding one — `page_shell` had
 been importing `figure_caption` back out of `option_surface_plot` through a deferred local
@@ -220,7 +223,7 @@ its frame and the six numbers, and says so.
 (→ `covered_call/rules.py`) and the book (→ `covered_call/engine.py`).
 
 **`options_surface_lab/covered_call/`** — *AD-12, **accepted 2026-09-14** (T-74); `rules.py`
-and `live.py` landed 2026-09-13, `writeup.py` and `tape.py` 2026-09-14, **`engine.py` 2026-09-15 (T-57)**, `evidence.py` 2026-09-16 (T-58), **`plots.py` 2026-09-17 (T-69)**; `page.py` still to come.* Assignment 2's subpackage: `tape.py`, `rules.py`, `engine.py`, `plots.py`,
+and `live.py` landed 2026-09-13, `writeup.py` and `tape.py` 2026-09-14, **`engine.py` 2026-09-15 (T-57)**, `evidence.py` 2026-09-16 (T-58), **`plots.py` and `page.py` 2026-09-17 (T-69, T-59) — the subpackage is complete.*** Assignment 2's subpackage: `tape.py`, `rules.py`, `engine.py`, `plots.py`,
 `page.py`, `writeup.py`, layered as §2 prescribes. `rules.py` is the transform core's pure
 half — `Params` (the SD-x decisions as a frozen record), `select_strike`, `is_itm`, `valid_mid`,
 the blotter-row constructors, and the calendar helpers that own SPEC §3.2 item 4's **closing
@@ -617,7 +620,7 @@ architecture change (§5, §6 first).
 | **(A2)** Add or change a strategy rule or parameter | `covered_call/rules.py` + `Params`, its test, and the page's rule sentence (FR-14 pins them) | the engine's loop — a rule *selects*, the engine *books* |
 | **(A2)** Add or change a statistic *about the tape* (FR-17's fit, a spread measure) | `covered_call/evidence.py` + its test + the notebook section (AD-3 co-build); a new *parameter* for it goes in `rules.Params` so FR-14 prints it | `engine.py` — the book is derived from the blotter, the evidence from the tape, and neither may read the other |
 | **(A2)** Change how a fill, a skip or an expiry is booked | `covered_call/engine.py` **and** the invariant suite (SPEC-COVERED-CALL §12). A booking change that breaks an invariant is a domain-rule change — PRD §14 first | the ledger's identities (I-1, I-2, I-11) |
-| **(A2)** Add a figure or table to the covered-call page | `covered_call/plots.py` → `covered_call/page.py`; tables as HTML rendered by the builder and styled by `theme.PAGE_CSS` (T-68) — the generator's templates are T-51, after 09-20 | 1.1's page; the theme, except through T-68 |
+| **(A2)** Add a figure or table to the covered-call page | `covered_call/plots.py` → `covered_call/page.py`; tables through `page_shell.PageShell.table`, styled by `theme.PAGE_CSS` (T-68) — the generator's templates are T-51, after 09-20. A panel that a CI guard greps needs its marker in `page.CAPTION_MARKERS` / `BLOTTER_*_MARKER` **and** in `pages.yml`; a test pins the two | 1.1's page; the theme, except through T-68 |
 | **(A2)** Pull or re-shape the hourly tape | `covered_call/tape.py` only; additive payload keys | `option_pipeline_data.pkl`, ever |
 
 ## 8. Cross-cutting posture

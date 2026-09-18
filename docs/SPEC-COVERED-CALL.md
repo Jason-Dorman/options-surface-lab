@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft v1 — 2026-09-12. **§2–§10 and §12 are now the code's behaviour, not a target** (T-65, T-80, T-56, T-63, T-81, T-57 2026-09-15, and **T-58 2026-09-16**: the weekly loop, fills, settlement, the blotter, the skip log, the ledger, the I-1…I-12 suite and the mid-vs-print evidence). §11 and I-13 remain targets until T-79 / T-59 land (lockstep rule). §10 was **corrected 2026-09-16 by T-83's review** — the sample now excludes the post-close bar and the headline moved. |
+| Status | Draft v1 — 2026-09-12. **§2–§10 and §12 are now the code's behaviour, not a target** (T-65, T-80, T-56, T-63, T-81, T-57 2026-09-15, and **T-58 2026-09-16**: the weekly loop, fills, settlement, the blotter, the skip log, the ledger, the I-1…I-12 suite and the mid-vs-print evidence). **§11 and I-13 landed 2026-09-17** (T-69, T-59): the seven panels, the tables, every publish guard and the page-equals-its-sources invariant. §10 was **corrected 2026-09-16 by T-83's review** — the sample now excludes the post-close bar and the headline moved. |
 | Scope | The book: tape → rules → engine → blotter + ledger + Reg T account → page. Schemas, the weekly algorithm, fills, settlement, edge cases, the invariant suite. |
 | Companion | Requirements: [PRD.md Part B](PRD.md) (§13–§20) · Board: [BACKLOG-2.md](BACKLOG-2.md) · Brief: [ASSIGNMENT-2-COVERED-CALL.md](ASSIGNMENT-2-COVERED-CALL.md) · Shared machinery: [SYSTEM-SPEC.md](SYSTEM-SPEC.md) §6 (RIC grammar), §5 (cache-first) · Structure: [ARCHITECTURE.md](ARCHITECTURE.md) AD-12 |
 
@@ -613,10 +613,18 @@ and it rests on the $49.50, not on the R².
 ## 11. The page
 
 Published at `/covered-call/` by **`build_covered_call.py`** (repo root), which renders the
-chrome `build_preview.py` renders — `page_shell.PageShell` — and will compose
-`covered_call/page.py: build_page(tape, params) -> Page` (NFR-5) when T-59 lands. *(This said
-"registered with the generator"; AD-11's registry and templates are deferred past the 09-20
-submission, and T-79's interim is a second builder, not a registry. Corrected 2026-09-17.)*
+chrome `build_preview.py` renders — `page_shell.PageShell` — and composes
+`covered_call/page.py: build_page(tape, params) -> Page` (NFR-5). **Landed 2026-09-17
+(T-59).** *(This said "registered with the generator"; AD-11's registry and templates are
+deferred past the 09-20 submission, and T-79's interim is a second builder, not a registry.
+Corrected 2026-09-17.)*
+
+**Panels are numbered 1–7, not only the figures**, and the **live book is [6]** — between the
+evidence and the write-up, because the backtest is the body, the live run is what follows from
+it, and the PO's prose closes the page. That differs from 1.1, where an index names a *figure*
+because the indices are also the as-of listener's addressing scheme (`osl-fig-{n}`, T-12);
+this page cross-filters nothing, so nothing is addressed by number.
+
 Panels, in reading order:
 
 1. **The strategy** — `Params` rendered as prose + a table (FR-14), and the rule ids the
@@ -633,8 +641,11 @@ Panels, in reading order:
    look tighter or looser than the statistic beside it and nothing would say so), both axes
    on **one range** so `y = x` is drawn at 45 degrees, and no fit line at all when none was
    estimated. The caption is `headline()` and `NON_SIMULTANEITY_CAVEAT` verbatim.
-6. **Write-up** — the PO's prose (FR-19), the FR-7 mechanism: a prose module, `[unwritten]`
-   in red, a test, and a CI guard.
+6. **Live book** (FR-21) — the live blotter, the position, and the raw quotes behind the
+   fill. It states which half of the page is historical and which is running forward, and the
+   state sentence is derived, so a settled book stops claiming an open position.
+7. **Write-up** — the PO's prose (FR-19), the FR-7 mechanism: a prose module,
+   `[unwritten]` in red, a test, and a CI guard. All three are live as of T-59.
 
 No listener is needed: nothing cross-filters. Tables are HTML, styled by `theme.PAGE_CSS`
 **(landed 2026-09-17, T-68)**: `.osl-table-scroll` wraps every one of them and owns both
@@ -661,9 +672,18 @@ pins those properties rather than trusting the next person who shortens a captio
 page's own, because a marker shared with 1.1's `synthetic panel` would let one page's
 fabrication pass the other's check — plus a non-empty page, a non-empty readout strip, and a
 link to the rest of the site (a page nothing links to is published and invisible, which no
-render can show). The `[unwritten]`, R² and blotter guards land **with the panels they
-guard**: a guard written before its subject cannot fail for the right reason, and one written
-for a subject that never arrives fails the deploy for the wrong one.
+render can show).
+
+*The rest landed with their panels (T-59, 2026-09-17):* two figures, `<td>BUY</td>`, one of
+`<td>EXPIRE</td>` / `<td>ASSIGN</td>`, `Fill assumption:`, and `[unwritten]`. Three things the
+mutation run forced. **A blotter guard must grep a blotter cell, not a rule id** — the rule
+ids are printed in the strategy panel's key too, so `grep R-ENTRY-STOCK` passes on a page
+whose blotter is empty, which is the one failure it exists for. **Both pages refuse
+`[unwritten]`**, so a test asserting the bare string is satisfied by the *other* page's guard;
+each is pinned to its own error message. And the markers are **two kinds with two rules**: a
+caption marker exists twice in the page (HTML and `layout.meta`) so it must be ASCII with no
+`/` and no `·`, while a structural marker like `<td>BUY</td>` never reaches figure JSON and is
+allowed its slash.
 
 ## 12. Invariants — the executable definition of "logically consistent" (NFR-6)
 
@@ -691,7 +711,7 @@ waits on the page (T-59).
 | I-10 | **Skips are real:** every week without an entry appears in the skip log with a reason the tape supports (no print / no strike / no valid quote / short week), and no week appears in both. |
 | I-11 | **Reg T arithmetic:** `IM == 0.5 × LMV`, `MM == 0.25 × LMV`, `available == NAV − IM`, `excess == NAV − MM`; all zero when flat. |
 | I-12 | **Determinism:** the same tape and `Params` produce a byte-identical blotter. |
-| I-13 | **The page says what its sources say:** the blotter rendered into the built page equals `run_backtest`'s output for the committed tape, and the R² equals `evidence.mid_vs_print`'s (the T-44 lesson, applied to tables). *Corrected 2026-09-16 (T-83): this said "the engine's outputs" for both, written before T-58 moved the R² out of the engine's reach — and `evidence` may not import `engine`, so taken literally it asked for a comparison the package's own layering forbids. Amending a spec means re-reading the invariants that quote it; T-82 recorded that lesson eight lines above the section T-58 edited.* |
+| I-13 | *(landed 2026-09-17, T-59 — `tests/covered_call/test_page.py`.)* **The page says what its sources say:** the blotter rendered into the built page equals `run_backtest`'s output for the committed tape, and the R² equals `evidence.mid_vs_print`'s (the T-44 lesson, applied to tables). *Corrected 2026-09-16 (T-83): this said "the engine's outputs" for both, written before T-58 moved the R² out of the engine's reach — and `evidence` may not import `engine`, so taken literally it asked for a comparison the package's own layering forbids. Amending a spec means re-reading the invariants that quote it; T-82 recorded that lesson eight lines above the section T-58 edited.* |
 
 ## 13. Edge cases (AD-9 applied)
 

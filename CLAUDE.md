@@ -75,7 +75,7 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 ```bash
 python build_preview.py       # 1.1's page — the static index.html Pages serves at /
 python build_covered_call.py  # A2's page — Pages serves it at /covered-call/
-pytest                        # 653 tests in tests/ — all green, no xfail
+pytest                        # 684 tests in tests/ — all green, no xfail
 reflex run                    # local dev server (FR-1); not what gets published
 
 # Both take `--site DIR` (CI passes `--site _site`): the page lands at DIR/<route> with its
@@ -329,10 +329,11 @@ is still calendar-dependent — OQ-6's `end_date` parameter is the root fix and 
 sign-off.
 
 **Next up (2026-09-17):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST.** The first live
-entry is **booked** — see T-78 below. ~~T-56~~, ~~T-77~~, ~~T-57~~, ~~T-58~~, ~~T-79~~, ~~T-68~~ and ~~T-69~~ are done — **the
-tape is pulled, the book runs, the fill assumption is measured, the page has a route, and both
-figures exist** — so the critical path is now **T-59** (put the panels on the page), T-60 (the
-PO's write-up), then T-71/T-72 to ship. **T-66 (notebook 03
+entry is **booked** — see T-78 below. **A2-M4 is complete.** ~~T-56~~, ~~T-77~~, ~~T-57~~, ~~T-58~~, ~~T-79~~, ~~T-68~~, ~~T-69~~
+and ~~T-59~~ are done — the tape is pulled, the book runs, the fill assumption is measured and
+**the page carries all seven panels**. The critical path is now **T-60 (the PO's write-up) —
+and CI is red until it lands**, because FR-19's `[unwritten]` refusal is live and doing its
+job — then T-71/T-72 to ship, with T-78's settlement leg on Friday 09-18. **T-66 (notebook 03
 §1–§4) is still open**: it was meant to be co-built with T-57 and was not; T-58 created the
 notebook and wrote §5 into it, so T-66 is now a matter of filling in the sections above its own.
 The PO chose **QQQ** (SD-1, 2026-09-12) and the **last
@@ -617,9 +618,50 @@ carry:
   it took a clean Linux venv built from `requirements.txt`, which is the only thing that ever
   ran what CI runs.
 
+**T-59 landed 2026-09-17 (FR-14, FR-15, FR-18, FR-21, I-13) — the page carries the book.**
+`covered_call/page.py`: `build_page(tape, params) -> Page` and SPEC §11's seven panels —
+strategy, Reg T account, blotter + skip log, daily ledger, mid vs print, live book, write-up —
+plus `PageShell.table` for the HTML tables and every remaining publish guard in `pages.yml`.
+**27 new tests; 25 of 25 injected defects caught; 684 green, no xfail.**
+
+**CI IS RED ON PURPOSE UNTIL T-60 LANDS.** FR-19's `[unwritten]` refusal is live: the five
+write-up answers are still the PO's to write, they render in red, the test fails and the Pages
+workflow refuses to deploy. That is the FR-7 mechanism working exactly as specified — the page
+has one graded element with no figure behind it, so its absence has to be loud. **Nothing else
+fails.** Every other guard on both pages passes; the deploy unblocks the moment the prose is
+written and the page is rebuilt in the same commit.
+
+Six things worth carrying:
+
+- **Three of the eight mutation survivors were defects in my own guards, not in the page.**
+  The worst: I-13 compared each rendered cell to `page._present(record[column])` — the very
+  function that produced it — so a mutant rounding money to whole dollars moved the page *and*
+  the expectation together and the suite stayed green. That is T-46's
+  guard-that-reads-back-its-own-effect, landed on again in a new place. It reads the number
+  back out of the string now, and a separate test asserts a fill still carries its cents.
+- **A guard that checks row width is not checking the header.** The ledger test asserted every
+  row had twenty cells; a truncated *header* then rendered twenty cells under nineteen names,
+  silently relabelling every column after the gap. Headers are asserted too now.
+- **Both pages refuse `[unwritten]`, so asserting the bare string proves nothing about
+  either.** Deleting the covered-call refusal left the test green on the strength of 1.1's.
+  Each guard is pinned to its own error message.
+- **A blotter guard must grep a blotter *cell*, not a rule id.** The rule ids are printed in
+  the strategy panel's key on purpose, so a reader can read the notes without the spec — which
+  means `grep R-ENTRY-STOCK` passes on a page whose blotter has no rows at all, the one
+  failure the guard exists for. It greps `<td>BUY</td>`.
+- **A figure's box can be load-bearing.** The scatter ties its axes to one pixel scale so
+  `y = x` is genuinely 45 degrees; Plotly honours that in a wide box by letterboxing the cloud
+  into the middle third. Panel [5] is half width at hero height — roughly square — and that is
+  the only place on this site where a panel's proportions are a correctness question. Found by
+  asking what the panel would look like at full width, not by a failing assertion.
+- **The OCC symbol's padding is grammar, and HTML collapses it.** `QQQ   260918C00710000`
+  pads its root to six characters (SPEC §8); rendered plainly it prints a *different* string
+  from the one the engine produced, silently, in the one table whose whole purpose is to show
+  exactly what was booked. `PageShell.table` escapes every cell and preserves runs of spaces.
+
 **T-69 landed 2026-09-17 (FR-16, FR-17) — `covered_call/plots.py`, so both of A2's
 figures exist.** `account_figure(book)` and `mid_vs_print_figure(evidence)`. **23 tests,
-24 of 24 injected defects caught; 653 green, no xfail.** The module is presentation and
+24 of 24 injected defects caught; 653 green at the time, no xfail.** The module is presentation and
 recomputes nothing, which makes almost every test one shape: *the figure says what the `Book`
 or the `MidVsPrint` says, and nothing it derived itself* — T-46's rule applied to a plot,
 because a test that reads a number back out of the trace it just set proves only that Plotly
@@ -806,9 +848,9 @@ AD-10 is approved and **not landed**; **AD-11's interim landed 2026-09-17 (T-79)
 registry and templates stay deferred. The whole M5 restructure is deferred until after the
 submission — PO to confirm the standing recommendation. The order that fits the calendar is at
 the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions → T-78's entry → T-56 → T-57 → T-58 →
-T-79 → T-68 → T-69~~ (all landed) → **T-59** → T-60 → ship, with T-78's settlement leg on
+T-79 → T-68 → T-69 → T-59~~ (all landed) → **T-60** → ship, with T-78's settlement leg on
 Friday 09-18. 1.1's brief is archived at `docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open.
-**653 tests green, no xfail** (2026-09-17, full run; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
+**684 tests green, no xfail** (2026-09-17, full run; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
 Update this paragraph as things land (lockstep rule).
 
 **T-57 landed 2026-09-15 — `covered_call/engine.py`, so the book runs** (FR-15, FR-16, NFR-6).

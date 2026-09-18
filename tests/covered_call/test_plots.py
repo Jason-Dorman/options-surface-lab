@@ -216,6 +216,15 @@ def test_both_axes_carry_one_range_so_the_identity_line_is_at_45_degrees(scatter
     x_range, y_range = scatter.layout.xaxis.range, scatter.layout.yaxis.range
     assert tuple(x_range) == tuple(y_range), "the axes carry different rulers"
 
+    # Equal ranges are necessary and NOT sufficient — the half of this the first version of
+    # the test missed. Plotly maps each axis onto its own pixel span, so the same range in a
+    # 4:1 panel draws `y = x` at about 14 degrees. `scaleanchor` is what ties the two spans
+    # together, and it is the only part of this a reader would actually see go wrong.
+    assert scatter.layout.yaxis.scaleanchor == "x", (
+        "the axes share a range but not a pixel scale — `y = x` tilts with the panel's shape"
+    )
+    assert scatter.layout.yaxis.scaleratio == 1
+
     pts = evidence.points
     lo, hi = float(x_range[0]), float(x_range[1])
     assert lo <= pts[["mid", "trdprc_1"]].min().min()

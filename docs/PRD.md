@@ -703,13 +703,16 @@ instead of the mid costs **$49.50**, moving the window return from 1.658% to 1.5
 run per page with a marker each. **The identity the content needs is in (T-68,
 2026-09-17)** — `NAV_LINE` / `MARGIN_IM` / `MARGIN_MM` behind `theme.account_line()`,
 FR-17's `FIT_LINE` and the shared `IDENTITY_LINE`, and the `.osl-table*` family, recorded in
-DESIGN-BRIEF §9. **What remains is the content** — panels in SPEC §11's order, blotter, skip
-log and ledger as HTML tables that scroll below `TABLE_MIN_WIDTH` rather than deform
-(T-69/T-59). AD-11's registry and templates are deferred past 09-20
-(T-51), so the page is assembled in Python by its own builder rather than by a generator.
-The per-page CI guards that have landed are the synthetic refusal and a non-empty book; the
-`[unwritten]` and R² guards land with the panels they guard — a guard written before its
-subject cannot fail for the right reason.
+DESIGN-BRIEF §9. **The content landed 2026-09-17 (T-69, T-59):** `covered_call/page.py` composes SPEC
+§11's seven panels — the strategy, the Reg T account, the blotter with its skip log, the
+daily ledger, mid-vs-print, the live book and the write-up — with the blotter, ledger, skip
+log and parameter tables as HTML that scrolls below `TABLE_MIN_WIDTH` rather than deforming.
+AD-11's registry and templates are deferred past 09-20 (T-51), so the page is assembled in
+Python by its own builder rather than by a generator. **Every per-page CI guard is now in**:
+the synthetic refusal, a non-empty readout strip, two figures, a `BUY` and a resolved week in
+the blotter, FR-17's fit line, and FR-19's `[unwritten]` refusal — **which is failing the
+deploy until T-60 is written**, exactly as FR-7's did. What remains is the browser drive
+(T-71).
 *Accepted when:* the Pages URL renders the page in incognito with every panel present and the
 NAV hover working; 14-width audit clean; zero console errors.
 
@@ -719,6 +722,12 @@ what happened, where theory met tape, what you would change. The FR-7 mechanism:
 module, `[unwritten]` in red, a failing test, a CI refusal.
 *Accepted when:* every slot is written by the PO and specific to the book on the page (cites
 its own numbers); the guard passes.
+**◐ 2026-09-17 (T-70 + T-59): the mechanism is complete and the prose is not.** The PO's
+methodology block — the Rule / Fill / Stock / Audit / Limitation hierarchy, the
+observation-point paragraph, the synchronisation caveat and the midpoint example — is on the
+page. The five answers are still `[unwritten]`: they render in red, `test_an_unwritten_answer_is_loud`
+fails, and the Pages workflow **refuses to deploy**. All three guards are live, so the
+remaining work is the PO's alone (T-60).
 
 **FR-21 — The live book from Monday 2026-09-14.** *(PO, 2026-09-12: "Monday this system
 needs to have everything in place to purchase the shares, write the call and fill out the
@@ -736,6 +745,14 @@ is the rule on day one.
 *Accepted when:* the two 09-14 rows are on the page with their raw quotes; they pass I-3 … I-6;
 the panel states what is historical and what is live; the live rows were written by
 `covered_call/live.py`, not typed.
+**◐ 2026-09-17 (T-59): the panel is on the page.** [6] carries the two booked rows, the
+position (short the 710 call expiring 09-18 against 100 shares — **still open**, and the
+panel says so), and the raw quotes behind the fill: the stock print and its bar range, the
+call's bid and ask, and both last-trade offsets, so the midpoint is beside the evidence for
+it rather than asserted. It states in words which half of the page is historical and which is
+running forward, and the state sentence is **derived** — a settled book stops claiming an
+open position rather than being re-edited. What remains is the settlement leg itself
+(T-78, Friday 09-18).
 
 ### P1
 
@@ -769,8 +786,8 @@ NFR-1 … NFR-5 apply unchanged. Added:
 | A2-M0 | Governance and decisions | — | This part; T-62 spike; SD-1…SD-6 decided; ~~AD-12 signed~~ **✅ 2026-09-14, amended (T-74)**. Remaining: FR-14 prints the decisions on the page |
 | A2-M1 | The tape | A2-M0 | FR-13, synthetic tape, the one-time pull committed. **complete 2026-09-15**: `tape.py` (T-56), the committed pull (T-77 — 37,857 bars over 10 weeks, verified against T-65's independent run), the synthetic tape and its fixtures (T-63), and the tape suite (T-64) |
 | A2-M2 | The engine | A2-M1 | FR-14, FR-15, FR-16, the invariant suite, notebook 03 |
-| A2-M3 | The evidence | A2-M1 | FR-17. **◐ 2026-09-16:** the transform and notebook 03 §5 landed (T-58); the figure is T-69 and the panel T-59, both inside A2-M4 |
-| A2-M4 | The page | ~~T-79~~ **✅ 2026-09-17** (a second builder sharing the chrome), ~~T-68~~ **✅ 2026-09-17** (the lines and the table rules, DESIGN-BRIEF §9) + A2-M2/M3 | FR-18, FR-21's live panel, theme additions. **Remaining: T-69 (figures), T-59 (the panels), T-70's red rendering** |
+| A2-M3 | The evidence | A2-M1 | FR-17. **✅ 2026-09-17:** the transform and notebook 03 §5 landed 09-16 (T-58); the figure (T-69) and the panel (T-59) landed 09-17 |
+| A2-M4 | The page | **✅ 2026-09-17** — ~~T-79~~ (a second builder sharing the chrome), ~~T-68~~ (the lines and table rules, DESIGN-BRIEF §9), ~~T-69~~ (both figures), ~~T-59~~ (the seven panels, the tables, every publish guard, I-13) | FR-18, FR-21's live panel, theme additions. **Remaining: the browser drive (T-71), which is A2-M5** |
 | A2-M5 | Write-up and ship | A2-M4 | FR-19, browser drive, incognito, Canvas |
 | P1 | Comparison variant | every P0 green | FR-20 |
 

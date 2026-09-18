@@ -189,3 +189,43 @@ def test_hw1_publishes_at_the_site_root():
     """The URL already submitted on Canvas keeps working (AD-11). Moving 1.1 off `/` is a
     PO decision, not a refactor."""
     assert SITE_PATHS["index"] == "index.html"
+
+
+# ------------------------------------------------------------------ tables (T-68 / T-59)
+def test_a_table_preserves_a_run_of_spaces():
+    """The OCC symbol pads its root to six characters and that padding is grammar (SPEC §8).
+
+    HTML collapses runs of whitespace, so rendering it plainly prints a *different* string
+    from the one the engine produced — silently, in the one table whose whole purpose is to
+    show exactly what was booked.
+    """
+    markup = PageShell("t").table(("occ",), [["QQQ   260918C00710000"]])
+    assert "QQQ&nbsp;&nbsp;&nbsp;260918C00710000" in markup
+    assert "QQQ   260918C00710000" not in markup, "the padding will collapse in a browser"
+
+
+def test_a_table_escapes_its_cells():
+    """A blotter note is data, not markup. Nothing here is user input today, which is the
+    reason to escape now rather than the reason not to: the first cell that carries a `<`
+    would otherwise break the table and nothing would say why."""
+    markup = PageShell("t").table(("note",), [["<b>R-ENTRY</b> & more"]])
+    assert "&lt;b&gt;R-ENTRY&lt;/b&gt; &amp; more" in markup
+    assert "<b>R-ENTRY</b>" not in markup
+
+
+def test_a_table_carries_its_scroll_box():
+    """`position:sticky` resolves against the nearest scrolling ancestor, so a sticky header
+    with no scroll box of its own simply never sticks — and nothing about the render says
+    why. The wrapper is also what makes a 20-column ledger scroll instead of deforming."""
+    markup = PageShell("t").table(("a", "b"), [["1", "2"]])
+    assert markup.startswith('<div class="osl-table-scroll">')
+    assert 'class="osl-table"' in markup
+
+
+def test_a_table_cell_can_say_what_it_is():
+    """A `(text, class)` cell is how the page marks a number, a skip reason or a breached
+    account — the caller decides meaning, `theme.PAGE_CSS` decides appearance (§9)."""
+    markup = PageShell("t").table(("x",), [[("SKIP_NO_QUOTE", "osl-skip")]])
+    assert '<td class="osl-skip">SKIP_NO_QUOTE</td>' in markup
+    assert "osl-table-kv" not in markup
+    assert "osl-table-kv" in PageShell("t").table(("k", "v"), [["a", "b"]], kv=True)

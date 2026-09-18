@@ -178,9 +178,10 @@ def mid_vs_print_figure(evidence, *, height: int | None = None) -> go.Figure:
     actually estimated: below ``MIN_FIT_POINTS`` distinct mids ``fit_y`` returns nothing and
     this figure draws nothing, the same refusal posture ``iv_refusal`` gave FR-11.
 
-    **Both axes carry one range**, so the identity line sits at 45 degrees. An unequal pair
-    of axes would tilt it, and a reference line that misstates its own slope is worse than
-    none.
+    **Both axes carry one range and one pixel scale**, so the identity line sits at 45
+    degrees whatever shape its panel is. A reference line that misstates its own slope is
+    worse than none, and the reader's whole reading of the cloud — is the print above or
+    below the mid — is read off that angle.
 
     ``Scattergl``: 16,626 SVG markers is a scroll that janks on a mid-range laptop. The
     sample is drawn **whole** — subsampling evidence offered as evidence would need saying
@@ -245,7 +246,18 @@ def mid_vs_print_figure(evidence, *, height: int | None = None) -> go.Figure:
             margin=T.PANEL_FIGURE_MARGIN,
             legend=T.legend(),
             xaxis=T.axis("Quoted mid ($)", range=axis_range),
-            yaxis=T.axis("Last print, TRDPRC_1 ($)", range=axis_range),
+            # `scaleanchor` is what actually makes the identity line 45 degrees. Equal
+            # *ranges* are necessary and not sufficient: Plotly maps each axis onto its own
+            # pixel span, so the same range in a 4:1 box renders `y = x` at about 14
+            # degrees — the reference line lying about its slope in the one way a test that
+            # compares two `range` tuples cannot see. Found by asking what the panel would
+            # look like at full page width, not by a failing assertion.
+            yaxis=T.axis(
+                "Last print, TRDPRC_1 ($)",
+                range=axis_range,
+                scaleanchor="x",
+                scaleratio=1,
+            ),
         )
     )
     return with_caption(

@@ -505,11 +505,19 @@ The render-level guard is **not** here. A stylesheet with no markup consuming it
 written before its subject (T-79's lesson), so the table classes are proven to *exist* and are
 proven to render only when T-59 emits the markup and T-71 drives it in a browser at 14 widths.
 
-*Updated 2026-09-17 (T-69): the four line colours now have a consumer —
-`covered_call/plots.py` reads them through `theme.account_line()` and the `FIT_LINE` /
-`IDENTITY_LINE` pair, and `tests/covered_call/test_plots.py` asserts each line wears the
+*Updated 2026-09-17 (T-69, T-59): everything in this section now has a consumer.
+`covered_call/plots.py` reads the line colours through `theme.account_line()` and the
+`FIT_LINE` / `IDENTITY_LINE` pair, and `covered_call/page.py` renders the tables through
+`page_shell.PageShell.table` — `osl-num` on every figure, `osl-label` on every name,
+`osl-skip` on a skip reason. `tests/covered_call/test_plots.py` asserts each line wears the
 role the theme gives it by reading the theme at assert time, so a repointed token restyles
-the chart. The **table** classes still have none — that is T-59.*
+the chart. The **browser** proof is still T-71.*
+
+*One thing the composition changed: **a figure's box can be load-bearing**. The mid-vs-print
+scatter ties its two axes to one pixel scale so `y = x` is genuinely 45 degrees, and Plotly
+honours that in a wide box by letterboxing the cloud into the middle third. So panel [5] is
+**half width at hero height** — roughly square — which is the only place on this site a
+panel's proportions are a correctness question rather than a taste one.*
 
 **One class has no renderer on either tape: `.osl-flag`.** `NEG_AVAILABLE` never fires — the
 committed tape's `available` bottoms at $38,886.50 against a $75,000 book, and the synthetic

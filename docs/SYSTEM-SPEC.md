@@ -127,7 +127,8 @@ flowchart TD
 |---|---|---|---|
 | `option_surface_utils.py` | numpy, pandas, scipy | reflex, plotly, theme | Data acquisition, parsing, reshaping, stats |
 | `option_surface_plot.py` | plotly, utils, theme, `page_shell` | reflex | Turning 1.1's frames into figures. Re-exports `with_caption` / `figure_caption` / `as_panel_figure`, which moved to `page_shell` in T-69 |
-| `page_shell.py` | plotly, theme | reflex, utils, either assignment's modules | The chrome both builders render, **and the figure side of the panel contract**: `with_caption` / `figure_caption` (a caption is data in `layout.meta`, rendered as HTML by whichever page holds the figure) and `as_panel_figure` |
+| `page_shell.py` | plotly, theme | reflex, utils, either assignment's modules | The chrome both builders render — command bar, readouts, panel, `table()`, document — **and the figure side of the panel contract**: `with_caption` / `figure_caption` (a caption is data in `layout.meta`, rendered as HTML by whichever page holds the figure) and `as_panel_figure` |
+| `covered_call/page.py` | `page_shell`, `plots`, `engine`, `evidence`, `rules`, `live`, `writeup`, theme | reflex, lseg, pandas arithmetic of its own | A2's page: `build_page` and SPEC §11's seven panels. It *arranges* — every number is read off a record, which is what makes I-13 checkable |
 | `covered_call/plots.py` | plotly, theme, `page_shell`, `engine`, `evidence`, `rules` | reflex, lseg, `page.py` | A2's figures: FR-16's NAV/IM/MM account chart, FR-17's mid-vs-print scatter. Presentation — it recomputes nothing |
 | `theme.py` | (stdlib only) | everything else | Design tokens: palette, fonts, layout defaults |
 | `commentary.py` | (nothing) | everything | FR-7's three sentences — prose, authored by the PO |

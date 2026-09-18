@@ -14,6 +14,7 @@ import re
 import pytest
 
 import build_covered_call as builder
+from options_surface_lab.covered_call import page as page_mod
 from options_surface_lab.covered_call.engine import run_backtest
 from options_surface_lab.covered_call.rules import Params
 from options_surface_lab.covered_call.tape import load_tape
@@ -64,6 +65,86 @@ def test_the_ci_guard_greps_for_the_marker_the_builder_emits():
     assert builder.SYNTHETIC_MARKER in workflow, (
         f"the CI guard no longer greps for {builder.SYNTHETIC_MARKER!r} — the covered-call "
         "page could publish a book run on a tape that is a shape, not a market"
+    )
+
+
+def test_every_publish_guard_greps_a_phrase_the_page_actually_emits(html):
+    """SPEC §11's per-page guards, pinned to the artifact they guard (T-59).
+
+    A publish guard is a plain grep over a built file, so a copy edit orphans it and it
+    then passes forever — which is exactly what happened when FR-11's caption was
+    shortened and the workflow kept hunting for "DERIVED, NOT OBSERVED" (T-45). Each
+    phrase has to be **in the page** and **in the workflow**, or this fails.
+    """
+    workflow = read(WORKFLOW)
+    markers = (
+        page_mod.CAPTION_MARKERS
+        + (page_mod.BLOTTER_ENTRY_MARKER,)
+        + page_mod.BLOTTER_SETTLED_MARKERS
+    )
+    for phrase in markers:
+        assert phrase in workflow, (
+            f"{phrase!r} is asserted of the page but the CI guard does not check it"
+        )
+
+    assert page_mod.BLOTTER_ENTRY_MARKER in html, "no entry was booked into the page"
+    assert any(m in html for m in page_mod.BLOTTER_SETTLED_MARKERS), "no week resolved"
+    for phrase in page_mod.CAPTION_MARKERS:
+        assert phrase in html, f"{phrase!r} is guarded but the page does not say it"
+
+
+def test_a_caption_guard_can_survive_plotlys_json_encoder():
+    """The rule that applies to CAPTION markers and to nothing else.
+
+    A caption exists **twice** in the built page — as panel HTML, and inside the figure's
+    `layout.meta`. Plotly's encoder escapes a forward slash inside that JSON and the page's
+    own separators are `&nbsp;·&nbsp;`, so a guard spanning either character silently never
+    matches the copy inside the figure. Structural markers like `<td>BUY</td>` are markup and
+    never appear in figure JSON at all, which is why they are allowed their slash.
+    """
+    for phrase in page_mod.CAPTION_MARKERS:
+        assert phrase.isascii(), f"{phrase!r} will not survive a grep over the built page"
+        assert "/" not in phrase and "\u00b7" not in phrase, phrase
+
+
+def test_the_blotter_marker_cannot_pass_on_a_page_with_an_empty_book():
+    """The guard greps a blotter *cell*, not a rule id, and that distinction is the guard.
+
+    Every rule id is also printed in the strategy panel's key — deliberately, so a reader
+    can read the notes without the spec — so `grep R-ENTRY-STOCK` would pass on a page
+    whose blotter had no rows at all, which is the one failure this check exists for.
+    """
+    ids = {rid for rid, _ in page_mod.RULE_IDS}
+    for phrase in (page_mod.BLOTTER_ENTRY_MARKER,) + page_mod.BLOTTER_SETTLED_MARKERS:
+        assert not any(rid in phrase for rid in ids), (
+            f"{phrase!r} would also match the strategy panel's rule-id key"
+        )
+
+
+def test_the_write_up_guard_refuses_the_page_until_the_po_has_written_it(html):
+    """FR-19's half of the FR-7 mechanism, asserted from both ends.
+
+    The workflow must carry the refusal, and the page must be consistent with
+    `writeup.ANSWERS`: while a slot is unwritten the marker is present *and* CI is right to
+    refuse the deploy. When T-60 lands, the marker leaves the page and this test tracks it
+    instead of having to be remembered.
+    """
+    from options_surface_lab.covered_call import writeup
+
+    # Pinned to the covered-call guard's OWN error message, not to the marker. Both pages
+    # refuse `[unwritten]` — FR-7's and FR-19's — so asserting the bare string passes while
+    # this page's refusal is deleted, on the strength of the other page's. The mutation run
+    # found exactly that.
+    workflow = read(WORKFLOW)
+    assert workflow.count("[unwritten]") >= 2, "one page lost its unwritten refusal"
+    assert "covered_call/writeup.py" in workflow, (
+        "the covered-call page's FR-19 refusal is gone from the workflow"
+    )
+
+    unwritten = any(a == writeup.UNWRITTEN for a in writeup.ANSWERS)
+    assert (writeup.UNWRITTEN in html) is unwritten, (
+        "the page and writeup.py disagree about whether the write-up is finished — "
+        "the page was not rebuilt after the prose changed (the lockstep rule)"
     )
 
 
