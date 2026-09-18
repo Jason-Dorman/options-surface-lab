@@ -215,16 +215,11 @@ def build_page(tape, params: Params | None = None, *, shell: PageShell | None = 
     panels = (
         shell.figure_panel(
             1, "Growth of the book", "FR-16 · NAV, initial, maintenance · hover a date",
-            plots.account_figure(book), width=T.W_HERO, hero=True,
+            plots.account_figure(book), width=T.W_FULL,
         ),
-        # Beside the NAV path rather than under it, and narrow on purpose: the scatter ties
-        # its axes to one pixel scale so `y = x` is 45 degrees, which a wide box pays for in
-        # letterboxing. Four columns at hero height is near enough square to cost nothing,
-        # and the two charts still sit together above the tables, as the example has them.
         shell.figure_panel(
             2, "Midpoint assumption", "FR-17 · TRDPRC_1 vs (BID+ASK)/2",
-            plots.mid_vs_print_figure(evidence, height=T.HERO_FIGURE_HEIGHT),
-            width=T.W_SIDECAR,
+            plots.mid_vs_print_figure(evidence), width=T.W_FULL,
         ),
         _blotter_panel(shell, book),
         _ledger_panel(shell, book, params),
@@ -469,16 +464,18 @@ def _short_call(record) -> str:
 # [5] The rules and the write-up — FR-14, FR-19
 # --------------------------------------------------------------------------
 def _writeup_panel(shell: PageShell, params: Params) -> str:
-    """The rules, the whole parameter record, and the PO's five answers.
+    """The rules in prose, then FR-19's five answers, then the record — in that order.
 
-    FR-14 and FR-19 share a panel because they are one statement: *this is what the book
-    did, and this is why*. The strategy had a panel of its own — first on the page, ahead
-    of the book it described — until 2026-09-18; the example keeps its rules here, at the
-    end, and every field of `Params` is still printed (FR-14's acceptance).
+    **Rebuilt 2026-09-18.** It shipped as four side-by-side blocks, each holding its own
+    scrolling table: the method, the whole `Params` record, nine simplifications and five
+    rule ids, abreast, above the answers. On a real screen that is four columns of chrome
+    where the example page has four short paragraphs, and the thing a reader came for — what
+    the strategy is, and what the author concluded — was the smallest text on it.
 
-    An unwritten answer renders in `NEGATIVE`, fails its test and warns the deploy — FR-7's
-    mechanism inherited whole, because this is the only part of the page with no figure
-    behind it and its absence would otherwise look like a design choice.
+    So prose leads, the answers follow, and the **record folds into a `<details>`**. FR-14's
+    acceptance is that the page *prints* every field of `Params` and every S-x; it does,
+    behind one disclosure a reader opens when they want to audit rather than read. Nothing
+    was removed.
     """
     param_rows = [
         (name, (str(_present(value)), "osl-num" if name in _NUMERIC else ""))
@@ -486,64 +483,55 @@ def _writeup_panel(shell: PageShell, params: Params) -> str:
             (f.name, getattr(params, f.name)) for f in dataclasses.fields(params)
         )
     ]
-    blocks = (
-        (
-            "The rule, in words",
-            f'<div class="osl-note">One covered call a week on <b>{params.root}</b> over '
+    prose = "".join(
+        f'<div class="osl-note" style="padding-bottom:10px">{text}</div>'
+        for text in (
+            f"<b>The rule.</b> One covered call a week on <b>{params.root}</b> over "
             f"<b>{params.start} → {params.end}</b>, on <b>${params.start_cash:,.0f}</b> of "
             f"starting cash: buy {params.shares} shares and write {params.contracts} call "
             f"at the {params.interval} bar the rule names, then hold through expiry. "
-            f"{params.describe_strike_rule()} At expiry the call is assigned when the "
-            f"settlement print is {_itm_words(params)}; otherwise it expires and the shares "
-            "stay. A week whose quote is invalid is skipped and logged, never booked at an "
-            "invented price.</div>",
-        ),
-        (
-            "Method — the decision hierarchy",
-            shell.table(
-                ("Step", "What was decided"),
-                [((label, "osl-label"), text) for label, text in writeup.METHOD],
-                kv=True,
-            )
-            + "".join(
-                f'<div class="osl-note" style="padding-top:10px">{text}</div>'
-                for text in (writeup.OBSERVATION_POINT, writeup.SYNCHRONISATION,
-                             writeup.MIDPOINT_EVIDENCE)
-            ),
-        ),
-        (
-            "Parameters — the whole record",
-            shell.table(("Parameter", "Value"), param_rows, kv=True),
-        ),
-        (
-            "Stated simplifications",
-            shell.table(
-                ("Id", "Stated simplification"),
-                [((sid, "osl-label"), text) for sid, text in SIMPLIFICATIONS],
-                kv=True,
-            )
-            + shell.table(
-                ("Note", "What fired"),
-                [((rid, "osl-label"), text) for rid, text in RULE_IDS],
-                kv=True,
-            ),
-        ),
-    )
-    rules = "".join(
-        f'<div class="osl-commentary-item"><div class="osl-commentary-q">{title}</div>'
-        f"{inner}</div>"
-        for title, inner in blocks
+            f"{params.describe_strike_rule()}",
+            f"<b>The exit is to wait.</b> No buy-backs and no rolls. At expiry the call is "
+            f"assigned when the settlement print is {_itm_words(params)} — the shares go at "
+            "the strike and the book is flat — otherwise it expires worthless and the "
+            "shares stay. A week whose quote is invalid is skipped and logged, never booked "
+            "at a price nobody quoted.",
+            writeup.OBSERVATION_POINT,
+            writeup.SYNCHRONISATION,
+            writeup.MIDPOINT_EVIDENCE,
+        )
     )
     answers = "".join(
         '<div class="osl-commentary-item">'
         f'<div class="osl-commentary-q">{question}</div>{_answer(answer)}</div>'
         for question, answer in zip(writeup.QUESTIONS, writeup.ANSWERS)
     )
+    record = (
+        shell.table(
+            ("Step", "What was decided"),
+            [((label, "osl-label"), text) for label, text in writeup.METHOD],
+            kv=True,
+        )
+        + shell.table(("Parameter", "Value"), param_rows, kv=True)
+        + shell.table(
+            ("Id", "Stated simplification"),
+            [((sid, "osl-label"), text) for sid, text in SIMPLIFICATIONS],
+            kv=True,
+        )
+        + shell.table(
+            ("Note", "What fired"),
+            [((rid, "osl-label"), text) for rid, text in RULE_IDS],
+            kv=True,
+        )
+    )
     body = (
-        f'<div class="osl-commentary" style="padding:0">{rules}</div>'
-        '<div class="osl-commentary-q" style="padding-top:14px">'
+        f"{prose}"
+        '<div class="osl-commentary-q" style="padding-top:6px">'
         "FR-19 — the five questions, answered by the PO</div>"
-        f'<div class="osl-commentary" style="padding:0">{answers}</div>'
+        f'<div class="osl-commentary" style="padding:10px 0 0 0">{answers}</div>'
+        "<details class=\"osl-details\"><summary>Parameters, decisions and stated "
+        "simplifications — the whole record</summary>"
+        f'<div class="osl-details-body">{record}</div></details>'
     )
     return shell.panel(
         "Covered-call rules and write-up",

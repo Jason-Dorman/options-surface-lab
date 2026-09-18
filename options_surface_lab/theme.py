@@ -162,6 +162,10 @@ MARGIN_MM = "#6E8CB8"     # maintenance margin, 25% — the margin-call line, fa
 # 60 deg floor the four 1.1 series must clear, which is a floor for 4px markers separated by
 # hue ALONE. The hero already accepts this exact gap between the spot plane and the violet
 # puts, in one scene (DESIGN-BRIEF §3).
+#: A dot on every event of the account chart. Twenty points are *events* — a Monday entry,
+#: a Friday resolution — and a bare polyline hides how few there are and where they fall.
+ACCOUNT_MARKER_SIZE = 5
+
 ACCOUNT_LINES = {
     "nav": dict(color=NAV_LINE, width=2.2, dash="solid"),
     "im": dict(color=MARGIN_IM, width=1.4, dash="dash"),
@@ -613,11 +617,15 @@ PAGE_CSS = f"""
     white-space:nowrap;
   }}
   .osl-nav a {{
-    color:{TEXT_MUTED}; text-decoration:none;
+    color:{TEXT}; text-decoration:none;
     border-bottom:1px solid {BORDER}; padding-bottom:2px;
   }}
   .osl-nav a:hover {{ color:{ACCENT}; border-bottom-color:{ACCENT}; }}
-  .osl-nav a + a {{ margin-left:14px; }}
+  /* The page you are on. Marked rather than omitted: a nav that lists only the OTHER pages
+     gives a two-page site one link and nothing to orient by — the cross-links were there
+     since T-79 and the PO could not find them (2026-09-18). */
+  .osl-nav a.on {{ color:{ACCENT}; border-bottom-color:{ACCENT}; }}
+  .osl-nav a + a {{ margin-left:16px; }}
 
   /* ---- readout strip: KPIs butted together under the bar ---- */
   .osl-readouts {{
@@ -814,6 +822,25 @@ PAGE_CSS = f"""
      labels take the muted type a readout label does. */
   .osl-table-kv {{ min-width:0; }}
   .osl-table-kv td:first-child {{ color:{TEXT_MUTED}; width:38%; white-space:normal; }}
+
+  /* ---- a disclosure: the audit trail, folded (T-59, 2026-09-18) ----
+     FR-14 requires the page to print every parameter and every stated simplification. Four
+     tables of them abreast above the write-up buried the thing a reader came for, so they
+     fold into this: printed, one click away, and never the loudest thing on the panel. */
+  .osl-details {{
+    border-top:1px solid {BORDER}; margin-top:14px; padding-top:10px;
+  }}
+  .osl-details > summary {{
+    cursor:pointer; color:{TEXT_MUTED}; font-family:{FONT_MONO}; font-size:10px;
+    letter-spacing:1.1px; text-transform:uppercase; list-style:none;
+  }}
+  .osl-details > summary::before {{ content:"▸ "; color:{ACCENT}; }}
+  .osl-details[open] > summary::before {{ content:"▾ "; }}
+  .osl-details > summary:hover {{ color:{ACCENT}; }}
+  .osl-details-body {{
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));
+    gap:12px; padding-top:10px;
+  }}
 
   .osl-warn {{
     background:{_rgba(NEGATIVE, 0.14)}; border:1px solid {NEGATIVE}; color:{NEGATIVE};

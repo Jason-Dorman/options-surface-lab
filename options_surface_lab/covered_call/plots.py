@@ -17,11 +17,18 @@ panel underneath.
 **The captions are data, not drawn text** (T-47): :func:`with_caption` puts them in
 ``layout.meta`` and the panel renders them as HTML, where they wrap.
 
-**Weekends are left in the account chart's axis.** A ``rangebreak`` would buy back ~28% of
-the x axis, and it would also be a change of ruler — the kind this project has learned to
-label rather than perform quietly (FR-10). The line across a weekend is flat because marks
-carry forward and no bar exists to move them (S-7), so the gap is honest as drawn and
-costs only space.
+**Both charts draw the rows a reader can point at, not every row that exists.** The account
+chart drew all 784 hourly bars until 2026-09-18 and it was unreadable: the NAV line came out
+jagged with intra-day noise on a 2% band, and Initial and Maintenance — which fall to zero
+the moment the book goes flat between Friday and Monday — became ten square waves. It draws
+the **event ledger** now, one point per booked bar, with markers, which is what the
+assignment's example page draws and what makes the shape legible. The hourly frame is still
+what the engine computes; it was never what a reader could read.
+
+**Weekends are left in the axis.** A ``rangebreak`` would buy back ~28% of the x axis, and it
+would also be a change of ruler — the kind this project has learned to label rather than
+perform quietly (FR-10). Between events NAV moves only with the marks, so the straight line
+across a weekend is honest as drawn and costs only space.
 """
 
 from __future__ import annotations
@@ -92,12 +99,15 @@ def account_figure(book, *, height: int | None = None) -> go.Figure:
     reaches down to zero; the return is the readout strip's job, not this panel's, and the
     caption points at the number that *does* answer this panel's question.
 
-    **The hourly ledger is what is drawn** (SPEC §9), not the daily roll-up: the roll-up is
-    a selection of these rows for a reader checking a week by hand, so a number in that
-    table is by construction a number on this line.
+    **The event ledger is what is drawn** (SPEC §9), the same rows the table below prints —
+    so a number in that table is, by construction, a point on this line. The hourly frame
+    behind it is still what the engine computes and what the invariants check; drawing it
+    put intra-day noise on a 2% band and turned the two requirement lines into square waves
+    as the book went flat each Friday. Markers, because twenty points are events a reader
+    can point at and a bare polyline hides how few there are.
     """
-    height = height or T.HERO_FIGURE_HEIGHT
-    ledger = book.ledger
+    height = height or T.PANEL_FIGURE_HEIGHT
+    ledger = book.event_ledger()
     if ledger.empty:
         return with_caption(
             _empty("No bars in the window", height),
@@ -110,9 +120,10 @@ def account_figure(book, *, height: int | None = None) -> go.Figure:
             go.Scatter(
                 x=ledger["ts"],
                 y=ledger[column],
-                mode="lines",
+                mode="lines+markers",
                 name=name,
                 line=T.account_line(role),
+                marker=dict(size=T.ACCOUNT_MARKER_SIZE, color=T.account_line(role)["color"]),
                 hovertemplate="%{y:$,.2f}<extra>" + name + "</extra>",
             )
         )
@@ -122,9 +133,14 @@ def account_figure(book, *, height: int | None = None) -> go.Figure:
             height=height,
             margin=T.PANEL_FIGURE_MARGIN,
             hovermode="x unified",
-            legend=T.legend(),
-            xaxis=T.axis("Hourly bar"),
-            yaxis=T.axis("Dollars", tickprefix="$", tickformat=","),
+            # Top-LEFT. At the right it sits under Plotly's modebar, which is exactly where
+            # the three entries were overlapping the toolbar in the first render.
+            legend=T.legend(x=0.0, xanchor="left"),
+            # No axis titles. The ticks are dates and dollars and say so themselves; a
+            # rotated "Dollars" down the left edge is a label for a reader who has already
+            # read the label. The example carries neither.
+            xaxis=T.axis(),
+            yaxis=T.axis(tickprefix="$", tickformat=","),
         )
     )
     return with_caption(fig, *_account_caption(book))
@@ -159,9 +175,11 @@ def _account_caption(book) -> tuple:
         verdict = "No week entered, so available was never tested at an entry bar."
 
     return (
-        f"NAV against the requirement it has to clear: IM = {IM_RATE:.0%} of long market "
-        f"value, MM = {MM_RATE:.0%}. The short call is covered, so it adds $0 to both; when "
-        "the book is flat all three fall to cash.",
+        # The cards above already define the rates, so this says the thing only the picture
+        # raises: why two of the three lines drop to the floor ten times.
+        f"One point per booked event. Initial ({IM_RATE:.0%} of long market value) and "
+        f"Maintenance ({MM_RATE:.0%}) fall to zero on every week the book is flat between "
+        "Friday's resolution and Monday's entry — a covered call adds $0 to either.",
         verdict,
     )
 
@@ -178,10 +196,12 @@ def mid_vs_print_figure(evidence, *, height: int | None = None) -> go.Figure:
     actually estimated: below ``MIN_FIT_POINTS`` distinct mids ``fit_y`` returns nothing and
     this figure draws nothing, the same refusal posture ``iv_refusal`` gave FR-11.
 
-    **Both axes carry one range and one pixel scale**, so the identity line sits at 45
-    degrees whatever shape its panel is. A reference line that misstates its own slope is
-    worse than none, and the reader's whole reading of the cloud — is the print above or
-    below the mid — is read off that angle.
+    **Both axes carry one range**, so a point above the line printed above its mid and a
+    point below printed below — which is the reading this panel is for. The two axes are not
+    locked to one *pixel* scale: that would draw `y = x` at a true 45 degrees and letterbox
+    the cloud into the middle third of a wide panel. The example page makes the same trade,
+    and the caption states that the axes share a range so nobody reads a slope off the
+    screen.
 
     ``Scattergl``: 16,626 SVG markers is a scroll that janks on a mid-range laptop. The
     sample is drawn **whole** — subsampling evidence offered as evidence would need saying
@@ -211,7 +231,7 @@ def mid_vs_print_figure(evidence, *, height: int | None = None) -> go.Figure:
             y=y,
             mode="markers",
             name=EVIDENCE_TRACES[0],
-            marker=dict(color=T.MARK, size=T.SIZE_MARK, symbol=T.SYMBOL_MARK),
+            marker=dict(color=T.MARK, size=T.SIZE_MARK, symbol=T.SYMBOL_MARK, opacity=0.55),
             hovertemplate="mid %{x:$,.3f}<br>print %{y:$,.2f}<extra></extra>",
         )
     )
@@ -244,24 +264,23 @@ def mid_vs_print_figure(evidence, *, height: int | None = None) -> go.Figure:
         **T.figure_layout(
             height=height,
             margin=T.PANEL_FIGURE_MARGIN,
-            legend=T.legend(),
+            legend=T.legend(x=0.0, xanchor="left"),
             xaxis=T.axis("Quoted mid ($)", range=axis_range),
-            # `scaleanchor` is what actually makes the identity line 45 degrees. Equal
-            # *ranges* are necessary and not sufficient: Plotly maps each axis onto its own
-            # pixel span, so the same range in a 4:1 box renders `y = x` at about 14
-            # degrees — the reference line lying about its slope in the one way a test that
-            # compares two `range` tuples cannot see. Found by asking what the panel would
-            # look like at full page width, not by a failing assertion.
-            yaxis=T.axis(
-                "Last print, TRDPRC_1 ($)",
-                range=axis_range,
-                scaleanchor="x",
-                scaleratio=1,
-            ),
+            # **Equal ranges, not an equal pixel scale** (PO, 2026-09-18). `scaleanchor`
+            # makes `y = x` a true 45 degrees and Plotly pays for it in a wide box by
+            # letterboxing the cloud into the middle third — which is what the panel is,
+            # now that it sits full width like the example's. The example makes the same
+            # trade (`lo`/`hi` span both axes; no aspect lock), and the reading that
+            # matters — is the print above or below the mid — is unaffected by the angle.
+            # The caption says the axes share a range so the slope is not read off screen.
+            yaxis=T.axis("Last print, TRDPRC_1 ($)", range=axis_range),
         )
     )
     return with_caption(
-        fig, f"{FIT_CAPTION_PREFIX} {evidence.headline()}", NON_SIMULTANEITY_CAVEAT
+        fig,
+        f"{FIT_CAPTION_PREFIX} {evidence.headline()}",
+        "Both axes carry the same range, so a point above the dashed line printed above its "
+        "mid. " + NON_SIMULTANEITY_CAVEAT,
     )
 
 

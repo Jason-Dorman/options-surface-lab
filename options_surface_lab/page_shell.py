@@ -27,9 +27,22 @@ import plotly.graph_objects as go
 
 from options_surface_lab import theme as T
 
-#: The site's wordmark, not a page's. Every page carries it, because the brief's own URL
-#: example is a course-level site that each homework adds a page to.
+#: The site's name, and the default wordmark for a page that does not name itself.
+#:
+#: **A page may override it** (PO, 2026-09-18). Every page carried this until then, on the
+#: reasoning that the brief's URL example is a course-level site each homework adds a page
+#: to — which is true of the *site* and unhelpful on a *page*: a reader landing on
+#: `/covered-call/` was told what the site is called and had to read the instrument line to
+#: learn what they were looking at. The example page does the same thing the other way
+#: round: a small brand in the topbar, and the page's own name as its heading.
 WORDMARK = "Options Surface Lab"
+
+#: What each page calls itself, where that differs from the site. `PageShell` falls back to
+#: `WORDMARK`, so a page added without an entry here is named after the site rather than
+#: rendering blank.
+PAGE_WORDMARKS = {
+    "covered-call": "Covered Call Blotter",
+}
 
 #: Where each page is published. HW1 stays at the site root so the URL already submitted on
 #: Canvas keeps working (AD-11); every later assignment takes a route of its own.
@@ -58,8 +71,14 @@ NAV_LABELS = {
 }
 
 
-def nav_for(page: str, *, site: bool) -> list[tuple[str, str]]:
-    """Links from `page` to every *other* page, spelled for where it is being written.
+def nav_for(page: str, *, site: bool) -> list[tuple[str, str, bool]]:
+    """Links to **every** page, spelled for where `page` is being written.
+
+    `(href, label, is_current)`. It returned only the *other* pages until 2026-09-18, which
+    meant a two-page site showed one link and a reader had no way to see what else existed
+    — the PO could not find the cross-links at all. Listing every page with the current one
+    marked is how the example page does it, and it is the only form that stays legible when
+    a third assignment lands.
 
     A page is written twice from the same code — into `_site/<route>/index.html`, and as a
     root artifact — and the two need different hrefs. Getting that wrong produces a dead
@@ -69,9 +88,12 @@ def nav_for(page: str, *, site: bool) -> list[tuple[str, str]]:
     if page not in SITE_PATHS:
         raise KeyError(f"unknown page {page!r} — known pages are {sorted(SITE_PATHS)}")
     return [
-        (_site_href(page, other) if site else LOCAL_PATHS[other], NAV_LABELS[other])
+        (
+            _site_href(page, other) if site else LOCAL_PATHS[other],
+            NAV_LABELS[other],
+            other == page,
+        )
         for other in SITE_PATHS
-        if other != page
     ]
 
 
@@ -211,25 +233,36 @@ class PageShell:
     empty panel frames, with nothing in the HTML to say why.
     """
 
-    def __init__(self, title: str) -> None:
+    def __init__(self, title: str, wordmark: str | None = None) -> None:
         self.title = title
+        #: What the command bar calls this page. Defaults to the site's name.
+        self.wordmark = wordmark or WORDMARK
         self._plotly_included = False
 
     # ------------------------------------------------------------------ chrome
-    def command_bar(self, ident: str, *, nav: Sequence[tuple[str, str]] = ()) -> str:
-        """Wordmark left, the site's other pages in the middle, instrument identity right.
+    def command_bar(self, ident: str, *, nav: Sequence[Sequence] = ()) -> str:
+        """Page name left, every page of the site in the middle, instrument identity right.
 
-        `nav` is `(href, label)` pairs. The hrefs are the *builder's* to decide, not the
-        shell's: the same page is written twice — once into `_site/<route>/index.html`
-        where the links are routes, and once as a root artifact the PO opens from the
-        filesystem, where they are filenames. A shell that hardcoded routes would give the
-        local artifact two dead links, which is only visible by clicking.
+        `nav` is `(href, label)` or `(href, label, is_current)`. The current page is marked
+        rather than omitted: a two-page site that only ever showed the *other* page gave a
+        reader nothing to orient by, and the cross-links were invisible enough that the PO
+        asked for links that were already there (2026-09-18).
+
+        The hrefs are the *builder's* to decide, not the shell's: the same page is written
+        twice — once into `_site/<route>/index.html` where the links are routes, and once as
+        a root artifact the PO opens from the filesystem, where they are filenames. A shell
+        that hardcoded routes would give the local artifact dead links, which is only
+        visible by clicking.
         """
-        links = "".join(f'<a href="{href}">{label}</a>' for href, label in nav)
+        links = ""
+        for item in nav:
+            href, label, current = (tuple(item) + (False,))[:3]
+            cls = ' class="on"' if current else ""
+            links += f'<a{cls} href="{href}">{label}</a>'
         nav_html = f'<div class="osl-nav">{links}</div>' if links else ""
         return (
             '<div class="osl-bar">'
-            f'<div class="osl-wordmark">{WORDMARK}</div>'
+            f'<div class="osl-wordmark">{self.wordmark}</div>'
             f"{nav_html}"
             f'<div class="osl-ident">{ident}</div>'
             "</div>"
@@ -380,6 +413,11 @@ class PageShell:
             full_html=False,
             include_plotlyjs=("cdn" if not self._plotly_included else False),
             div_id=f"{FIG_ID_PREFIX}{n}",
+            # No modebar. It floats over the top-right corner of every figure, which is
+            # where a legend also wants to be — the two overlapped on the first covered-call
+            # render — and it offers a reader of a finished page nothing but a way to break
+            # the axes. Hover, which is what FR-16 actually requires, is unaffected.
+            config={"displayModeBar": False, "responsive": True},
         )
         self._plotly_included = True
         fig_class = "osl-figure osl-figure-hero" if hero else "osl-figure"

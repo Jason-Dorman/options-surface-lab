@@ -19,6 +19,7 @@ from options_surface_lab.page_shell import (
     LOCAL_PATHS,
     NAV_LABELS,
     SITE_PATHS,
+    PAGE_WORDMARKS,
     WORDMARK,
     PageShell,
     Stacked,
@@ -131,18 +132,39 @@ def test_the_document_emits_nothing_for_an_absent_section():
     assert "osl-warn" not in body and "osl-readouts" not in body
 
 
-def test_the_wordmark_belongs_to_the_site_not_to_a_page():
-    """Every page carries it — the brief's own URL example is a course-level site each
-    homework adds a page to."""
-    html = PageShell("anything").command_bar("ident")
-    assert WORDMARK in html
+def test_a_page_that_does_not_name_itself_is_named_after_the_site():
+    """The default is still the site's wordmark — the brief's URL example is a course-level
+    site each homework adds a page to, and a page added without a name must not render
+    blank."""
+    assert WORDMARK in PageShell("anything").command_bar("ident")
+
+
+def test_a_page_may_name_itself():
+    """PO, 2026-09-18: a reader landing on `/covered-call/` was told what the *site* is
+    called and had to read the instrument line to learn what they were looking at.
+
+    Pinned to `PAGE_WORDMARKS` rather than to the string, so the name the builder uses and
+    the name asserted here cannot be two different decisions.
+    """
+    name = PAGE_WORDMARKS["covered-call"]
+    html = PageShell(name, wordmark=name).command_bar("ident")
+    assert f'<div class="osl-wordmark">{name}</div>' in html
+    assert WORDMARK not in html, "the page is still carrying the site's name as well"
 
 
 # --------------------------------------------------------------------------- the site nav
-def test_a_page_links_to_every_other_page_and_never_to_itself():
+def test_a_page_links_to_every_page_and_marks_the_one_you_are_on():
+    """Every page, not only the others (PO, 2026-09-18).
+
+    A two-page site whose nav omitted the current page showed exactly one link, with
+    nothing to say what it was one of — the cross-links had been there since T-79 and the
+    PO could not find them. Marking the current page is what makes the nav a map.
+    """
     for page in SITE_PATHS:
-        others = {label for _, label in nav_for(page, site=True)}
-        assert others == {NAV_LABELS[o] for o in SITE_PATHS if o != page}
+        entries = nav_for(page, site=True)
+        assert {label for _, label, _ in entries} == set(NAV_LABELS.values())
+        current = [label for _, label, on in entries if on]
+        assert current == [NAV_LABELS[page]], f"{page} does not mark itself: {current}"
 
 
 def test_the_same_link_is_spelled_differently_on_the_site_and_on_disk():
@@ -151,19 +173,21 @@ def test_the_same_link_is_spelled_differently_on_the_site_and_on_disk():
     Getting this wrong produces a dead link, which renders perfectly and is discoverable
     only by clicking — this project's signature failure mode, in a new place.
     """
-    assert nav_for("index", site=True) == [("covered-call/", NAV_LABELS["covered-call"])]
-    assert nav_for("covered-call", site=True) == [("../", NAV_LABELS["index"])]
-    assert nav_for("index", site=False) == [
-        (LOCAL_PATHS["covered-call"], NAV_LABELS["covered-call"])
-    ]
-    assert nav_for("covered-call", site=False) == [(LOCAL_PATHS["index"], NAV_LABELS["index"])]
+    def href_to(page, *, site, other):
+        return next(h for h, label, _ in nav_for(page, site=site)
+                    if label == NAV_LABELS[other])
+
+    assert href_to("index", site=True, other="covered-call") == "covered-call/"
+    assert href_to("covered-call", site=True, other="index") == "../"
+    assert href_to("index", site=False, other="covered-call") == LOCAL_PATHS["covered-call"]
+    assert href_to("covered-call", site=False, other="index") == LOCAL_PATHS["index"]
 
 
 def test_a_site_href_is_relative_so_a_project_site_still_resolves():
     """An absolute `/covered-call/` is right on a user site and wrong on a project site.
     This one is served from `/options-surface-lab/`."""
     for page in SITE_PATHS:
-        for href, _ in nav_for(page, site=True):
+        for href, _, _ in nav_for(page, site=True):
             assert not href.startswith("/"), f"{page}: {href} breaks on a project site"
 
 

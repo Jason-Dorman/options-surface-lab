@@ -11,7 +11,14 @@ from __future__ import annotations
 
 import pytest
 
-from options_surface_lab.page_shell import LOCAL_PATHS, NAV_LABELS, SITE_PATHS, nav_for
+from options_surface_lab.page_shell import (
+    LOCAL_PATHS,
+    NAV_LABELS,
+    PAGE_WORDMARKS,
+    SITE_PATHS,
+    WORDMARK,
+    nav_for,
+)
 from pagelib import WORKFLOW, built_page, external_hosts, nav_hrefs, orphan_classes, read
 
 #: Every page, by its key in `page_shell`. Parametrizing off the shared table rather than a
@@ -64,20 +71,36 @@ def test_every_page_links_to_its_siblings(page):
     each one must be a page this repo actually builds.
     """
     hrefs = nav_hrefs(_html(page))
-    assert hrefs == [href for href, _ in nav_for(page, site=False)], (
+    assert hrefs == [href for href, _, _ in nav_for(page, site=False)], (
         f"{page}'s nav does not match page_shell.nav_for — the two spellings have drifted"
     )
     for href in hrefs:
         assert href in set(LOCAL_PATHS.values()), f"{page} links to {href!r}, not a page here"
 
+    # Every sibling is reachable, which is the thing this test is named for. Before
+    # 2026-09-18 the nav omitted the current page, so "links to its siblings" and "lists
+    # the site" were the same assertion; they are not, and it is the second one that makes
+    # a page findable from any other.
+    siblings = {v for k, v in LOCAL_PATHS.items() if k != page}
+    assert siblings <= set(hrefs), f"{page} cannot reach {siblings - set(hrefs)}"
+
 
 @pytest.mark.parametrize("page", PAGE_KEYS)
 def test_every_page_names_itself_in_the_command_bar(page):
-    """The wordmark is the site's; the ident line is the page's. Both pages carry both, so
-    a reader who lands on either knows what site it is and which book it shows."""
+    """The wordmark names the **page**, the ident line names the book it shows.
+
+    Asserted of the *built* page, not of `PageShell`. The builder is what decides whether a
+    page carries its own name, and a unit test on the shell passes happily while the
+    builder stops passing one — which is what a mutation run found on 2026-09-18, the same
+    day the PO asked for the name in the first place.
+    """
     html = _html(page)
     assert 'class="osl-ident"' in html
-    assert NAV_LABELS[page] not in nav_hrefs(html), "a page must not link to itself"
+
+    expected = PAGE_WORDMARKS.get(page, WORDMARK)
+    assert f'<div class="osl-wordmark">{expected}</div>' in html, (
+        f"{page} does not call itself {expected!r}"
+    )
 
 
 def test_the_workflow_builds_every_page_it_guards():

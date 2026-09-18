@@ -75,7 +75,7 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 ```bash
 python build_preview.py       # 1.1's page — the static index.html Pages serves at /
 python build_covered_call.py  # A2's page — Pages serves it at /covered-call/
-pytest                        # 696 tests in tests/ — all green, no xfail
+pytest                        # 698 tests in tests/ — all green, no xfail
 reflex run                    # local dev server (FR-1); not what gets published
 
 # Both take `--site DIR` (CI passes `--site _site`): the page lands at DIR/<route> with its
@@ -624,6 +624,50 @@ strategy, Reg T account, blotter + skip log, daily ledger, mid vs print, live bo
 plus `PageShell.table` for the HTML tables and every remaining publish guard in `pages.yml`.
 **30 new tests; 28 of 28 injected defects caught; 687 green, no xfail.**
 
+**A page now names itself, and the nav lists the whole site (2026-09-18, PO).** Two small
+changes with the same cause: the chrome was written for a *site* and a reader arrives at a
+*page*.
+
+- `page_shell.PAGE_WORDMARKS` — the covered-call page's command bar and browser tab say
+  **Covered Call Blotter**, not "Options Surface Lab". Every page carried the site's name on
+  the reasoning that the brief's URL example is a course-level site each homework adds to.
+  That is true of the site and unhelpful on a page: a reader landing on `/covered-call/` had
+  to read the instrument line to learn what they were looking at.
+- `nav_for` returns **every** page with the current one marked, not only the others. A
+  two-page site showed one link with nothing to say what it was one of — and the cross-links
+  had existed since T-79 while the PO, looking at the page, asked for links to be added.
+  *A link nobody can find is the same defect as a link that is not there*, and the CI guard
+  that greps `class="osl-nav"` could not tell the difference.
+
+**The mutation run caught the gap that mattered:** deleting the builder's `wordmark=` left
+every test green, because the naming test exercised `PageShell` rather than the built page.
+The builder is what decides whether a page carries its own name, so the assertion moved onto
+the artifact.
+
+**The figures did not look like the example's either, and I shipped that twice before
+looking at one (2026-09-18, PO: *"these plots do not look the same - mine looks like
+garbage"*).** Three defects, and the first is the one that mattered:
+
+- **The account chart drew all 784 hourly bars.** The example draws its ledger — 20 booked
+  events. At hourly resolution NAV is a jagged line on a 2% band, and Initial and Maintenance
+  fall to zero the instant the book goes flat each Friday, so they rendered as **ten square
+  waves**. It draws `event_ledger()` now, with markers, which is the same twenty rows the
+  table beneath it prints. *I had written "the hourly ledger is what is drawn" into the module
+  docstring as though it were a principle; it was a choice, and it was wrong.*
+- **The write-up panel was four scrolling tables abreast** — the method, all of `Params`, nine
+  simplifications, five rule ids — above the answers. On a screen that is four columns of
+  chrome where the example has four short paragraphs, and the thing a reader came for was the
+  smallest text on it. Prose leads now, the answers follow, and the record folds into a
+  `<details>`: FR-14 still prints every field, one disclosure away.
+- **The legend sat under Plotly's modebar** and both charts carried 600px panels and rotated
+  axis titles. Modebar off, legend top-left, tile height, no axis titles — the ticks are dates
+  and dollars and say so themselves.
+
+**The rule I broke is this repo's own: *measure the picture, not only the numbers*.** Every
+change above was made against figure JSON and test assertions, and every one of them passed.
+`kaleido` is installed now and the two figures render to PNG in one command — there is no
+excuse for the next one being judged from a trace list.
+
 **The page did not look like the assignment's example page, and nothing had ever compared
 them (2026-09-18, PO).** `jakevestal.github.io/535_fintech/` — which the brief calls a
 *"non-enabling example"* and which says of itself *"numbers here are made up to show the
@@ -903,7 +947,7 @@ submission — PO to confirm the standing recommendation. The order that fits th
 the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions → T-78's entry → T-56 → T-57 → T-58 →
 T-79 → T-68 → T-69 → T-59~~ (all landed) → **T-60** → ship, with T-78's settlement leg on
 Friday 09-18. 1.1's brief is archived at `docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open.
-**696 tests green, no xfail** (2026-09-18, full run; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
+**698 tests green, no xfail** (2026-09-18, full run; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
 Update this paragraph as things land (lockstep rule).
 
 **T-57 landed 2026-09-15 — `covered_call/engine.py`, so the book runs** (FR-15, FR-16, NFR-6).

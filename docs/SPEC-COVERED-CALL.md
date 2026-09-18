@@ -463,6 +463,13 @@ with hover — labelled **NAV / Initial / Maintenance**, the account's words rat
 engine's keys — and the table below it is the **event** roll-up: one row per *booked* bar
 (`Book.event_ledger`), not one per session.
 
+**The chart draws those same rows.** It drew all 784 hourly bars until 2026-09-18 and was
+unreadable: intra-day noise on a 2% band made NAV jagged, and Initial and Maintenance — which
+fall to zero the moment the book goes flat between Friday's resolution and Monday's entry —
+became ten square waves. One point per booked bar, with markers, is what the example page
+draws and what makes the shape legible; the hourly frame is still what the engine computes and
+what the invariants check, and it was never what a reader could read.
+
 *Amended 2026-09-18.* It was one row per session close. A reader checking the book by hand
 checks it **against the blotter**, so a table keyed on the blotter's own bars reads straight
 across from it — and forty-nine rows of a mark drifting between events is volume rather than

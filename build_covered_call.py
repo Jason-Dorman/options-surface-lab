@@ -23,6 +23,7 @@ from options_surface_lab.covered_call.rules import Params
 from options_surface_lab.covered_call.tape import load_tape
 from options_surface_lab.page_shell import (
     LOCAL_PATHS,
+    PAGE_WORDMARKS,
     SITE_PATHS,
     PageShell,
     nav_for,
@@ -56,7 +57,10 @@ def build_covered_call(
     "happens to equal the book here" — the premium summed and the premium retyped are the
     same number on ten traded weeks. The build never uses either; the CLI cannot reach them.
     """
-    shell = PageShell("Covered call · Options Surface Lab")
+    # The page names itself in the command bar and in the browser tab. A reader who
+    # lands here from a search result or a submitted link should not have to read the
+    # instrument line to learn what they are looking at (PO, 2026-09-18).
+    shell = PageShell(PAGE_WORDMARKS[PAGE], wordmark=PAGE_WORDMARKS[PAGE])
     params = params or Params()
     tape = load_tape(params=params) if tape is None else tape
     page = build_page(tape, params, shell=shell, live=live)

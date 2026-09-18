@@ -53,32 +53,48 @@ def scatter(evidence):
 # --------------------------------------------------------------------------
 # FR-16 — the Reg T account
 # --------------------------------------------------------------------------
-def test_the_account_chart_draws_the_ledger_and_not_its_own_arithmetic(account, book):
+def test_the_account_chart_draws_the_event_ledger_and_not_its_own_arithmetic(account, book):
     """Every point is a ledger cell. The figure recomputes nothing (AD-12, SPEC §1).
 
-    Compared column by column against ``book.ledger`` — the frame the figure was handed,
-    not a frame derived from the traces. A mutant that plotted ``lmv`` where ``im`` belongs,
-    or that scaled a series, is caught here and nowhere else: the trace's *name* would still
-    be right and the chart would still look like three plausible lines.
+    Compared column by column against `book.event_ledger()` — the frame the figure was
+    handed, not a frame derived from the traces. A mutant that plotted `lmv` where `im`
+    belongs, or that scaled a series, is caught here and nowhere else: the trace's *name*
+    would still be right and the chart would still look like three plausible lines.
     """
+    rows = book.event_ledger()
     assert tuple(t.name for t in account.data) == plots.ACCOUNT_TRACES
     for trace, column in zip(account.data, ("nav", "im", "mm")):
-        assert list(trace.y) == pytest.approx(list(book.ledger[column])), (
+        assert list(trace.y) == pytest.approx(list(rows[column])), (
             f"the {trace.name} line is not the ledger's `{column}` column"
         )
-        assert list(pd.DatetimeIndex(trace.x)) == list(pd.DatetimeIndex(book.ledger["ts"]))
+        assert list(pd.DatetimeIndex(trace.x)) == list(pd.DatetimeIndex(rows["ts"]))
 
 
-def test_the_account_chart_draws_the_hourly_frame_not_the_daily_roll_up(account, book):
-    """SPEC §9: the chart draws the hourly ledger, the table is the roll-up of these rows.
+def test_the_account_chart_draws_the_events_a_reader_can_point_at(account, book):
+    """It drew all 784 hourly bars until 2026-09-18 and was unreadable (PO).
 
-    The two differ by an order of magnitude (784 bars against 49 sessions), so drawing the
-    roll-up would produce a chart that is *correct at every point it shows* while quietly
-    dropping fifteen sixteenths of the window — including every intra-day move the panel
-    exists to let a reader inspect.
+    Intra-day noise on a 2% band made NAV jagged, and Initial and Maintenance — which fall
+    to zero the moment the book goes flat each Friday — became ten square waves. It draws
+    the **event** ledger now, one point per booked bar, which is what the ledger table below
+    prints and what the assignment's example page draws.
+
+    The three counts must differ on this fixture or the test cannot tell them apart.
     """
-    assert len(account.data[0].y) == len(book.ledger)
-    assert len(book.daily_ledger()) < len(book.ledger), "the fixture cannot tell the two apart"
+    events, hourly = len(book.event_ledger()), len(book.ledger)
+    assert len(account.data[0].y) == events
+    assert events < len(book.daily_ledger()) < hourly, (
+        f"the fixture cannot separate the three frames ({events}, "
+        f"{len(book.daily_ledger())}, {hourly})"
+    )
+
+
+def test_every_event_carries_a_marker(account):
+    """Twenty points are *events* — a Monday entry, a Friday resolution. A bare polyline
+    hides how few there are and where they fall, which is most of why the hourly version
+    read as noise rather than as a book."""
+    for trace in account.data:
+        assert "markers" in trace.mode, f"{trace.name} draws no points"
+        assert trace.marker.size == T.ACCOUNT_MARKER_SIZE
 
 
 def test_every_line_wears_the_role_the_theme_gives_it(account):
@@ -134,11 +150,15 @@ def test_the_caption_quotes_the_floor_at_an_entry_bar_not_the_all_bars_minimum(a
 def test_the_caption_states_the_reg_t_rates_the_engine_applied(account):
     """The rates are read from `engine`, so the sentence cannot drift from the ledger.
 
-    A page that says "IM = 50%" beside a ledger computed at 30% is a page that is wrong in
-    the one place a reader would never check, because the words agree with themselves.
+    A page that says "50%" beside a ledger computed at 30% is wrong in the one place a
+    reader would never check, because the words agree with themselves.
     """
     text = " ".join(figure_caption(account))
-    assert f"IM = {IM_RATE:.0%}" in text and f"MM = {MM_RATE:.0%}" in text
+    assert f"{IM_RATE:.0%}" in text and f"{MM_RATE:.0%}" in text
+    assert "fall to zero" in text, (
+        "the caption must explain the two lines dropping to the floor each flat week — it "
+        "is the first thing a reader asks of this picture"
+    )
 
 
 def test_the_caption_says_so_when_the_flag_fires(synthetic_tape):
@@ -161,12 +181,12 @@ def test_an_empty_book_draws_an_empty_panel_rather_than_raising(params):
     """AD-9: a hole renders as a hole. An empty ledger is a result, not an error.
 
     The ``Book`` is built here rather than run, because ``run_backtest`` *refuses* a tape
-    with no stock bars (T-82's guard) — so the only way this branch is ever reached is a
-    window inside a real tape that holds no bar, and the only way to test it is to hand the
-    figure the frame that situation produces.
+    with no stock bars (T-82's guard) — so the only way this branch is reached is a window
+    inside a real tape that holds no bar, and the only way to test it is to hand the figure
+    the frame that situation produces.
     """
     fig = plots.account_figure(_empty_book(params))
-    assert fig.layout.height == T.HERO_FIGURE_HEIGHT
+    assert fig.layout.height == T.PANEL_FIGURE_HEIGHT
     assert not fig.data, "an empty ledger drew lines"
     assert figure_caption(fig), "an empty panel still has to say why it is empty"
 
@@ -206,24 +226,22 @@ def test_the_two_reference_lines_are_the_identity_and_the_fit(scatter, evidence)
     assert fit.line.color == T.FIT_LINE
 
 
-def test_both_axes_carry_one_range_so_the_identity_line_is_at_45_degrees(scatter, evidence):
-    """A reference line that misstates its own slope is worse than no reference line.
+def test_both_axes_carry_one_range_and_the_caption_says_so(scatter, evidence):
+    """Equal **ranges**, so a point above the line printed above its mid — the reading this
+    panel is for. The range must also contain every point, or the panel crops its own sample.
 
-    Unequal axes tilt `y = x` while leaving it labelled `y = x`, and the reader's whole
-    reading of the cloud — is the print above or below the mid — is read off that angle.
-    The range must also contain every point, or the panel silently crops its own sample.
+    The axes are deliberately *not* locked to one pixel scale (PO, 2026-09-18). That would
+    draw `y = x` at a true 45 degrees and letterbox the cloud into the middle third of a
+    full-width panel; the example page makes the same trade. What replaces the guarantee is
+    the caption saying the axes share a range, so nobody reads a slope off the screen — and
+    that sentence is asserted here, because a trade-off nobody states is just a defect.
     """
     x_range, y_range = scatter.layout.xaxis.range, scatter.layout.yaxis.range
     assert tuple(x_range) == tuple(y_range), "the axes carry different rulers"
-
-    # Equal ranges are necessary and NOT sufficient — the half of this the first version of
-    # the test missed. Plotly maps each axis onto its own pixel span, so the same range in a
-    # 4:1 panel draws `y = x` at about 14 degrees. `scaleanchor` is what ties the two spans
-    # together, and it is the only part of this a reader would actually see go wrong.
-    assert scatter.layout.yaxis.scaleanchor == "x", (
-        "the axes share a range but not a pixel scale — `y = x` tilts with the panel's shape"
+    assert scatter.layout.yaxis.scaleanchor is None, (
+        "the axes are pixel-locked again — the cloud will letterbox at full width"
     )
-    assert scatter.layout.yaxis.scaleratio == 1
+    assert "same range" in " ".join(figure_caption(scatter))
 
     pts = evidence.points
     lo, hi = float(x_range[0]), float(x_range[1])
@@ -241,7 +259,7 @@ def test_the_caption_is_the_headline_and_the_caveat_verbatim(scatter, evidence):
     """
     lines = figure_caption(scatter)
     assert lines[0] == f"{plots.FIT_CAPTION_PREFIX} {evidence.headline()}"
-    assert NON_SIMULTANEITY_CAVEAT in lines
+    assert NON_SIMULTANEITY_CAVEAT in lines[1], "the caveat was paraphrased"
 
 
 def test_the_publish_guard_has_an_anchor_a_grep_can_actually_find():
@@ -317,16 +335,17 @@ def test_the_shipped_evidence_panel_shows_every_one_of_its_sixteen_thousand_poin
 # --------------------------------------------------------------------------
 @pytest.mark.parametrize(
     "name,expected",
-    [("account", "HERO_FIGURE_HEIGHT"), ("scatter", "PANEL_FIGURE_HEIGHT")],
+    [("account", "PANEL_FIGURE_HEIGHT"), ("scatter", "PANEL_FIGURE_HEIGHT")],
 )
 def test_every_figure_declares_the_height_its_panel_reserves(name, expected, request):
     """The standing rule (DESIGN-BRIEF §5). Plotly draws to `layout.height` whatever the
     box says, so a figure that leaves it unset renders at 450 and paints over the panel
     below — which the dev app did for a day before anyone looked at the right screen.
 
-    Each figure is pinned to **its own** token, not to "one of the two". The looser form
-    passed a hero rendered at tile height, which is the same defect a size smaller: a 360px
-    box inside a 600px panel leaves 240px of dead navy that reads as a rendering fault.
+    Each figure is pinned to **its own** token, not to "one of the two" — the looser form
+    passed a figure rendered at the wrong one of them. Both are tile height since
+    2026-09-18: twenty points and a fitted cloud are compact pictures, and 600px of panel
+    around them was most of what made the first render look like dead space.
     """
     fig = request.getfixturevalue(name)
     assert fig.layout.height == getattr(T, expected), (
