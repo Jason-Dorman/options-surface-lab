@@ -309,13 +309,35 @@ def test_the_builder_writes_the_route_the_workflow_guards(tmp_path):
 
 def test_the_local_artifact_and_the_published_page_are_one_render(tmp_path, html):
     """Two destinations, one page. The only difference may be the nav hrefs — anything else
-    and the artifact the PO checks is not the artifact CI ships (RUNBOOK §5)."""
+    and the artifact the PO checks is not the artifact CI ships (RUNBOOK §5).
+
+    **The failure names a character offset, not the page.** Comparing two 465 KB strings
+    with a bare `assert a == b` makes pytest print both, and on 2026-09-18 that buried a
+    one-character cause in a CI log the PO could not read *"way too big to paste"*. The
+    standing rule from the FR-7 prose failure is that a test asserting against a built page
+    reduces to a bool first; this one reduces to a bool and a window.
+    """
     def strip(s: str) -> str:
         return re.sub(r'<div class="osl-nav">.*?</div>', "", s, flags=re.S)
 
-    site_html = read(builder.build_covered_call(tmp_path))
-    assert strip(site_html) == strip(html), (
-        "the published page and the root artifact differ by more than their nav links"
+    site = strip(read(builder.build_covered_call(tmp_path)))
+    local = strip(html)
+    if site == local:
+        return
+
+    at = next(
+        (i for i in range(min(len(site), len(local))) if site[i] != local[i]),
+        min(len(site), len(local)),
+    )
+    window = slice(max(0, at - 90), at + 90)
+    raise AssertionError(
+        "the published page and the root artifact differ by more than their nav links.\n"
+        f"  lengths   : site {len(site)}, committed {len(local)}\n"
+        f"  first diff: char {at}\n"
+        f"  site      : ...{site[window]}...\n"
+        f"  committed : ...{local[window]}...\n"
+        "  If the two were built on different machines, check page_shell.JSON_ENGINE — "
+        "plotly picks its serializer from what is installed unless it is pinned."
     )
 
 

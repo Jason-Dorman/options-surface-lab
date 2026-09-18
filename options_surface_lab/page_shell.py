@@ -24,8 +24,28 @@ from html import escape
 from typing import Iterable, Sequence, Union
 
 import plotly.graph_objects as go
+import plotly.io as pio
 
 from options_surface_lab import theme as T
+
+#: **The published page must be byte-reproducible on any machine**, and until 2026-09-18 it
+#: was not. Plotly picks its JSON serializer at run time: `orjson` when it is importable,
+#: the standard library otherwise. The two escape non-ASCII differently — `orjson` writes a
+#: literal `—`, `json` writes `—` — so the same figure, the same data and the same
+#: plotly version produced two different files depending on whether an *optional accelerator
+#: reflex happens to install* was present. This machine had it; CI's container did not, and
+#: `test_the_local_artifact_and_the_published_page_are_one_render` went red on a 465 KB diff.
+#:
+#: Pinned to the standard library, which is always there. Pinning `orjson` in
+#: `requirements.txt` would fix CI and leave the artifact hostage to an optional import on
+#: anyone else's machine; this fixes the property that actually matters. It is set once, at
+#: import, because `to_html` reads the global — see `PageShell.figure_panel`.
+#:
+#: T-84's lesson in a new place: *a graded artifact whose build depends on what happens to
+#: be installed is not reproducible.* There it was an unpinned version; here it is an
+#: optional dependency nobody declared.
+JSON_ENGINE = "json"
+pio.json.config.default_engine = JSON_ENGINE
 
 #: The site's name, and the default wordmark for a page that does not name itself.
 #:

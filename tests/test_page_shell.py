@@ -13,6 +13,7 @@ import re
 import pytest
 
 from options_surface_lab import theme as T
+from options_surface_lab import page_shell
 from options_surface_lab.page_shell import (
     CAP_ID_PREFIX,
     FIG_ID_PREFIX,
@@ -150,6 +151,38 @@ def test_a_page_may_name_itself():
     html = PageShell(name, wordmark=name).command_bar("ident")
     assert f'<div class="osl-wordmark">{name}</div>' in html
     assert WORDMARK not in html, "the page is still carrying the site's name as well"
+
+
+def test_the_json_serializer_is_pinned_so_the_page_is_reproducible():
+    """The published page must be byte-identical wherever it is built.
+
+    Plotly picks its JSON serializer at run time — `orjson` when importable, the standard
+    library otherwise — and the two escape non-ASCII differently: `orjson` writes a literal
+    em-dash, `json` writes `\\u2014`. On 2026-09-18 that meant this machine (where reflex had
+    pulled orjson in) and CI's container produced **different files from identical code**,
+    and the page the PO checked was not the page CI shipped.
+
+    Asserted on a rendered figure, not only on the config knob: the knob is the mechanism
+    and the escaping is the property, and a future plotly could honour one without the
+    other. Pinning `orjson` in requirements.txt would have fixed CI while leaving the
+    artifact hostage to an optional import on anyone else's machine.
+    """
+    import plotly.graph_objects as go
+    import plotly.io as pio
+
+    assert page_shell.JSON_ENGINE == "json"
+    assert pio.json.config.default_engine == page_shell.JSON_ENGINE, (
+        "something re-pointed plotly's serializer after page_shell pinned it"
+    )
+
+    html = go.Figure(go.Scatter(x=[1], y=[1], name="a \u2014 b")).to_html(
+        full_html=False, include_plotlyjs=False
+    )
+    assert "\\u2014" in html, "the figure JSON is not escaping non-ASCII"
+    assert "\u2014" not in html, (
+        "a literal em-dash reached the figure JSON — the serializer is not the pinned one, "
+        "so this page cannot be reproduced on a machine with a different set installed"
+    )
 
 
 # --------------------------------------------------------------------------- the site nav

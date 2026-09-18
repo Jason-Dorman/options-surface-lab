@@ -75,7 +75,7 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 ```bash
 python build_preview.py       # 1.1's page — the static index.html Pages serves at /
 python build_covered_call.py  # A2's page — Pages serves it at /covered-call/
-pytest                        # 698 tests in tests/ — all green, no xfail
+pytest                        # 699 tests in tests/ — all green, no xfail
 reflex run                    # local dev server (FR-1); not what gets published
 
 # Both take `--site DIR` (CI passes `--site _site`): the page lands at DIR/<route> with its
@@ -624,6 +624,36 @@ strategy, Reg T account, blotter + skip log, daily ledger, mid vs print, live bo
 plus `PageShell.table` for the HTML tables and every remaining publish guard in `pages.yml`.
 **30 new tests; 28 of 28 injected defects caught; 687 green, no xfail.**
 
+**CI went red on a suite that was green here, again — and this time the log was unreadable
+(2026-09-18).** The cause was one character. **Plotly picks its JSON serializer at run time**:
+`orjson` when it is importable, the standard library otherwise, and the two escape non-ASCII
+differently — `orjson` writes a literal `—`, `json` writes `—`. `reflex` had pulled
+`orjson` into `algo`; CI's container had no such thing. So identical code, identical data and
+identical plotly produced **two different files**, and
+`test_the_local_artifact_and_the_published_page_are_one_render` — which byte-compares a fresh
+render against the committed artifact — went red on a 465 KB diff that pytest printed in full.
+
+`page_shell.JSON_ENGINE` pins it to the standard library. **`orjson` is deliberately *not*
+pinned in `requirements.txt`**: that would have fixed CI while leaving the artifact hostage to
+an optional import on anyone else's machine, and the property that matters is that the
+published page is byte-reproducible anywhere. Three things to carry:
+
+- **T-84's lesson in a new place.** There the unreproducibility was an unpinned *version*;
+  here it was an undeclared *optional dependency* that changes the output of a library that
+  is pinned. "Pin your requirements" was not enough, because nothing in `requirements.txt`
+  mentions orjson and nothing ever would have.
+- **I reproduced it instead of guessing.** Four hypotheses (version drift, `OSL_OFFLINE`,
+  timezone, line endings) were all wrong and all cheap to believe. `docker run
+  python:3.12-slim` with the repo mounted reproduced it in one command, and a twelve-line
+  script found the offset. *The container is now the way to check CI, not the argument about
+  what CI might be doing.*
+- **The test that failed was unreadable, and that was a second defect.** A bare
+  `assert a == b` on two 465 KB strings makes pytest print both; the PO could not paste the
+  error. It reduces to a bool and a 180-character window now, and says to check
+  `JSON_ENGINE` if the two were built on different machines. This is the FR-7 prose lesson —
+  *a test that asserts against the built page reduces to a bool first* — which was on the
+  books and which I did not apply to the tests I wrote this week.
+
 **A page now names itself, and the nav lists the whole site (2026-09-18, PO).** Two small
 changes with the same cause: the chrome was written for a *site* and a reader arrives at a
 *page*.
@@ -947,7 +977,7 @@ submission — PO to confirm the standing recommendation. The order that fits th
 the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions → T-78's entry → T-56 → T-57 → T-58 →
 T-79 → T-68 → T-69 → T-59~~ (all landed) → **T-60** → ship, with T-78's settlement leg on
 Friday 09-18. 1.1's brief is archived at `docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open.
-**698 tests green, no xfail** (2026-09-18, full run; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
+**699 tests green, no xfail** (2026-09-18, full run, **and in CI's own `python:3.12-slim` container**; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
 Update this paragraph as things land (lockstep rule).
 
 **T-57 landed 2026-09-15 — `covered_call/engine.py`, so the book runs** (FR-15, FR-16, NFR-6).

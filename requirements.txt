@@ -18,6 +18,12 @@ pandas==2.3.3
 numpy==2.5.2
 scipy==1.18.1
 plotly==7.0.0
+# NOTE: plotly picks its JSON serializer from what is importable — `orjson` if present,
+# the standard library otherwise — and the two escape non-ASCII differently. That made
+# the published page differ between this machine (reflex pulls orjson in) and CI's
+# container, from identical code. `page_shell.JSON_ENGINE` pins it to the standard
+# library, so `orjson` is deliberately NOT pinned here: pinning it would fix CI and
+# leave the artifact hostage to an optional import on anyone else's machine.
 pyarrow==25.0.1     # Assignment 2's tape is parquet, not pickle (AD-11, SPEC-COVERED-CALL §3.1)
 
 # Dev / test
