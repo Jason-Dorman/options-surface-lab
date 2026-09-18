@@ -660,7 +660,12 @@ states, in words, what a negative available-funds entry would mean — the brief
 **◐ 2026-09-15 (T-57):** the ledger half is in and I-2 / I-11 pass on both tapes; `available`
 bottoms at **$38,886.50 at an entry bar** under SD-3 — the only bars the flag is checked on — so `NEG_AVAILABLE` never fires on this book and is instead
 proven by a test that funds the account at $1,000 and watches the flag appear beside a trade
-that is still booked. The **chart** and the **sentence** wait on T-69 / T-59.
+that is still booked. **The chart landed 2026-09-17 (T-69)** — `plots.account_figure`, the
+hourly ledger on one axis with `hovermode="x unified"` so one hover box carries all three
+values at a bar, which is the acceptance criterion read literally. Its caption carries the
+**sentence**, derived rather than typed: on a clean book it quotes the available floor *at an
+entry bar* and says the flag never fires; on a flagged one it says available went negative and
+that the trade was booked anyway. What waits on **T-59** is putting the panel on the page.
 
 **FR-17 — Mid vs `TRDPRC_1`, with R².** For near-the-money call bars carrying both a valid
 quote and a print: the scatter, the OLS fit, `y = x`, and `n`, slope, intercept, R², median
@@ -695,9 +700,12 @@ instead of the mid costs **$49.50**, moving the window return from 1.658% to 1.5
 `build_covered_call.py` publishes `_site/covered-call/index.html`, rendering the chrome
 `build_preview.py` renders (`page_shell.PageShell`) and the book's headline read off
 `run_backtest` over the committed tape; the two pages link to each other; the publish guards
-run per page with a marker each. **What remains is the content** — panels in SPEC §11's
-order, blotter, skip log and ledger as HTML tables that scroll below `FIGURE_MIN_WIDTH`
-rather than deform (T-69/T-59). AD-11's registry and templates are deferred past 09-20
+run per page with a marker each. **The identity the content needs is in (T-68,
+2026-09-17)** — `NAV_LINE` / `MARGIN_IM` / `MARGIN_MM` behind `theme.account_line()`,
+FR-17's `FIT_LINE` and the shared `IDENTITY_LINE`, and the `.osl-table*` family, recorded in
+DESIGN-BRIEF §9. **What remains is the content** — panels in SPEC §11's order, blotter, skip
+log and ledger as HTML tables that scroll below `TABLE_MIN_WIDTH` rather than deform
+(T-69/T-59). AD-11's registry and templates are deferred past 09-20
 (T-51), so the page is assembled in Python by its own builder rather than by a generator.
 The per-page CI guards that have landed are the synthetic refusal and a non-empty book; the
 `[unwritten]` and R² guards land with the panels they guard — a guard written before its
@@ -762,7 +770,7 @@ NFR-1 … NFR-5 apply unchanged. Added:
 | A2-M1 | The tape | A2-M0 | FR-13, synthetic tape, the one-time pull committed. **complete 2026-09-15**: `tape.py` (T-56), the committed pull (T-77 — 37,857 bars over 10 weeks, verified against T-65's independent run), the synthetic tape and its fixtures (T-63), and the tape suite (T-64) |
 | A2-M2 | The engine | A2-M1 | FR-14, FR-15, FR-16, the invariant suite, notebook 03 |
 | A2-M3 | The evidence | A2-M1 | FR-17. **◐ 2026-09-16:** the transform and notebook 03 §5 landed (T-58); the figure is T-69 and the panel T-59, both inside A2-M4 |
-| A2-M4 | The page | ~~T-79~~ **✅ 2026-09-17** (a second builder sharing the chrome) + A2-M2/M3 | FR-18, FR-21's live panel, theme additions. **Remaining: T-68 (theme), T-69 (figures), T-59 (the panels), T-70's red rendering** |
+| A2-M4 | The page | ~~T-79~~ **✅ 2026-09-17** (a second builder sharing the chrome), ~~T-68~~ **✅ 2026-09-17** (the lines and the table rules, DESIGN-BRIEF §9) + A2-M2/M3 | FR-18, FR-21's live panel, theme additions. **Remaining: T-69 (figures), T-59 (the panels), T-70's red rendering** |
 | A2-M5 | Write-up and ship | A2-M4 | FR-19, browser drive, incognito, Canvas |
 | P1 | Comparison variant | every P0 green | FR-20 |
 

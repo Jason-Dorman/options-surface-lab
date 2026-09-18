@@ -621,20 +621,41 @@ Panels, in reading order:
 
 1. **The strategy** — `Params` rendered as prose + a table (FR-14), and the rule ids the
    blotter's notes cite.
-2. **NAV, IM, MM** over the window with hover (FR-16) — the hero.
+2. **NAV, IM, MM** over the window with hover (FR-16) — the hero. **Landed 2026-09-17
+   (T-69)** as `plots.account_figure(book)`: the **hourly** ledger on one axis shared with
+   zero, `hovermode="x unified"` so one box carries all three values at a bar, and a caption
+   that quotes the available floor **at an entry bar** — the only bars the flag is checked
+   on, and the number T-82 first published off a thin pre-market bar.
 3. **Blotter** (FR-15) — the full table; below it the **skip log** (§8.2).
 4. **Ledger** — daily roll-up (§9).
-5. **Mid vs print** — scatter, fit, R² (FR-17).
+5. **Mid vs print** — scatter, fit, R² (FR-17). **Landed 2026-09-17 (T-69)** as
+   `plots.mid_vs_print_figure(evidence)`: all `n` points (`Scattergl`; a thinned cloud would
+   look tighter or looser than the statistic beside it and nothing would say so), both axes
+   on **one range** so `y = x` is drawn at 45 degrees, and no fit line at all when none was
+   estimated. The caption is `headline()` and `NON_SIMULTANEITY_CAVEAT` verbatim.
 6. **Write-up** — the PO's prose (FR-19), the FR-7 mechanism: a prose module, `[unwritten]`
    in red, a test, and a CI guard.
 
-No listener is needed: nothing cross-filters. Tables are HTML rendered by the generator's
-templates, styled by `theme.PAGE_CSS` (the table rules are new — T-68, PO taste); below
-`FIGURE_MIN_WIDTH` a table scrolls inside its panel like a figure does (T-47's posture).
+No listener is needed: nothing cross-filters. Tables are HTML, styled by `theme.PAGE_CSS`
+**(landed 2026-09-17, T-68)**: `.osl-table-scroll` wraps every one of them and owns both
+overflow axes — a `position:sticky` header resolves against its nearest scrolling ancestor, so
+a header with no scroll box of its own simply never sticks — `.osl-table` carries the hairline
+rules and the `TABLE_MIN_WIDTH` floor, `.osl-num` right-aligns a figure, and `.osl-skip` /
+`.osl-flag` are the page's only two coloured cells. The strategy's key/value table opts out of
+the width floor through `.osl-table-kv`. Below `TABLE_MIN_WIDTH` a table scrolls inside its
+panel rather than deforming, exactly as a figure does below `FIGURE_MIN_WIDTH` (T-47's posture).
+The palette and the reasoning are DESIGN-BRIEF §9; FR-16's three lines come from
+`theme.account_line("nav"|"im"|"mm")`, which states their subordination in one place.
 
 **CI guards, per page:** refuse a page built from the synthetic tape; refuse `[unwritten]`;
 require the R² line; require at least one `BUY` and one `EXPIRE`/`ASSIGN` in the blotter (a
 page with an empty book renders plausibly and is wrong).
+
+**The R² guard greps `plots.FIT_CAPTION_PREFIX`, not the R² itself.** The line it guards
+carries `R²`, `×` and `−`, and a guard is a shell grep over a built page that holds the
+caption twice — as panel HTML and inside `layout.meta`, where Plotly's encoder ships a slash
+as `\/`. So the anchor is a constant, pure ASCII, with no `/` and no `·` (T-45), and a test
+pins those properties rather than trusting the next person who shortens a caption.
 
 *Landed 2026-09-17 (T-79):* the synthetic refusal — on **`synthetic tape`**, a marker of this
 page's own, because a marker shared with 1.1's `synthetic panel` would let one page's

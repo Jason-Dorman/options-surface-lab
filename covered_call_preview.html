@@ -174,6 +174,65 @@
      to prove it is there, so its absence must not look like a design choice. */
   .osl-commentary-todo { color:#FF4D6D; font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace; font-weight:700; }
 
+  /* ---- tables: the strategy, the blotter, the skip log, the ledger (T-68) ----
+     **Hairline rules, no zebra** (PO, 2026-09-17). The page is already made of hairlines --
+     panels are separated by a rule and not by space (section 5) -- and a second rhythm of
+     banded rows competes with that grid rather than helping a reader across a row. The work
+     of tracking a row is done by the hover lift and by mono numerals instead.
+
+     Every table lives inside `.osl-table-scroll`, which owns both overflow axes. That
+     wrapper is not decoration: `position:sticky` on a header resolves against its nearest
+     scrolling ancestor, so a sticky header with no scroll box of its own simply never
+     sticks -- and nothing about the render says why. */
+  .osl-table-scroll {
+    max-height:420px; overflow:auto; border:1px solid #1B2A44;
+  }
+  .osl-table {
+    width:100%; min-width:720px; border-collapse:collapse;
+    font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace; font-size:11.5px; line-height:1.5;
+  }
+  .osl-table thead th {
+    position:sticky; top:0; z-index:1;
+    background:#111E33; color:#94897A;
+    font-family:'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif; font-weight:600; font-size:10px;
+    letter-spacing:1.1px; text-transform:uppercase;
+    text-align:left; white-space:nowrap;
+    padding:5px 10px;
+    /* An INSET SHADOW, not a border. Under `border-collapse:collapse` a cell's borders
+       belong to the table rather than to the cell, so they do not travel with a sticky
+       header -- the background sticks and the rule underneath it scrolls away, leaving the
+       column names floating on top of the first data row. It renders, so nothing errors;
+       it is only visible once somebody scrolls. */
+    box-shadow:inset 0 -1px 0 #1B2A44;
+  }
+  .osl-table td {
+    padding:5px 10px; border-top:1px solid #1B2A44;
+    color:#E8E3D9; white-space:nowrap;
+  }
+  .osl-table tbody tr:hover td { background:#111E33; }
+  /* Numbers right-aligned and tabular, so a column of dollars lines up at the decimal --
+     the same reason every tick label on the site is mono (section 4). */
+  .osl-table .osl-num { text-align:right; font-variant-numeric:tabular-nums; }
+  /* A cell that names something rather than measuring it. */
+  .osl-table .osl-label { color:#94897A; }
+
+  /* **Only the exceptions are coloured** (PO, 2026-09-17): a skipped week and a breached
+     margin line. A blotter is a list of trades, so BUY / SELL / EXPIRE / ASSIGN all stay
+     TEXT -- colouring every side turns a record into a dashboard and makes the two rows that
+     actually want attention no louder than the twenty-four that do not.
+
+     Amber on a skip reason is emphasis on a WORD, which is the licence `.osl-note b`
+     already has (section 6 rule 2); it never lands on a number, where it would be an
+     encoding. */
+  .osl-table .osl-skip { color:#FFB000; font-weight:700; }
+  .osl-table .osl-flag { color:#FF4D6D; font-weight:700; }
+
+  /* The strategy's parameters are two columns of key and value, not a ledger. It opts out of
+     the width floor -- a 2-column table that scrolls is a scrollbar for nothing -- and its
+     labels take the muted type a readout label does. */
+  .osl-table-kv { min-width:0; }
+  .osl-table-kv td:first-child { color:#94897A; width:38%; white-space:normal; }
+
   .osl-warn {
     background:rgba(255,77,109,0.14); border:1px solid #FF4D6D; color:#FF4D6D;
     padding:10px 14px; margin-bottom:10px; font-weight:600;

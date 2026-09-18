@@ -75,7 +75,7 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 ```bash
 python build_preview.py       # 1.1's page — the static index.html Pages serves at /
 python build_covered_call.py  # A2's page — Pages serves it at /covered-call/
-pytest                        # 588 tests in tests/ — all green, no xfail
+pytest                        # 653 tests in tests/ — all green, no xfail
 reflex run                    # local dev server (FR-1); not what gets published
 
 # Both take `--site DIR` (CI passes `--site _site`): the page lands at DIR/<route> with its
@@ -329,10 +329,10 @@ is still calendar-dependent — OQ-6's `end_date` parameter is the root fix and 
 sign-off.
 
 **Next up (2026-09-17):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST.** The first live
-entry is **booked** — see T-78 below. ~~T-56~~, ~~T-77~~, ~~T-57~~, ~~T-58~~ and ~~T-79~~ are done — **the tape is
-pulled, the book runs, the fill assumption is measured and the page has a route** — so the
-critical path is now **T-68/T-69/T-59** (the panels), T-60 (the PO's write-up), then
-T-71/T-72 to ship. **T-66 (notebook 03
+entry is **booked** — see T-78 below. ~~T-56~~, ~~T-77~~, ~~T-57~~, ~~T-58~~, ~~T-79~~, ~~T-68~~ and ~~T-69~~ are done — **the
+tape is pulled, the book runs, the fill assumption is measured, the page has a route, and both
+figures exist** — so the critical path is now **T-59** (put the panels on the page), T-60 (the
+PO's write-up), then T-71/T-72 to ship. **T-66 (notebook 03
 §1–§4) is still open**: it was meant to be co-built with T-57 and was not; T-58 created the
 notebook and wrote §5 into it, so T-66 is now a matter of filling in the sections above its own.
 The PO chose **QQQ** (SD-1, 2026-09-12) and the **last
@@ -617,6 +617,87 @@ carry:
   it took a clean Linux venv built from `requirements.txt`, which is the only thing that ever
   ran what CI runs.
 
+**T-69 landed 2026-09-17 (FR-16, FR-17) — `covered_call/plots.py`, so both of A2's
+figures exist.** `account_figure(book)` and `mid_vs_print_figure(evidence)`. **23 tests,
+24 of 24 injected defects caught; 653 green, no xfail.** The module is presentation and
+recomputes nothing, which makes almost every test one shape: *the figure says what the `Book`
+or the `MidVsPrint` says, and nothing it derived itself* — T-46's rule applied to a plot,
+because a test that reads a number back out of the trace it just set proves only that Plotly
+stores what it is given. Six things worth carrying:
+
+- **T-69's own spec forced an AD-12 question.** "Captions via `with_caption`" — and
+  `with_caption` lived in 1.1's `option_surface_plot.py`, which A2 may not reach into. They
+  are the figure side of the *panel* contract rather than 1.1 content, so `with_caption` /
+  `figure_caption` / `as_panel_figure` now live in **`page_shell.py`**, the module that exists
+  to hold what both pages share. The move **removes** a dependency instead of adding one:
+  `page_shell` had been importing `figure_caption` back out of `option_surface_plot` through a
+  deferred local import, to dodge the cycle that arrangement created. `option_surface_plot`
+  re-exports all three, so every existing call site is untouched.
+- **Figures are born panel-ready here.** 1.1 emits a titled figure and the builder calls
+  `as_panel_figure` to strip it, because those figures are also shown standalone by the Reflex
+  app. This page is their only consumer, so the two-step is gone — and with it the defect it
+  invites, which this project has already shipped once (a figure whose declared height
+  overflowed the box reserved for it, DESIGN-BRIEF §8).
+- **One axis, shared with zero, and that costs something on purpose.** FR-16's panel asks
+  *does NAV stay above the requirement*, which is only meaningful on a common scale — so a
+  secondary axis for NAV is wrong here however much flatter it makes the line look. The price
+  is that NAV's own path is a ~2% band near the top of a chart that reaches to zero; the return
+  is the readout strip's job, and the caption points instead at the number that *does* answer
+  this panel: the available floor **at an entry bar**, derived from the ledger, never typed.
+- **`y = x` is drawn at 45 degrees or it lies about its own slope.** Both axes carry one
+  range; a reader's whole reading of that cloud — is the print above or below the mid — is
+  read off that angle. Two mutants (unshared axes, a range that crops the sample) are caught.
+- **The R² publish guard needs an anchor a grep can find.** SPEC §11 requires "the R² line",
+  and that line carries `R²`, `×` and `−` and exists **twice** in the built page — as panel
+  HTML and inside `layout.meta`, where Plotly's encoder ships a slash as `\/`. So
+  `plots.FIT_CAPTION_PREFIX` is a constant, and a test pins it ASCII and free of `/` and `·`
+  rather than trusting the next person who shortens a caption (T-45's defect, pre-empted).
+- **Deferred on purpose, and it is the best thing not on that panel:** marking the book's
+  **ten fills** on the cloud. SPEC §10.2 measures the fill error there at **$0.0375** against
+  $0.035 over the whole sample, and it is the assumption at the points where it actually cost
+  money. It is not what T-69 specifies and it is one call away — worth raising with T-59/T-60
+  rather than deciding here.
+
+**T-68 landed 2026-09-17 (FR-18, AD-6) — Assignment 2's lines and table rules**, in
+`theme.py` and recorded in **DESIGN-BRIEF §9**: `NAV_LINE` / `MARGIN_IM` / `MARGIN_MM` behind
+`account_line()`, `FIT_LINE` / `IDENTITY_LINE` for FR-17's panel, the `.osl-table*` family and
+four table metrics. Three PO decisions, taken with the measurements in front of them.
+**17 of 17 injected defects caught; 628 green at the time, no xfail.** Five things worth carrying:
+
+- **The palette had no room left, and that is a finding rather than an excuse.** Every hue the
+  wheel still has free sits within ~35 deg of the amber — which is *type*, not data — or within
+  ~40 deg of a locked series hue (orange 24 deg from `ACCENT`, azure 3 deg from `NEUTRAL`,
+  straw 6 deg). So reuse was the principled answer here, not the lazy one, and the section says
+  so with the numbers rather than asserting taste.
+- **"A reference is not a series" earned its second application.** IM and MM are *requirements*
+  computed off LMV, not measurements of the strategy — the reader's question is "does NAV stay
+  above them" — so DESIGN-BRIEF §6 rule 6 binds them exactly as it binds FR-12's spot plane.
+  Subordinate by **weight and dash, not opacity**: a line has no area to fog what is behind it,
+  which is the one thing the plane's rule does *not* carry over.
+- **NAV is violet, not the cyan its 10.3:1 would argue for** (PO). Panel [5] of the same page is
+  the mid-vs-print scatter, so cyan and magenta are spoken for *there* by the README — a hue
+  that means "the mark" in one panel must not mean "the account" two panels up. Violet has no
+  job on a page with no puts in it. Tables get **hairline rules, no zebra** and **only the
+  exceptions coloured** (skip reason amber, `NEG_AVAILABLE` red, every blotter side left as
+  TEXT — colouring every side turns a record into a dashboard).
+- **My first base-level CSS guard measured text position, not nesting.** It took
+  `PAGE_CSS.split("@media")[0]` and declared seven perfectly unconditional rules missing,
+  because most of the stylesheet is written *after* the two breakpoint blocks. It matches
+  braces now and strips CSS comments, since a selector merely *named* in a note otherwise
+  counts as a rule that exists. It did, however, catch the real thing first: the table rules
+  had been inserted after the breakpoints, and a rule hidden inside one renders at some widths
+  and not at others — verified by hiding `.osl-table-kv` in a `@media` and watching it fail.
+- **`THEMED_SOURCES` is discovered now, not hand-listed.** §6 rule 5 had been stating its own
+  hole for weeks — *"a module that emits markup and is not on this list is a module free to
+  hold a colour"* — and T-69/T-59 are about to add two modules that render. A mutant hex in
+  `covered_call/rules.py`, which the old five-entry list never covered, is caught. A companion
+  test names the five renderers, so a glob that silently matched nothing cannot leave every
+  literal check passing over an empty parametrisation.
+- **The stylesheet change stale-failed the committed artifact**, exactly as the FR-7 prose did:
+  `test_the_local_artifact_and_the_published_page_are_one_render` went red until both pages
+  were rebuilt. Anything that changes what a page *renders* — not only what it says — needs the
+  rebuild in the same commit.
+
 **T-79 landed 2026-09-17 (FR-18, AD-11's interim) — the site has a second page.**
 `options_surface_lab/page_shell.py` holds the chrome both builders render (`PageShell` —
 command bar, readout strip, panel, document — plus the routes and the cross-page links), and
@@ -725,9 +806,9 @@ AD-10 is approved and **not landed**; **AD-11's interim landed 2026-09-17 (T-79)
 registry and templates stay deferred. The whole M5 restructure is deferred until after the
 submission — PO to confirm the standing recommendation. The order that fits the calendar is at
 the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions → T-78's entry → T-56 → T-57 → T-58 →
-T-79~~ (all landed) → **T-68/T-69/T-59** → T-60 → ship, with T-78's settlement leg on Friday
-09-18. 1.1's brief is archived at `docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open.
-**588 tests green, no xfail** (2026-09-17, full run; verified in a clean Linux venv on the pinned versions *and* on pandas 3).
+T-79 → T-68 → T-69~~ (all landed) → **T-59** → T-60 → ship, with T-78's settlement leg on
+Friday 09-18. 1.1's brief is archived at `docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open.
+**653 tests green, no xfail** (2026-09-17, full run; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
 Update this paragraph as things land (lockstep rule).
 
 **T-57 landed 2026-09-15 — `covered_call/engine.py`, so the book runs** (FR-15, FR-16, NFR-6).

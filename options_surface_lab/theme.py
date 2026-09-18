@@ -129,6 +129,71 @@ SPREAD_SCALE = [[0.0, "#0E3446"], [0.35, MARK], [0.7, WARN], [1.0, NEGATIVE]]
 # a reader to make — and since the glyph is fixed by role, hue is the only channel telling
 # the two rights apart, so it has to do the work alone. Amber stays out of the data channel.
 
+# ------------------------------------------------- Assignment 2: the covered-call page
+#
+# Chosen FROM the palette rather than added to it, and that is a finding rather than a
+# preference: every hue the wheel has left sits within ~35 deg of the amber (which is type,
+# not data) or within ~40 deg of a locked series hue, so a "new" colour here would be a
+# near-shade of something that already means something. DESIGN-BRIEF §9.
+#
+# **NAV is a series; IM and MM are rulers.** The question that panel answers is not "what are
+# these three quantities" but "does NAV stay above them" — IM and MM are *requirements*
+# computed off LMV, not measurements of the strategy. So §6 rule 6 applies exactly as it does
+# to FR-12's spot plane: a reference wears no series hue and no amber, and stays subordinate.
+# Here it is subordinate by weight and dash rather than by opacity — a line has no area to fog
+# what is behind it, so translucency would only make it hard to see.
+#
+# NAV takes violet rather than the cyan its 10.3:1 would argue for (PO, 2026-09-17), because
+# panel [5] of this same page is the mid-vs-print scatter: cyan and magenta are spoken for
+# HERE by the README's own encoding, and a hue that means "the mark" in one panel must not
+# mean "the account" two panels down. Violet has no job on this page — a covered call has no
+# puts in it.
+#
+# Written as values, not as aliases of `MARK_PUT` / `SPOT_PLANE` / `NEUTRAL`, which they
+# currently match. The match is deliberate — one palette, roles reused — but the *coupling*
+# is not: re-toning 1.1's puts must not move Assignment 2's NAV line. `IDENTITY_LINE` below
+# is the one genuine alias, and for the opposite reason.
+NAV_LINE = "#A78BFA"      # net asset value — the page's one data series
+MARGIN_IM = "#7FA8D9"     # initial margin, 50% of LMV — a requirement, drawn as a ruler
+MARGIN_MM = "#6E8CB8"     # maintenance margin, 25% — the margin-call line, fainter still
+
+# The ladder is read in three channels at once (hue, weight, dash), so no single one of them
+# has to carry it alone. That is what lets NAV sit 43 deg from the rulers — closer than the
+# 60 deg floor the four 1.1 series must clear, which is a floor for 4px markers separated by
+# hue ALONE. The hero already accepts this exact gap between the spot plane and the violet
+# puts, in one scene (DESIGN-BRIEF §3).
+ACCOUNT_LINES = {
+    "nav": dict(color=NAV_LINE, width=2.2, dash="solid"),
+    "im": dict(color=MARGIN_IM, width=1.4, dash="dash"),
+    "mm": dict(color=MARGIN_MM, width=1.2, dash="dot"),
+}
+
+
+def account_line(role: str, **overrides) -> dict:
+    """`line=` for one of FR-16's three lines — `"nav"`, `"im"` or `"mm"`.
+
+    A function rather than three constants so the *relationship* is stated in one place: a
+    restyle that made the rulers as heavy as NAV, or gave one of them a solid stroke, would
+    turn a reference back into a series and `tests/test_theme.py` reads this dict to stop it.
+    """
+    if role not in ACCOUNT_LINES:
+        raise KeyError(f"unknown account line {role!r} — known roles are {sorted(ACCOUNT_LINES)}")
+    spec = dict(ACCOUNT_LINES[role])
+    spec.update(overrides)
+    return spec
+
+
+# FR-17's mid-vs-print panel. The cloud keeps the README's cyan — every point's x *is* a mark
+# — and the two lines laid over it are references, so they take the ruler family and never a
+# hue a reader could take for a third series.
+FIT_LINE = "#7FA8D9"        # the least-squares fit: a model laid over the tape
+FIT_LINE_WIDTH = 1.8
+# A genuine alias, unlike the three above. 1.1's `settle_vs_trade_figure` already draws a
+# y = x in `TEXT_MUTED` dashed; the two pages make the same statement with the same line, and
+# letting them drift apart would be a defect rather than a divergence.
+IDENTITY_LINE = TEXT_MUTED
+IDENTITY_LINE_WIDTH = 1.0
+
 # --------------------------------------------------------------------------- typography
 
 # Space Grotesk for display, JetBrains Mono for every number, Inter for prose. Each stack
@@ -470,6 +535,27 @@ PAGE_PAD = "14px"
 PANEL_PAD = "10px 12px 12px 12px"
 HEADER_PAD = "7px 12px"
 
+# ------------------------------------------------------------------ table metrics (T-68)
+#
+# Assignment 2's page is half tables: the strategy's parameters, the blotter, the skip log
+# and the daily ledger. A table gets the same posture a figure got in T-47 — **it scrolls
+# rather than deforming**. Four columns of dollars squeezed until the decimals no longer line
+# up is the table version of "the chart is broken", and a horizontal scrollbar is the honest
+# alternative (AD-9's posture, applied to layout).
+#
+# 720 is the widest of the four tables' honest minimum — the ledger's thirteen columns — and
+# it is applied to all of them, so a reader never meets two different table behaviours on one
+# page. The strategy table is two columns of key and value and opts out (`.osl-table-kv`):
+# giving it a 720px floor would put a scrollbar under a table that fits.
+TABLE_MIN_WIDTH = 720
+# A long table scrolls inside its panel instead of making the panel the length of the page.
+# The blotter is 26 rows and the ledger is one per session; at 420px both show ~14 rows, which
+# is enough to see a week without the panel swallowing the ones below it. The header is
+# sticky, so scrolling never costs a reader the column names.
+TABLE_MAX_HEIGHT = 420
+TABLE_FONT_SIZE = 11.5
+TABLE_CELL_PAD = "5px 10px"
+
 
 # --------------------------------------------------------------------------- HTML / Reflex
 #
@@ -656,6 +742,65 @@ PAGE_CSS = f"""
   /* An unwritten sentence is LOUD. This is the one requirement on the page with no figure
      to prove it is there, so its absence must not look like a design choice. */
   .osl-commentary-todo {{ color:{NEGATIVE}; font-family:{FONT_MONO}; font-weight:700; }}
+
+  /* ---- tables: the strategy, the blotter, the skip log, the ledger (T-68) ----
+     **Hairline rules, no zebra** (PO, 2026-09-17). The page is already made of hairlines --
+     panels are separated by a rule and not by space (section 5) -- and a second rhythm of
+     banded rows competes with that grid rather than helping a reader across a row. The work
+     of tracking a row is done by the hover lift and by mono numerals instead.
+
+     Every table lives inside `.osl-table-scroll`, which owns both overflow axes. That
+     wrapper is not decoration: `position:sticky` on a header resolves against its nearest
+     scrolling ancestor, so a sticky header with no scroll box of its own simply never
+     sticks -- and nothing about the render says why. */
+  .osl-table-scroll {{
+    max-height:{TABLE_MAX_HEIGHT}px; overflow:auto; border:1px solid {BORDER};
+  }}
+  .osl-table {{
+    width:100%; min-width:{TABLE_MIN_WIDTH}px; border-collapse:collapse;
+    font-family:{FONT_MONO}; font-size:{TABLE_FONT_SIZE}px; line-height:1.5;
+  }}
+  .osl-table thead th {{
+    position:sticky; top:0; z-index:1;
+    background:{SURFACE_ALT}; color:{TEXT_MUTED};
+    font-family:{FONT_BODY}; font-weight:600; font-size:10px;
+    letter-spacing:1.1px; text-transform:uppercase;
+    text-align:left; white-space:nowrap;
+    padding:{TABLE_CELL_PAD};
+    /* An INSET SHADOW, not a border. Under `border-collapse:collapse` a cell's borders
+       belong to the table rather than to the cell, so they do not travel with a sticky
+       header -- the background sticks and the rule underneath it scrolls away, leaving the
+       column names floating on top of the first data row. It renders, so nothing errors;
+       it is only visible once somebody scrolls. */
+    box-shadow:inset 0 -1px 0 {BORDER};
+  }}
+  .osl-table td {{
+    padding:{TABLE_CELL_PAD}; border-top:1px solid {BORDER};
+    color:{TEXT}; white-space:nowrap;
+  }}
+  .osl-table tbody tr:hover td {{ background:{SURFACE_ALT}; }}
+  /* Numbers right-aligned and tabular, so a column of dollars lines up at the decimal --
+     the same reason every tick label on the site is mono (section 4). */
+  .osl-table .osl-num {{ text-align:right; font-variant-numeric:tabular-nums; }}
+  /* A cell that names something rather than measuring it. */
+  .osl-table .osl-label {{ color:{TEXT_MUTED}; }}
+
+  /* **Only the exceptions are coloured** (PO, 2026-09-17): a skipped week and a breached
+     margin line. A blotter is a list of trades, so BUY / SELL / EXPIRE / ASSIGN all stay
+     TEXT -- colouring every side turns a record into a dashboard and makes the two rows that
+     actually want attention no louder than the twenty-four that do not.
+
+     Amber on a skip reason is emphasis on a WORD, which is the licence `.osl-note b`
+     already has (section 6 rule 2); it never lands on a number, where it would be an
+     encoding. */
+  .osl-table .osl-skip {{ color:{WARN}; font-weight:700; }}
+  .osl-table .osl-flag {{ color:{NEGATIVE}; font-weight:700; }}
+
+  /* The strategy's parameters are two columns of key and value, not a ledger. It opts out of
+     the width floor -- a 2-column table that scrolls is a scrollbar for nothing -- and its
+     labels take the muted type a readout label does. */
+  .osl-table-kv {{ min-width:0; }}
+  .osl-table-kv td:first-child {{ color:{TEXT_MUTED}; width:38%; white-space:normal; }}
 
   .osl-warn {{
     background:{_rgba(NEGATIVE, 0.14)}; border:1px solid {NEGATIVE}; color:{NEGATIVE};

@@ -38,15 +38,39 @@ def asof(wide):
     return wide.groupby(wide["date"].dt.normalize()).size().idxmax()
 
 # The modules FR-8 names: the figure builders, the Reflex app, and every static builder —
-# plus the shell they share, which is where the panel chrome actually lives from T-79. A
-# module that emits markup and is not on this list is a module free to hold a colour.
-THEMED_SOURCES = [
-    ROOT / "options_surface_lab" / "option_surface_plot.py",
-    ROOT / "options_surface_lab" / "options_surface_app.py",
-    ROOT / "options_surface_lab" / "page_shell.py",
-    ROOT / "build_preview.py",
-    ROOT / "build_covered_call.py",
-]
+# plus the shell they share, which is where the panel chrome actually lives from T-79.
+#
+# **Discovered, not hand-listed** (T-68). DESIGN-BRIEF §6 rule 5 said it itself: "a module
+# that emits markup and is not on this list is a module free to hold a colour" — and a list a
+# human maintains is exactly how that happens, silently, the first time somebody adds a
+# module. Assignment 2 adds `covered_call/plots.py` and `covered_call/page.py` (T-69, T-59),
+# and neither can arrive unguarded now. Everything in the package is swept: a module with no
+# visual output has no colour literals to lose, so the only cost of over-covering is that a
+# pure-logic module is proven clean, and the benefit is that a NEW one cannot be missed.
+THEMED_SOURCES = sorted(
+    [p for p in (ROOT / "options_surface_lab").rglob("*.py") if p.name != "theme.py"]
+    + list(ROOT.glob("build_*.py"))
+)
+
+
+def test_the_themed_source_sweep_reaches_the_modules_that_render():
+    """The discovery above is only a guard while it actually finds the renderers.
+
+    A glob that silently matched nothing — a moved package, a renamed builder — would leave
+    every literal test passing over an empty parametrisation, which is the shape of a guard
+    that cannot fail. So the five modules the rule was written for are named here and the
+    sweep must contain all of them.
+    """
+    names = {p.name for p in THEMED_SOURCES}
+    for required in (
+        "option_surface_plot.py",
+        "options_surface_app.py",
+        "page_shell.py",
+        "build_preview.py",
+        "build_covered_call.py",
+    ):
+        assert required in names, f"{required} is not in the themed-source sweep"
+    assert "theme.py" not in names, "theme.py is where the literals live — it cannot be swept"
 
 HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 RGB = re.compile(r"\brgba?\(")
@@ -225,6 +249,196 @@ def test_the_spot_plane_is_neither_a_series_nor_the_chrome(wide, asof):
     assert plane.hoverinfo == "skip", "a wall through the cloud must not steal a point's hover"
     assert {c[1] for c in plane.colorscale} == {T.SPOT_PLANE}, (
         "the plane's colour ramps, so it looks like it encodes a magnitude"
+    )
+
+
+# ------------------------------------------- Assignment 2's page: lines and tables (T-68)
+
+
+def test_the_margin_lines_are_rulers_and_nav_is_the_series():
+    """FR-16's panel asks one question: does NAV stay above IM and MM?
+
+    IM and MM are *requirements* computed off LMV, not measurements of the strategy — so
+    DESIGN-BRIEF §6 rule 6 binds them exactly as it binds FR-12's spot plane: a reference
+    wears no series hue and no amber, and stays subordinate to the thing it is a reference
+    for. Three co-equal lines would answer a question nobody asked.
+
+    Read off `account_line()` rather than off the three colour constants, because the
+    subordination lives in the weight and the dash — a restyle that kept the hues and
+    equalised the strokes would pass a colours-only check while destroying the panel's point.
+    """
+    nav, im, mm = (T.account_line(r) for r in ("nav", "im", "mm"))
+
+    assert nav["dash"] == "solid", "the series must be the unbroken line"
+    for name, ruler in (("IM", im), ("MM", mm)):
+        assert ruler["dash"] != "solid", f"{name} is drawn solid — it reads as a third series"
+        assert ruler["width"] < nav["width"], (
+            f"{name} is {ruler['width']}px against NAV's {nav['width']}px — a reference that "
+            "is as heavy as the series is not subordinate to it"
+        )
+    assert im["dash"] != mm["dash"], "the two rulers are indistinguishable from each other"
+    assert mm["width"] <= im["width"], (
+        "MM is the further floor and must not be the louder of the two"
+    )
+
+
+def test_the_covered_call_lines_are_neither_chrome_nor_a_1_1_series():
+    """§6 rule 2 and rule 6, on the page that added four new lines to the site.
+
+    `WARN` is amber and is used on this page — on a skip *reason*, which is a word. The ban
+    is on amber reaching a data channel, so what has to hold is that none of the four lines
+    a figure draws wears it.
+    """
+    lines = {
+        "NAV": T.NAV_LINE,
+        "IM": T.MARGIN_IM,
+        "MM": T.MARGIN_MM,
+        "fit": T.FIT_LINE,
+    }
+    for name, colour in lines.items():
+        assert colour != T.ACCENT, f"{name} is drawn in the heading colour"
+
+    # The rulers may not wear a hue that means "a series" on the site. NAV may — it IS a
+    # series — but not one whose meaning is spoken for on its own page: panel [5] is the
+    # mid-vs-print scatter, so cyan is the mark and magenta is the print there too.
+    series = {T.MARK, T.MARK_PUT, T.TRADE, T.TRADE_PUT}
+    for name in ("IM", "MM", "fit"):
+        assert lines[name] not in series, f"{name} is wearing a data series' colour"
+    assert T.NAV_LINE not in {T.MARK, T.TRADE}, (
+        "NAV is wearing the README's cyan or magenta, which panel [5] of the same page "
+        "uses for the mark and the print (PO, 2026-09-17)"
+    )
+
+
+def test_the_rulers_read_as_one_family_and_nav_as_something_else():
+    """The panel must not go monochrome, stated structurally rather than as a number.
+
+    The 60 deg floor in `test_a_right_is_never_a_near_shade_of_its_own_counterpart` is for
+    4px markers separated by **hue alone**; these lines carry weight and dash as well, and
+    NAV sits 39-42 deg off the rulers — the same neighbourhood the hero already renders
+    between the slate spot plane and the violet puts, in one scene (DESIGN-BRIEF §3). So a
+    number copied from there would be a number tuned to pass.
+
+    What actually has to hold is the *shape* of the relationship: IM and MM are one family
+    (3 deg apart — they are two floors on one account), and NAV is outside it. A restyle that
+    collapsed all three into one hue fails the second assertion however wide the first gap
+    is, which is the failure this guard exists for.
+    """
+    to_im, to_mm = _hue_gap(T.NAV_LINE, T.MARGIN_IM), _hue_gap(T.NAV_LINE, T.MARGIN_MM)
+    between = _hue_gap(T.MARGIN_IM, T.MARGIN_MM)
+    assert between < min(to_im, to_mm), (
+        f"the two rulers are {between:.0f} deg apart but NAV is only {min(to_im, to_mm):.0f} "
+        "deg away — they no longer read as a family with the series outside it"
+    )
+    for name, gap in (("IM", to_im), ("MM", to_mm)):
+        assert gap >= 30, (
+            f"NAV and {name} are {gap:.0f} deg apart — same hue family, so the panel reads "
+            "as three shades of one line rather than a series and its floors"
+        )
+
+
+def test_the_two_pages_draw_one_identity_line(wide, asof):
+    """`y = x` means the same thing on both pages, so it is one value, not two.
+
+    `IDENTITY_LINE` is deliberately an alias rather than a repeated literal — the opposite
+    decision from `NAV_LINE`, which repeats `MARK_PUT`'s value on purpose so that the two
+    pages stay free to diverge. Pinned against the line 1.1 actually renders rather than
+    against the constant it was copied from (T-46): a token that agrees only with itself
+    proves nothing.
+    """
+    fig = settle_vs_trade_figure(wide, asof)
+    drawn = next(t for t in fig.data if t.name == "y = x")
+    assert T.IDENTITY_LINE == drawn.line.color, (
+        f"1.1 draws y = x in {drawn.line.color} and Assignment 2 would draw it in "
+        f"{T.IDENTITY_LINE}"
+    )
+    assert drawn.line.dash == "dash", "the identity line is a reference and must stay dashed"
+
+
+# The classes Assignment 2's tables are built from. Hand-named on purpose: this list is the
+# contract between `theme.PAGE_CSS` and the page that emits the markup (T-59), and CSS fails
+# OPEN — an undefined class is not an error, it is simply no styling. That is how `.osl-w6`
+# went missing from the published page while the dev app looked perfect.
+TABLE_CLASSES = [
+    ".osl-table-scroll",  # the scroll box, and the ancestor a sticky header resolves against
+    ".osl-table",         # the table itself
+    ".osl-table-kv",      # the strategy's key/value variant, which opts out of the floor
+    ".osl-num",           # a right-aligned, tabular number
+    ".osl-label",         # a cell that names rather than measures
+    ".osl-skip",          # a skip reason — amber, the one exception
+    ".osl-flag",          # NEG_AVAILABLE — red, the other one
+]
+
+
+_CSS_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+
+
+def _css_at_base_level(css: str) -> str:
+    """`css` with every `@media { ... }` block and every comment removed.
+
+    Braces are matched rather than split on. The first version of this helper took
+    `css.split("@media")[0]`, which is text position and not nesting — most of the
+    stylesheet is written *after* the two breakpoint blocks, so it declared seven perfectly
+    unconditional rules to be missing. Comments go too, or a selector merely *named* in a
+    note counts as a rule that exists.
+    """
+    css = _CSS_COMMENT.sub("", css)
+    out, i = [], 0
+    while True:
+        j = css.find("@media", i)
+        if j < 0:
+            out.append(css[i:])
+            return "".join(out)
+        out.append(css[i:j])
+        k, depth = css.find("{", j), 0
+        while k < len(css):
+            depth += {"{": 1, "}": -1}.get(css[k], 0)
+            if depth == 0:
+                break
+            k += 1
+        i = k + 1
+
+
+def _css_rule(selector: str) -> str:
+    """The declarations of the one base-level rule for `selector`."""
+    body = _css_at_base_level(T.PAGE_CSS)
+    m = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", body)
+    assert m, f"{selector} has no unconditional rule in PAGE_CSS"
+    return m.group(1)
+
+
+@pytest.mark.parametrize("cls", TABLE_CLASSES)
+def test_every_table_class_is_defined_at_base_level(cls):
+    """Defined outside any `@media` block, for the reason `.osl-hero` states in PAGE_CSS.
+
+    A class that exists only inside a breakpoint is styled at some widths and unstyled at
+    others, and the unstyled one renders perfectly — just wrong.
+    """
+    assert re.search(re.escape(cls) + r"[ ,:{]", _css_at_base_level(T.PAGE_CSS)), (
+        f"{cls} has no unconditional rule in PAGE_CSS — CSS fails open, so a table using it "
+        "would render unstyled with nothing to say why"
+    )
+
+
+def test_a_table_scrolls_rather_than_deforming():
+    """T-47's posture, applied to a table (SPEC §11).
+
+    Thirteen columns of dollars squeezed until the decimals stop lining up is the table
+    version of "the chart is broken"; a scrollbar is the honest alternative. The floor has to
+    be *wider* than a figure's, because a figure can be redrawn narrow and a column of
+    numbers cannot, and the key/value table has to opt out or it scrolls for nothing.
+    """
+    assert T.TABLE_MIN_WIDTH > T.FIGURE_MIN_WIDTH, (
+        "a 13-column table needs more room than a figure, not less"
+    )
+    assert f"min-width:{T.TABLE_MIN_WIDTH}px" in T.PAGE_CSS, (
+        "TABLE_MIN_WIDTH is a token nothing renders — the stylesheet has its own number"
+    )
+    assert "overflow:auto" in _css_rule(".osl-table-scroll"), (
+        "the scroll box does not scroll, so a wide table will push its panel out of the grid"
+    )
+    assert "min-width:0" in _css_rule(".osl-table-kv"), (
+        "the key/value table inherits the 13-column width floor"
     )
 
 
@@ -481,6 +695,14 @@ CONTRAST_PAIRS = [
     ("TEXT_INVERSE on TRADE", T.TEXT_INVERSE, T.TRADE),
     ("TEXT_INVERSE on ACCENT", T.TEXT_INVERSE, T.ACCENT),
     ("TEXT_INVERSE on NEUTRAL", T.TEXT_INVERSE, T.NEUTRAL),
+    # Assignment 2's page (T-68): three lines on a plot interior, plus the two coloured cells
+    # its tables allow. MM is the tightest of them and is deliberately the faintest thing on
+    # that panel — "faintest" still has to clear the floor.
+    ("NAV_LINE on SURFACE_ALT", T.NAV_LINE, T.SURFACE_ALT),
+    ("MARGIN_IM on SURFACE_ALT", T.MARGIN_IM, T.SURFACE_ALT),
+    ("MARGIN_MM on SURFACE_ALT", T.MARGIN_MM, T.SURFACE_ALT),
+    ("FIT_LINE on SURFACE_ALT", T.FIT_LINE, T.SURFACE_ALT),
+    ("WARN on SURFACE", T.WARN, T.SURFACE),  # a skip reason in the skip log
 ]
 
 

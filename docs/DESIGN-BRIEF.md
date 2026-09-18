@@ -361,6 +361,7 @@ judgement calls; they are executable now.
 
 | Date | Change |
 |---|---|
+| 2026-09-17 | **Assignment 2's lines and tables (T-68), recorded in §9.** Four line colours and a table style, all chosen *from* the palette rather than added to it — every hue the wheel has left sits within ~35° of the amber, which is type, or ~40° of a locked series hue, so a new colour here would be a near-shade of something that already means something. Three PO decisions. **NAV is a series, IM and MM are rulers** — §6 rule 6 applied a second time, subordinate by weight and dash rather than by opacity, because a line has no area to fog what is behind it. **NAV takes violet, not the cyan its 10.3:1 would argue for**, because panel [5] of the same page is the mid-vs-print scatter and a hue that means "the mark" there must not mean "the account" two panels up; violet has no job on a page with no puts in it. And tables get **hairline rules, no zebra** with **only the exceptions coloured** — a skip reason in amber, `NEG_AVAILABLE` in red, every blotter side left as TEXT. `TABLE_MIN_WIDTH` gives a table T-47's posture: it scrolls rather than deforming. 17 of 17 injected defects caught, and `THEMED_SOURCES` is discovered now rather than hand-listed, which is §6 rule 5's own warning made mechanical before T-69 and T-59 add two more modules that render. |
 | 2026-09-17 | **The site gains a second page (T-79).** No palette change and no new measurement: `page_shell.PageShell` renders the chrome §5 already specifies, and the covered-call page at `/covered-call/` inherits the identity for free — which §7 called the point of AD-6 and is the first time it has been collected. One new class family, `.osl-nav`: a link to the site's other pages in the command bar, muted like a panel label at rest and amber on hover, because a link is chrome and amber is type (§6 rule 2). From HW2 a page nothing links to is a dead end, and the brief's own URL example is a course-level site each homework adds a page to. Driven in a real Chromium: **0 defects across 2 pages x 14 widths**, zero console errors. |
 | 2026-09-06 | **FR-7's commentary panel (T-12).** An unnumbered full-width prose panel under the hero row, in both renderings, each of the brief's questions printed above its answer. No new palette entry: it reuses the `.osl-note` prose style scaffolded when the grid was built, with the question styled as a readout label and `<b>` inside a sentence taking the amber — emphasis in prose is chrome, not a data channel (§6 rule 2). One genuinely new state: an **unwritten** sentence renders in `NEGATIVE`, loudly, because this is the only graded element on the page with no figure behind it and its absence would otherwise look like a design choice. |
 | 2026-09-04 | **The page holds its shape at every width (T-47).** A 14-viewport audit found 131 layout defects, one of them at every width. Three changes, all PO-chosen: **captions are HTML** in the panel, not annotations in the plot, so they wrap instead of colliding or clipping — that band is now empty by rule, and `CAPTION_Y*` / `LEGEND_ROW` / `LEGEND_BOX_PAD` / `LEGEND_ENTRIES_PER_ROW` / `theme.caption()` are deleted along with the arithmetic that policed them; a **width floor** (`FIGURE_MIN_WIDTH`, `HERO_MIN_WIDTH`) below which a panel scrolls rather than squeezing a figure into a shape its own chrome cannot fit; and a **third grid band** at `BREAK_TWO_COL` (1400px) so a 1366px laptop stops crowding the 6+4 split. The Reflex app now renders this stylesheet and these class names instead of restating the chrome as inline props — it had no breakpoints at all — so `PANEL_STYLE` and `PANEL_HEADER_STYLE` are gone. Audit after: 0 defects across 14 widths. |
@@ -377,3 +378,148 @@ judgement calls; they are executable now.
 | 2026-09-02 | **Deploy-only breakage.** The published page rendered the surface and the underlying one column wide: `.osl-w6`/`.osl-w4` were never added when the split moved from 7/3 to 6/4, and an undefined CSS class fails open. Width classes are now generated from `GRID_COLUMNS`; a token-vs-stylesheet test and an orphan-class test over the built page both guard it (§5). |
 | 2026-09-02 | PO found the 3D surface overflowing into the mark-vs-print panel in the **dev app**: it was handing un-panelised figures to the terminal grid, so titles doubled with the panel headers and declared heights (640, 460) exceeded the boxes reserved for them (600, 360). App figures now panelise exactly as the builder's do; `price_surface_figure` reads `HERO_FIGURE_HEIGHT`; empty figures declare a height. Guarded by tests (§5). |
 | 2026-09-02 | PO refined the correction: the put **colours** were the problem, not the glyphs — square/cross reverted to circle/diamond, so the glyph encodes the role and hue alone separates the rights. Hero row widened from 7/3 to 6/4. |
+
+## 9. Assignment 2 — the covered-call page (T-68, 2026-09-17)
+
+*Numbered after the revision history on purpose: §1–§8 are cited by number across the repo
+and inside `theme.py`, and renumbering them to slot a section in would break every one of
+those references to move a heading.*
+
+The covered-call page at `/covered-call/` draws two figures and four tables. It inherits §1–§7
+whole — same ground, same amber type, same panel grid — and needs four line colours and a table
+style that the first page never had.
+
+**Everything here is chosen *from* the palette rather than added to it, and that is a finding
+rather than a preference.** Measured against the nine hues §3 already spends, every region of
+the wheel still free sits within ~35° of the amber — which is *type*, not data — or within ~40°
+of a locked series hue:
+
+| Candidate | Hue | Nearest conflict |
+|---|---|---|
+| orange `#FF7A45` | 17° | 24° from `ACCENT` (the heading colour) |
+| lime `#B8E33F` | 76° | 34° from `ACCENT` |
+| azure `#4D9FFF` | 212° | 3° from `NEUTRAL` |
+| straw `#E8D48A` | 47° | 6° from `ACCENT` |
+
+So a "new" colour here would be a near-shade of something that already means something, and a
+near-shade is the exact defect the puts cost us on 2026-09-02. Reuse is the principled answer,
+not the lazy one.
+
+### NAV is a series; IM and MM are rulers
+
+The question panel [2] answers is not *"what are these three quantities"* — it is **"does NAV
+stay above them"**. IM (50% of LMV) and MM (25%) are *requirements* computed off the position,
+not measurements of the strategy. That makes §6 rule 6 bind them exactly as it binds FR-12's
+spot plane: a reference wears no series hue and no amber, and stays subordinate to what it is a
+reference for. Three co-equal lines would answer a question nobody asked.
+
+Subordinate here is **weight and dash**, not opacity. A line has no area to fog what is behind
+it, so translucency would only make it hard to see — which is the opposite of what the plane
+needed.
+
+| Token | Value | Job | On the plot interior |
+|---|---|---|---|
+| `NAV_LINE` | `#A78BFA` | net asset value — the page's one data series, 2.2px solid | 6.1:1 |
+| `MARGIN_IM` | `#7FA8D9` | initial margin — a ruler, 1.4px dashed | 6.8:1 |
+| `MARGIN_MM` | `#6E8CB8` | maintenance margin, the margin-call line — 1.2px dotted | 4.9:1 |
+| `FIT_LINE` | `#7FA8D9` | FR-17's least-squares fit — a model laid over the tape, 1.8px solid | 6.8:1 |
+| `IDENTITY_LINE` | = `TEXT_MUTED` | `y = x`, 1.0px dashed — the line 1.1 already draws | 4.9:1 |
+
+**NAV takes violet, not the cyan its 10.3:1 would argue for** (PO, 2026-09-17). Panel [5] of
+this same page is the mid-vs-print scatter — cyan and magenta are spoken for *here* by the
+README's own encoding, and a hue that means "the mark" in one panel must not mean "the account"
+two panels down. Violet has no job on this page: a covered call has no puts in it. The cloud on
+[5] therefore keeps the cyan, because every point's x really is a mark.
+
+NAV sits 39–42° off the rulers, closer than the 60° floor §3 imposes on the four 1.1 series —
+and deliberately so. That floor is for **4px markers separated by hue alone**; these lines carry
+weight and dash as well, and the hero already renders this same gap between the slate spot plane
+and the violet puts inside one scene. What the test pins is therefore not a number copied from
+there but the *shape* of the relationship: IM and MM are one family (3° apart — two floors on
+one account) and NAV is outside it. A restyle that collapsed all three into one hue fails that
+however wide the widest gap is.
+
+`NAV_LINE`, `MARGIN_IM` and `MARGIN_MM` are written as **values**, not as aliases of `MARK_PUT`
+/ `SPOT_PLANE` / `NEUTRAL`, which they currently match. The match is deliberate — one palette,
+roles reused — but the *coupling* is not: re-toning 1.1's puts must not move Assignment 2's NAV
+line. `IDENTITY_LINE` is the one genuine alias, for the opposite reason: both pages make the
+same statement with `y = x`, so they must not drift, and a test reads the colour off the line
+1.1 actually renders rather than off the constant it was copied from.
+
+### Tables
+
+Four of them: the strategy's parameters, the blotter, the skip log and the daily ledger.
+
+**Hairline rules, no zebra** (PO, 2026-09-17). The page is already made of hairlines — §5's
+panels are separated by a rule and not by space — and a second rhythm of banded rows competes
+with that grid rather than helping a reader across one. Tracking a row is done by a hover lift
+and by mono numerals instead; every number is right-aligned and `tabular-nums`, so a column of
+dollars lines up at the decimal for the same reason §4 puts every tick label in mono.
+
+**A table scrolls rather than deforming** — T-47's posture, applied to a second kind of object.
+Thirteen ledger columns squeezed until the decimals stop lining up is the table version of *"the
+chart is broken"*, and a scrollbar is the honest alternative (AD-9). `TABLE_MIN_WIDTH` is 720 —
+the widest of the four tables' honest minimum, applied to all of them so a reader never meets
+two table behaviours on one page — and the two-column strategy table opts out through
+`.osl-table-kv`, since a floor it already clears is a scrollbar for nothing.
+`TABLE_MAX_HEIGHT` (420px) keeps a long table inside its panel instead of making the panel the
+length of the page, and the header is `position:sticky` so scrolling never costs a reader the
+column names.
+
+**Only the exceptions are coloured** (PO, 2026-09-17): a skipped week and a breached margin
+line, and nothing else.
+
+| Class | Colour | What it marks |
+|---|---|---|
+| `.osl-skip` | `WARN` `#FFB000` | a skip reason in the skip log |
+| `.osl-flag` | `NEGATIVE` `#FF4D6D` | `NEG_AVAILABLE` on a ledger row |
+
+`BUY` / `SELL` / `EXPIRE` / `ASSIGN` all stay `TEXT`. A blotter is a list of trades; colouring
+every side turns a record into a dashboard and leaves the two rows that want attention no louder
+than the twenty-four that do not. Amber on a skip reason is emphasis on a **word**, which is the
+licence `.osl-note b` already has under §6 rule 2 — it never lands on a number, where it would
+be an encoding rather than emphasis.
+
+### What is pinned, and what T-68 could not pin
+
+`tests/test_theme.py` holds all of the above: the rulers' subordination read off `account_line()`
+rather than off the three colour constants (a restyle that kept the hues and equalised the
+strokes would pass a colours-only check while destroying the panel's point), the ruler/series
+hue families, the amber ban across all four lines, the shared `y = x`, every table class present
+*unconditionally* in `PAGE_CSS`, and the width floor. **17 of 17 injected defects caught.**
+
+Two things about that run are worth keeping:
+
+- **The first base-level guard was measuring text position, not nesting.** It took
+  `PAGE_CSS.split("@media")[0]`, and most of the stylesheet is written *after* the two
+  breakpoint blocks — so it declared seven perfectly unconditional rules to be missing. It
+  matches braces now, and strips CSS comments too, because a selector merely *named* in a note
+  otherwise counts as a rule that exists.
+- **`THEMED_SOURCES` is discovered rather than hand-listed now.** §6 rule 5 said it itself: *"a
+  module that emits markup and is not on this list is a module free to hold a colour"* — and a
+  list a human maintains is precisely how that happens. `covered_call/plots.py` and
+  `covered_call/page.py` (T-69, T-59) cannot arrive unguarded. A mutant that put a hex value in
+  `covered_call/rules.py` — a module the old list had never covered — is caught.
+
+The render-level guard is **not** here. A stylesheet with no markup consuming it is a guard
+written before its subject (T-79's lesson), so the table classes are proven to *exist* and are
+proven to render only when T-59 emits the markup and T-71 drives it in a browser at 14 widths.
+
+*Updated 2026-09-17 (T-69): the four line colours now have a consumer —
+`covered_call/plots.py` reads them through `theme.account_line()` and the `FIT_LINE` /
+`IDENTITY_LINE` pair, and `tests/covered_call/test_plots.py` asserts each line wears the
+role the theme gives it by reading the theme at assert time, so a repointed token restyles
+the chart. The **table** classes still have none — that is T-59.*
+
+**One class has no renderer on either tape: `.osl-flag`.** `NEG_AVAILABLE` never fires — the
+committed tape's `available` bottoms at $38,886.50 against a $75,000 book, and the synthetic
+tape does not reach it either. A skip reason renders on the synthetic tape (five rows) and on
+neither on the real one. So T-59 has to *construct* the flagged case to see it, exactly as
+`test_engine.py` had to build `S_exp == K` to test SD-6: a fixture that never reaches a branch
+is a branch with no test, however many tests name it.
+
+One trap was closed before the browser could find it: the sticky header's rule is an **inset
+shadow, not a `border-bottom`**. Under `border-collapse:collapse` a cell's borders belong to
+the table rather than to the cell, so they do not travel with a sticky header — the background
+sticks and the rule underneath it scrolls away, leaving the column names floating on the first
+data row. It renders, nothing errors, and it is only visible once somebody scrolls.

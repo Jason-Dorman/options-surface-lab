@@ -21,6 +21,8 @@ from __future__ import annotations
 import posixpath
 from typing import Iterable, Sequence
 
+import plotly.graph_objects as go
+
 from options_surface_lab import theme as T
 
 #: The site's wordmark, not a page's. Every page carries it, because the brief's own URL
@@ -82,6 +84,65 @@ def _site_href(from_page: str, to_page: str) -> str:
     to_dir = posixpath.dirname(SITE_PATHS[to_page])
     rel = posixpath.relpath(to_dir or ".", from_dir or ".")
     return "./" if rel == "." else rel.rstrip("/") + "/"
+
+# ------------------------------------------------------------------ the figure side
+#
+# A panel and the figure inside it have a contract: the figure states its caption and
+# the height its panel must reserve, and the panel renders both. That contract is the
+# shell's, not any one assignment's — it lived in `option_surface_plot` until T-69, when
+# Assignment 2's figures needed it and were forbidden to reach into 1.1 (AD-12).
+
+def with_caption(fig: go.Figure, *lines: str) -> go.Figure:
+    """Attach a figure's "how to read this" line(s) — as DATA, not as a drawn annotation.
+
+    The caption is rendered by whichever page holds the figure, in that page's own HTML, and
+    both renderings read it from here so they cannot drift (T-47). It travels in
+    `layout.meta`, which survives `to_html`/JSON, so the published page finds it in the same
+    place the Reflex app does.
+
+    **Why it is not an annotation any more.** A Plotly annotation is one unwrappable line
+    pinned to a fraction of a box whose pixel width changes with the viewport, sharing the
+    band above the plot with a legend that grows as the figure narrows. That arrangement has
+    produced the same defect at five different widths on this project — caption through
+    legend, caption clipped off the canvas, caption off the right edge of a tile, caption over
+    a wrapped legend, caption escaping the figure below 1440px. HTML text wraps; SVG text
+    does not.
+
+    Callers pass one line per caption row; `figure_caption` reads them back.
+    """
+    fig.layout.meta = dict(fig.layout.meta or {}, caption=[ln for ln in lines if ln])
+    return fig
+
+
+def figure_caption(fig: go.Figure) -> list:
+    """The caption lines a page must render under this figure's header. Never None."""
+    meta = fig.layout.meta or {}
+    return list(meta.get("caption") or [])
+
+
+def as_panel_figure(
+    fig: go.Figure, height: int | None = None, margin: dict | None = None
+) -> go.Figure:
+    """Strip a figure's own title and tighten it for a tiled panel (DESIGN-BRIEF §5).
+
+    In the terminal layout each panel carries a header rule with its number and name, so a
+    Plotly title inside the plot area would say the same thing twice and eat a third of the
+    tile. The caption annotation stays — it is the "how to read this" line, not a label.
+
+    Not applied to the hero surface: its title tracks the as-of slider, so it has to live
+    inside the figure JSON where the slider can rewrite it (AD-5).
+
+    ``margin`` overrides the tile default for panels that are not tiles. The tile margin
+    reserves 30px above the plot, which is enough for a figure whose whole top band is now
+    empty and nowhere near enough for one still carrying a legend and two caption lines —
+    and an annotation pushed off the paper does not warn, it just stops drawing.
+    """
+    return fig.update_layout(
+        title_text=None,
+        margin=margin or T.PANEL_FIGURE_MARGIN,
+        height=height or T.PANEL_FIGURE_HEIGHT,
+    )
+
 
 #: Stable element ids. The published page's listener addresses panels by these rather than
 #: by Plotly's random uuid — a uuid regenerated on every build makes the wiring
@@ -215,8 +276,6 @@ class PageShell:
         but it made the page's single external dependency six times harder to see when
         auditing it against NFR-4.
         """
-        from options_surface_lab.option_surface_plot import figure_caption
-
         body = fig.to_html(
             full_html=False,
             include_plotlyjs=("cdn" if not self._plotly_included else False),

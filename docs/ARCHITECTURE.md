@@ -185,7 +185,13 @@ because a number the page derives is a *readout* and belongs in the strip.
 2026-09-17, T-79)*
 `PageShell` — command bar, readout strip, panel, document — plus the site's page table
 (`SITE_PATHS` / `LOCAL_PATHS` / `NAV_LABELS`, and `nav_for`, which spells a cross-page link
-for wherever the page is being written). AD-11's interim: the registry and the Jinja2
+for wherever the page is being written) and, since **T-69**, the *figure* side of the same
+contract: `with_caption` / `figure_caption` / `as_panel_figure`. Those three lived in
+`option_surface_plot.py` until Assignment 2's figures needed them and were forbidden to reach
+into 1.1 (AD-12). The move **removed** a dependency rather than adding one — `page_shell` had
+been importing `figure_caption` back out of `option_surface_plot` through a deferred local
+import to dodge the cycle that created — and `option_surface_plot` re-exports all three, so
+every existing call site keeps working. AD-11's interim: the registry and the Jinja2
 templates land with T-51 after the 09-20 submission, so what moved here is only the chrome —
 enough that two builders cannot come to disagree about what a panel looks like, which is
 this project's most-repeated defect class. **The "have I emitted plotly.js" flag is per
@@ -214,7 +220,7 @@ its frame and the six numbers, and says so.
 (→ `covered_call/rules.py`) and the book (→ `covered_call/engine.py`).
 
 **`options_surface_lab/covered_call/`** — *AD-12, **accepted 2026-09-14** (T-74); `rules.py`
-and `live.py` landed 2026-09-13, `writeup.py` and `tape.py` 2026-09-14, **`engine.py` 2026-09-15 (T-57)**; `plots.py` and `page.py` still to come.* Assignment 2's subpackage: `tape.py`, `rules.py`, `engine.py`, `plots.py`,
+and `live.py` landed 2026-09-13, `writeup.py` and `tape.py` 2026-09-14, **`engine.py` 2026-09-15 (T-57)**, `evidence.py` 2026-09-16 (T-58), **`plots.py` 2026-09-17 (T-69)**; `page.py` still to come.* Assignment 2's subpackage: `tape.py`, `rules.py`, `engine.py`, `plots.py`,
 `page.py`, `writeup.py`, layered as §2 prescribes. `rules.py` is the transform core's pure
 half — `Params` (the SD-x decisions as a frozen record), `select_strike`, `is_itm`, `valid_mid`,
 the blotter-row constructors, and the calendar helpers that own SPEC §3.2 item 4's **closing

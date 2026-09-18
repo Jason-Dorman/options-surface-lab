@@ -126,7 +126,9 @@ flowchart TD
 | Module | May import | Must never import | Responsibility (one reason to change) |
 |---|---|---|---|
 | `option_surface_utils.py` | numpy, pandas, scipy | reflex, plotly, theme | Data acquisition, parsing, reshaping, stats |
-| `option_surface_plot.py` | plotly, utils, theme | reflex | Turning frames into figures |
+| `option_surface_plot.py` | plotly, utils, theme, `page_shell` | reflex | Turning 1.1's frames into figures. Re-exports `with_caption` / `figure_caption` / `as_panel_figure`, which moved to `page_shell` in T-69 |
+| `page_shell.py` | plotly, theme | reflex, utils, either assignment's modules | The chrome both builders render, **and the figure side of the panel contract**: `with_caption` / `figure_caption` (a caption is data in `layout.meta`, rendered as HTML by whichever page holds the figure) and `as_panel_figure` |
+| `covered_call/plots.py` | plotly, theme, `page_shell`, `engine`, `evidence`, `rules` | reflex, lseg, `page.py` | A2's figures: FR-16's NAV/IM/MM account chart, FR-17's mid-vs-print scatter. Presentation — it recomputes nothing |
 | `theme.py` | (stdlib only) | everything else | Design tokens: palette, fonts, layout defaults |
 | `commentary.py` | (nothing) | everything | FR-7's three sentences — prose, authored by the PO |
 | `options_surface_app.py` | reflex, utils, plot, theme | — | State, events, page composition |
@@ -484,9 +486,11 @@ a value here.
   both asserted in `tests/test_theme.py`.
 - **Three worlds consume it:** the Plotly builders, the Reflex page (`PANEL_STYLE`,
   `PANEL_HEADER_STYLE`), and the static builder (`PAGE_CSS`, `GOOGLE_FONTS_LINK`).
-- **`as_panel_figure()`** (in `option_surface_plot.py`, themed from here) strips a tiled
+- **`as_panel_figure()`** (in `page_shell.py` since T-69, themed from here) strips a tiled
   figure's own title and tightens its margins, because the panel header already names it.
-  The hero surface is exempt — its title is rewritten by the as-of slider (AD-5).
+  The hero surface is exempt — its title is rewritten by the as-of slider (AD-5). Assignment
+  2's figures do not use it at all: they are **born panel-ready**, because that page is their
+  only consumer and a two-step that can be forgotten is a two-step that will be (T-69).
 - **Webfonts:** `GOOGLE_FONTS_CSS` is one URL — Reflex takes it as a stylesheet, the static
   builder wraps it in `<link>` tags. Every stack falls back to a system face, so a font that
   never loads degrades rather than breaks. This is the published page's only non-Plotly
