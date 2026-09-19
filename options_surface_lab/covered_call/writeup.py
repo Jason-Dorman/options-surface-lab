@@ -9,10 +9,13 @@ test, and the Pages workflow refuses to deploy — three guards, because a missi
 rubric item is invisible on a page that otherwise renders perfectly (the FR-7 lesson,
 applied to FR-19).
 
-The methodology block below was written by the PO on 2026-09-14, out of the review
-that followed T-80's rehearsal. Its numbers are not decorative: ``test_writeup.py``
-re-runs ``select_strike`` on the two quoted prices and fails if the rule no longer
-does what the paragraph says it does.
+``METHOD`` was written by the PO on 2026-09-14, out of the review that followed
+T-80's rehearsal. The three paragraphs that sat beside it folded into the answers on
+2026-09-18: two of them restated an answer's own opening sentence, and the midpoint
+example was strictly weaker than the R² and the $49.50 bid-versus-mid bound that
+``ANSWERS[2]`` now cites. ``OBSERVATION_POINT_FACTS`` outlived its paragraph on
+purpose — ``test_writeup.py`` re-runs ``select_strike`` on those two prices, so the
+rule stays held to the argument whether or not the prose spells the numbers out.
 """
 
 UNWRITTEN = "[unwritten]"
@@ -39,19 +42,10 @@ METHOD = (
 )
 
 
-# --------------------------------------------------------------------------
-# Why the observation point is defined, and not merely the hour
-# --------------------------------------------------------------------------
-OBSERVATION_POINT = (
-    "Strike selection is based on the final stock observation in the Monday entry "
-    "bar rather than merely identifying the entry hour. This distinction matters: "
-    "on September 8, QQQ opened the 15:00–16:00 bar at $719.315 but finished at "
-    "$718.41, meaning an opening observation would have selected the $720 call "
-    "while the closing observation selected $719. Fixing the observation point "
-    "prevents strike selection from becoming ambiguous or discretionary."
-)
-
-#: The numbers ``OBSERVATION_POINT`` asserts, so a test can hold the prose to the rule.
+#: The numbers behind the observation-point argument in the first answer, kept as data so a
+#: test can re-run ``select_strike`` on them. The paragraph that quoted them folded into
+#: ``ANSWERS[0]`` on 2026-09-18; these two prices are what made the argument checkable, and
+#: the rule is held to them whether or not the prose spells them out.
 OBSERVATION_POINT_FACTS = {
     "bar": "2026-09-08 15:00",
     "open": 719.315,
@@ -59,23 +53,6 @@ OBSERVATION_POINT_FACTS = {
     "close": 718.41,
     "close_selects": 719.0,
 }
-
-
-SYNCHRONISATION = (
-    "The stock and option observations come from the same hourly bar. Their final "
-    "reported trades occurred five seconds apart, and spot finished at $718.41, "
-    "below the $719 strike selected by the rule. LSEG does not expose a timestamp "
-    "for the final bid/ask update at this resolution, so quote-level "
-    "synchronization cannot be established more precisely."
-)
-
-
-MIDPOINT_EVIDENCE = (
-    "For this example, the modeled midpoint fill was $4.80 versus an actual trade "
-    "price of $4.81. This single observation is encouraging but not evidence by "
-    "itself; the chain-wide midpoint-versus-trade regression and R² test whether "
-    "midpoint fills are generally a reasonable execution assumption."
-)
 
 
 # --------------------------------------------------------------------------
@@ -91,9 +68,35 @@ QUESTIONS = (
 )
 
 ANSWERS = (
-    UNWRITTEN,
-    UNWRITTEN,
-    UNWRITTEN,
-    UNWRITTEN,
-    UNWRITTEN,
+    # The observation-point paragraph folded in here on 2026-09-18 (it was a separate block
+    # above, restating this answer's own first sentence). The sentences are the PO's,
+    # unchanged but for the spaces the literal joins had dropped.
+    "I used the nearest out-of-the-money call based on QQQ’s final price in the Monday "
+    "15:00–16:00 bar. With $1 strike spacing, that landed almost exactly at-the-money; a "
+    "median 0.032% above spot. If that strike had no valid two-sided quote the trade is "
+    "skipped. Analysis showed by selecting the strike at the next dollar from the spot can "
+    "change the strike selection from the open to the close of the last hourly bar due to "
+    "QQQ’s volatility. Using the close keeps the rule consistent.",
+
+    "Hold through Friday’s 15:00 ET bar. If QQQ finishes below the strike, the call "
+    "expires and we keep the shares. If it finishes above, the shares are assigned at the "
+    "strike and the position closes. No early exit or roll. The goal is to measure the full "
+    "covered-call payoff through expiry.",
+
+    # The synchronisation caveat folded in here on the same day: it is the limit of this
+    # answer's own claim, and METHOD's "Limitation" row states it behind a <details>, where
+    # a reader judging the fill assumption will not necessarily open it.
+    "Trades tracked the midpoint closely (R² = 0.9962), with a median gap of $0.035. "
+    "Using the bid instead barely changed return, from 1.658% to 1.592%. Spot and option "
+    "data come from the same hourly bar, with their final trades executed five seconds "
+    "apart. LSEG doesn’t timestamp the final quote update so tighter synchronization "
+    "isn’t possible.",
+
+    "We used Reg T with a fully funded $75,000 account, so the covered call added no extra "
+    "margin requirement. With less cash the same trades would introduce borrowing and "
+    "interest costs.",
+
+    "Over ten weeks, the strategy returned 1.66% versus -1.00% for buy-and-hold, but the "
+    "near-ATM strikes gave up meaningful upside - including $528.50 in the live week. Next "
+    "I’d test a farther-OTM rule, such as 30-delta.",
 )

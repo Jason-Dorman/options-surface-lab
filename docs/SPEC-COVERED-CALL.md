@@ -674,18 +674,57 @@ Panels, in reading order:
 3. **Trades you actually made** — the blotter (FR-15), the brief's eight columns; the skip log
    joins it **only when a week was skipped**.
 4. **Position, cash, and margin over time** — the event ledger (§9).
-5. **Covered-call rules and write-up** — `Params` whole, the stated simplifications, the rule
-   ids, and FR-19's five answers.
+5. **Covered-call rules and write-up** — FR-19's five answers lead the panel; the record
+   folds into a `<details>`: the PO's `METHOD` hierarchy, **the rules in words**, `Params`
+   whole, the stated simplifications and the rule ids. The panel opened with two generated
+   paragraphs — the rule and the exit — until 2026-09-18, when the PO had them cut: they
+   restated the first two answers a few lines below them. They are **rows now, not
+   deletions**, because both were derived from `Params` and that is the property worth
+   keeping — a hand-written answer can outlive the decision it describes, a sentence read
+   off the dataclass cannot. The parameter table stays `Params` verbatim, so the derived
+   rows sit in a table of their own rather than as fields nobody declared. **SD-6's other
+   branch is unreachable** (`Params` refuses any `itm_rule` but `strict`), so no page can
+   render the inclusive wording and a typed sentence is indistinguishable by output from a
+   derived one; the guard on it is structural, not a string match.
 6. **Expired contracts this book queried** — every option the blotter wrote, with the RIC it
    answered under, read off the blotter rather than rebuilt (T-82: which form answers depends
    on the pull date).
-7. **Live book** (FR-21) — last.
+7. **Live book** (FR-21) — last. Its evidence table is pinned to the **entry** capture and
+   to the contract the **blotter** names, never to `captures[-1]` or to `position["call"]`.
+   Both of those were correct while a week was open and wrong the moment one settled
+   (2026-09-18): `settle` appends a second capture and empties the position, so the panel
+   printed the *settlement* bar under the label "Entry bar", the settlement spot beside a
+   fill booked at another price, and an empty bid/ask where FR-21's evidence belongs.
+   Nothing was invented — `capture()` names its bar `entry_bar` on **both** legs and
+   `diagnostics["bar_kind"]` is what distinguishes them, so a true label became a false
+   statement when a second snapshot arrived. A snapshot with no `bar_kind` is an entry: the
+   key arrived with T-81, after the 09-14 entry was booked. When a closing capture exists
+   the panel adds the **expiry bar** and the **settlement print** as their own rows.
+
+**A contract price prints at the precision it was filled at** (`page._price`, 2026-09-18):
+three decimals when the midpoint lands on a half-cent, two otherwise. An option mid does land
+there — five of the eleven weeks on this book — and `6.04` beside a `Cash Δ` of `604.50`
+leaves a reader checking the row by hand with a fifty-cent hole, in the one table whose whole
+purpose is to show exactly what was booked. `_money`'s own docstring had said it since T-59:
+a covered call's premium lives in the cents, and a page that rounds them reconciles against
+nothing. The guard reads the cell back **out of the page** and multiplies it by the row's own
+quantity, which is the arithmetic the reader performs.
 The **account cards** above the panels are the Reg T account at the last booked bar — cash,
 stock LMV, short option, NAV, initial, maintenance, available, excess — each with the line that
 defines it. They carried six statistics *about* the backtest until 2026-09-18, which is a
 summary of a study rather than an account; FR-16 asks for the account and the rubric gives it
 20 points. Every card is a cell of the last `event_ledger` row, which makes I-13 reach the
 strip as well as the tables.
+
+**One card is constant by construction, and that is a property of the book rather than a
+defect.** The engine refuses a window that straddles a week (§3.2 item 3) and I-7 resolves
+every open call, so the last *booked* bar is always a settlement bar and **Short option is
+`$0.00` on every book that can exist** — the committed tape, the synthetic one, and any tape
+that could be pulled. `short_calls` is `0` on that row too, so the card's column is the one
+number on the strip that no fixture can distinguish from its neighbours: a mutant reading
+`short_calls` instead of `option_mv` rendered an identical `$0.00` and survived the suite
+(2026-09-18). Its guard therefore fabricates the row rather than backtesting one. *A cell
+that is always zero is a cell whose source is never checked.*
 
 No listener is needed: nothing cross-filters. Tables are HTML, styled by `theme.PAGE_CSS`
 **(landed 2026-09-17, T-68)**: `.osl-table-scroll` wraps every one of them and owns both

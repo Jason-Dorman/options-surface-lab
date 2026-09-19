@@ -405,6 +405,8 @@ def _blotter_row(record: dict) -> list:
             out.append(Stacked(value, occ) if occ else value)
         elif name == "side":
             out.append((value, SIDE_CLASS[value]) if value in SIDE_CLASS else value)
+        elif name in _PRICE_COLUMNS:
+            out.append((_price(record.get(name)), "osl-num"))
         elif name == "cash_delta":
             # Signed, so the class is read off the number rather than off the side: an
             # ASSIGN's stock leg is a SELL that pays in, and a row whose cash did not move
@@ -507,6 +509,13 @@ def _writeup_panel(shell: PageShell, params: Params) -> str:
     acceptance is that the page *prints* every field of `Params` and every S-x; it does,
     behind one disclosure a reader opens when they want to audit rather than read. Nothing
     was removed.
+
+    *Amended 2026-09-18 (PO).* The two generated paragraphs that led the panel — the rule and
+    the exit — restated the PO's own first two answers a few lines above them, which is the
+    same redundancy that sent the three standalone paragraphs into the answers the same day.
+    They are **rows of the parameter table** now, not deletions: both were derived from
+    `Params`, and that is the property worth keeping — a hand-written answer can outlive a
+    decision it describes, a sentence read off the dataclass cannot.
     """
     param_rows = [
         (name, (str(_present(value)), "osl-num" if name in _NUMERIC else ""))
@@ -514,24 +523,21 @@ def _writeup_panel(shell: PageShell, params: Params) -> str:
             (f.name, getattr(params, f.name)) for f in dataclasses.fields(params)
         )
     ]
-    prose = "".join(
-        f'<div class="osl-note" style="padding-bottom:10px">{text}</div>'
-        for text in (
-            f"<b>The rule.</b> One covered call a week on <b>{params.root}</b> over "
-            f"<b>{params.start} → {params.end}</b>, on <b>${params.start_cash:,.0f}</b> of "
-            f"starting cash: buy {params.shares} shares and write {params.contracts} call "
-            f"at the {params.interval} bar the rule names, then hold through expiry. "
-            f"{params.describe_strike_rule()}",
-            f"<b>The exit is to wait.</b> No buy-backs and no rolls. At expiry the call is "
-            f"assigned when the settlement print is {_itm_words(params)} — the shares go at "
-            "the strike and the book is flat — otherwise it expires worthless and the "
-            "shares stay. A week whose quote is invalid is skipped and logged, never booked "
-            "at a price nobody quoted.",
-            writeup.OBSERVATION_POINT,
-            writeup.SYNCHRONISATION,
-            writeup.MIDPOINT_EVIDENCE,
-        )
-    )
+    # The two rules stated in words, **derived** rather than typed, so a sentence and the
+    # field it describes cannot come apart — a page that hand-wrote "nearest
+    # out-of-the-money" would keep saying it after SD-5 changed. They led the panel as prose
+    # until 2026-09-18 (PO: *"get rid of that redundancy"*), where they restated the PO's own
+    # first two answers a few lines below them. A table of their own, because the parameter
+    # table is `Params` verbatim and a derived row in it would be a field nobody declared.
+    in_words = [
+        (("Strike rule", "osl-label"), params.describe_strike_rule()),
+        (("ITM test", "osl-label"),
+         f"At expiry the call is assigned when the settlement print is "
+         f"{_itm_words(params)}; otherwise it expires and the shares stay."),
+        (("Exit", "osl-label"),
+         "Hold to the expiry bar. No buy-backs and no rolls. A week whose quote is invalid "
+         "is skipped and logged, never booked at a price nobody quoted."),
+    ]
     answers = "".join(
         '<div class="osl-commentary-item">'
         f'<div class="osl-commentary-q">{question}</div>{_answer(answer)}</div>'
@@ -543,6 +549,7 @@ def _writeup_panel(shell: PageShell, params: Params) -> str:
             [((label, "osl-label"), text) for label, text in writeup.METHOD],
             kv=True,
         )
+        + shell.table(("Rule", "As the parameters state it"), in_words, kv=True)
         + shell.table(("Parameter", "Value"), param_rows, kv=True)
         + shell.table(
             ("Id", "Stated simplification"),
@@ -556,7 +563,6 @@ def _writeup_panel(shell: PageShell, params: Params) -> str:
         )
     )
     body = (
-        f"{prose}"
         '<div class="osl-commentary-q" style="padding-top:6px">'
         "FR-19 — the five questions, answered by the PO</div>"
         f'<div class="osl-commentary" style="padding:10px 0 0 0">{answers}</div>'
@@ -685,32 +691,89 @@ def _capture_block(shell: PageShell, live: dict) -> str:
     This is the panel's evidence, not its decoration: a booked fill with no quote beside it
     is a number a reader has to take on trust, and the whole argument for the midpoint is
     that the bid and the ask were what they were.
+
+    **The evidence is pinned to the entry capture and to the contract the blotter names.**
+    It read `captures[-1]` and `position["call"]` until 2026-09-18, which was correct while
+    a week was open and became wrong the moment one settled: `settle` appends a second
+    capture and empties the position, so the panel printed the *settlement* bar under the
+    label "Entry bar", the settlement spot beside a fill booked at a different price, and
+    an empty bid/ask where FR-21's evidence belongs. Neither was invented — `capture()`
+    names its bar `entry_bar` on **both** legs (`diagnostics["bar_kind"]` is what tells them
+    apart), so a true label became a false statement when a second snapshot arrived. Reading
+    the contract off the blotter is the rule T-82 arrived at from the other direction: the
+    row that booked the trade is the only thing that still knows what was booked.
     """
     captures = live.get("captures") or []
     if not captures:
         return ""
-    last = captures[-1]
-    under = last.get("underlying") or {}
-    call = (live.get("position") or {}).get("call") or {}
+    entry = _capture_of(captures, "entry")
+    if entry is None:
+        return ""
+
+    under = entry.get("underlying") or {}
+    booked = _written_call(live)
     quoted = next(
-        (c for c in last.get("chain") or [] if c.get("ric") == call.get("ric")), {}
+        (c for c in entry.get("chain") or []
+         if c.get("ric") == booked.get("instrument")), {}
     )
     rows = [
-        (("Entry bar", "osl-label"), str(last.get("entry_bar", _ABSENT))),
-        (("Stock print", "osl-label"), (_present(under.get("trdprc_1")), "osl-num")),
+        (("Entry bar", "osl-label"), str(entry.get("entry_bar", _ABSENT))),
+        (("Stock print at that bar", "osl-label"),
+         (_present(under.get("trdprc_1")), "osl-num")),
         (("Stock bar high / low", "osl-label"),
          (f"{_present(under.get('high_1'))} / {_present(under.get('low_1'))}", "osl-num")),
         (("Call bid / ask", "osl-label"),
          (f"{_present(quoted.get('bid'))} / {_present(quoted.get('ask'))}", "osl-num")),
+        (("Fill, at the midpoint of those two", "osl-label"),
+         (_price(booked.get("fill")), "osl-num")),
         (("Last-trade offsets (stock / call)", "osl-label"),
          (f"{_present(under.get('c_sec_ofst'))}s / {_present(quoted.get('c_sec_ofst'))}s",
           "osl-num")),
-        (("RIC form", "osl-label"), str(last.get("chain", [{}])[0].get("ric_form", _ABSENT))),
+        (("RIC form", "osl-label"),
+         str((entry.get("chain") or [{}])[0].get("ric_form", _ABSENT))),
     ]
+
+    closing = _capture_of(captures, "closing")
+    if closing is not None:
+        settled = closing.get("underlying") or {}
+        rows += [
+            (("Expiry bar", "osl-label"), str(closing.get("entry_bar", _ABSENT))),
+            (("Settlement print", "osl-label"),
+             (_present(settled.get("trdprc_1")), "osl-num")),
+        ]
+
     return (
-        '<div class="osl-commentary-q" style="padding:14px 0 5px 0">Raw quotes at the bar</div>'
-        + shell.table(("Observation", "Value"), rows, kv=True)
+        '<div class="osl-commentary-q" style="padding:14px 0 5px 0">Raw quotes behind those '
+        "rows</div>" + shell.table(("Observation", "Value"), rows, kv=True)
     )
+
+
+#: `capture()` names its bar `entry_bar` whichever leg ran; `diagnostics["bar_kind"]` is the
+#: field that says which. The key arrived with T-81 (2026-09-15), *after* the 09-14 entry was
+#: booked, so a snapshot without it is an entry — which is what it meant when it was the only
+#: leg that existed.
+_ENTRY_KINDS = ("entry", None)
+
+
+def _capture_of(captures: list, kind: str) -> dict | None:
+    """The most recent capture taken at a bar of `kind` — `"entry"` or `"closing"`."""
+    for snapshot in reversed(captures):
+        found = (snapshot.get("diagnostics") or {}).get("bar_kind")
+        if found == kind or (kind == "entry" and found in _ENTRY_KINDS):
+            return snapshot
+    return None
+
+
+#: The blotter note that identifies the row on which the call was written.
+_ENTRY_CALL_RULE = "R-ENTRY-CALL"
+
+
+def _written_call(live: dict) -> dict:
+    """The blotter row that wrote the call — the only record of it that survives settlement."""
+    for record in live.get("blotter") or []:
+        if str(record.get("note") or "").startswith(_ENTRY_CALL_RULE):
+            return record
+    return {}
 
 
 # --------------------------------------------------------------------------
@@ -739,6 +802,29 @@ def _money(value) -> str:
     if text == _ABSENT:
         return text
     return f"−${text[1:]}" if text.startswith("-") else f"${text}"
+
+
+#: The blotter columns that carry a contract price rather than a dollar amount. They are
+#: the two cells a reader multiplies by `qty` to check `Cash Δ`, so they may not round.
+_PRICE_COLUMNS = ("limit", "fill")
+
+
+def _price(value) -> str:
+    """A contract price at the precision it was actually filled at.
+
+    Two places for a whole-cent price, three when it lands on a half-cent — an option
+    midpoint does, five weeks in eleven on this book. Printing `6.04` for a 6.045 fill
+    beside a `Cash Δ` of `604.50` leaves a reader checking that row by hand with a
+    fifty-cent hole, in the one table whose whole purpose is to show exactly what was
+    booked. `_money`'s docstring already said it: a covered call's premium lives in the
+    cents, and a page that rounds them reconciles against nothing.
+    """
+    import math
+
+    if isinstance(value, float) and not math.isnan(value):
+        text = f"{value:,.3f}"
+        return text[:-1] if text.endswith("0") else text
+    return _present(value)
 
 
 def _present(value) -> str:

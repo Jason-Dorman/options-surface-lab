@@ -75,7 +75,7 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 ```bash
 python build_preview.py       # 1.1's page — the static index.html Pages serves at /
 python build_covered_call.py  # A2's page — Pages serves it at /covered-call/
-pytest                        # 705 tests in tests/ — all green, no xfail
+pytest                        # 710 tests in tests/ — all green, no xfail
 reflex run                    # local dev server (FR-1); not what gets published
 
 # Both take `--site DIR` (CI passes `--site _site`): the page lands at DIR/<route> with its
@@ -328,13 +328,13 @@ refuses a strike, and fails only if the fixture has none anywhere. The fixture i
 is still calendar-dependent — OQ-6's `end_date` parameter is the root fix and needs PO
 sign-off.
 
-**Next up (2026-09-17):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST.** The first live
-entry is **booked** — see T-78 below. **A2-M4 is complete.** ~~T-56~~, ~~T-77~~, ~~T-57~~, ~~T-58~~, ~~T-79~~, ~~T-68~~, ~~T-69~~
-and ~~T-59~~ are done — the tape is pulled, the book runs, the fill assumption is measured and
-**the page carries all seven panels**. The site deploys again as of 09-18 (FR-19's refusal is
-a warning until T-60 — see below). The critical path is **T-60 (the PO's write-up)**, then
-T-71/T-72 to ship, with T-78's settlement leg **today, Friday 09-18**. **T-66 (notebook 03
-§1–§4) is still open**: it was meant to be co-built with T-57 and was not; T-58 created the
+**Next up (2026-09-18):** **Assignment 2 is due Sunday 2026-09-20 23:59 EST.** The live week is
+**booked and settled** — see T-78 below. **A2-M4 is complete and T-60 is written.** ~~T-56~~,
+~~T-77~~, ~~T-57~~, ~~T-58~~, ~~T-79~~, ~~T-68~~, ~~T-69~~, ~~T-59~~ and ~~T-60~~ are done — the
+tape is pulled, the book runs, the fill assumption is measured, **the page carries all seven
+panels** and the PO has answered all five FR-19 questions, so **every guard on both pages is a
+refusal again**. The critical path is now **T-71 (browser drive) → T-72 (docs lockstep +
+Canvas)**. **T-66 (notebook 03 §1–§4) is still open**: it was meant to be co-built with T-57 and was not; T-58 created the
 notebook and wrote §5 into it, so T-66 is now a matter of filling in the sections above its own.
 The PO chose **QQQ** (SD-1, 2026-09-12) and the **last
 hourly bar of the week's first session** as the entry bar (SD-4, 2026-09-13). The close is where
@@ -361,6 +361,73 @@ is T-59). Two things to carry:
   close, 720 at the open). SD-4 fixes the *bar*; what this pair argues is that the rule must fix
   the **observation point within it**. It belongs in the write-up (T-60), not in a reader's
   discovery.
+
+**T-78's settlement leg ran 2026-09-18 — the live week closed `ASSIGN`, and looking at the
+page afterwards found three defects nothing in the suite could see.** QQQ settled at
+**721.33** against the 710 strike, so the shares went at the strike and the book is flat on
+cash **$75,688.50**: premium $604.50 plus $84.00 on the stock, **+$688.50** against the
+**$1,217.00** a naked 100 shares would have made — $528.50 of surrendered upside, which is
+the strategy working as designed and the sharpest single instance of it on the book. Four
+things worth carrying:
+
+- **The panel printed the settlement bar under the label "Entry bar", and nothing was
+  wrong.** `capture()` names its snapshot's bar `entry_bar` on **both** legs —
+  `diagnostics["bar_kind"]` is what distinguishes them — and the live panel read
+  `captures[-1]` and identified the contract off `position["call"]`. Both were correct while
+  a week was open. `settle` appends a second capture and empties the position, so the panel
+  showed Friday's bar as the entry, Friday's spot beside a fill booked at 709.16, and an
+  **empty bid/ask** where FR-21's evidence belongs. *A key that is a true description of the
+  only case that exists becomes a false statement the moment a second case arrives* — T-82's
+  fabricated RIC, reached from the other direction. The evidence is pinned to the entry
+  capture and to the contract **the blotter names**, which is the only record of it that
+  survives settlement.
+- **A half-cent fill printed to two places does not add up, and five of eleven weeks are
+  half-cent fills.** An option midpoint lands on a half-cent whenever the spread is odd, so
+  the page printed **`6.04`** beside a `Cash Δ` of **`604.50`** — a fifty-cent hole in the
+  one table whose purpose is to show exactly what was booked, on the rubric's 25-point line.
+  `_money`'s own docstring had said it since T-59: *a covered call's premium lives in the
+  cents, and a page that rounds them reconciles against nothing.* It had never been applied
+  to `limit` and `fill`. The guard reads the cell back **out of the page** and multiplies by
+  the row's own quantity — the arithmetic a reader actually performs.
+- **Neither defect was reachable by any test that existed, because both arrived with a state
+  change nothing had ever produced.** The two live-panel tests did not fail on the mislabelled
+  bar; one **crashed** on `call["ric"]` being None and the other on the page no longer saying
+  "still open" — i.e. they reported the state change, not the defect. The open branch now has
+  a constructed fixture of its own, since the committed book will never be open again.
+- **The write-up's three standalone paragraphs folded into the answers** (PO: *"seems like the
+  answers are essentially giving the same information"* — they were). Two restated their
+  answer's own opening sentence; the $4.80/$4.81 midpoint example was strictly weaker than
+  the R² and the **$49.50** bid-versus-mid bound the fill answer now cites. `METHOD` stays.
+  `OBSERVATION_POINT_FACTS` **outlived its paragraph on purpose**, so `select_strike` is still
+  re-run on the two prices the argument was measured from — the prose may change, the rule
+  stays held to it. FR-19's CI guard went back to `::error::` **because a test went red**, not
+  because anyone remembered.
+- **The panel's two *generated* paragraphs went the same way, and they are the more
+  interesting cut.** "The rule…" and "The exit is to wait…" led the panel and restated the
+  PO's first two answers a few lines below them — but unlike the authored prose they were
+  **derived from `Params`**, which is a property no hand-written answer has: an answer saying
+  "nearest out-of-the-money" keeps saying it after SD-5 changes. So they moved into the
+  record fold as a **rules-in-words table** rather than being deleted, and the parameter
+  table stays `Params` verbatim so a derived row is not mistaken for a field. *Cutting
+  redundancy is a rendering decision; losing a derivation is a correctness one, and they are
+  easy to confuse.*
+- **The account cards are right, and one of them cannot be checked.** A recomputation from
+  the blotter and the raw parquet — touching neither `event_ledger` nor `page.py` — reproduces
+  all eight, and the printed strings satisfy the identities as well as the floats. But
+  **Short option is `$0.00` on every book that can exist**: the engine refuses a window that
+  straddles a week (SPEC §3.2 item 3) and I-7 resolves every open call, so the last *booked*
+  bar is always a settlement bar, and `short_calls` is `0` on that row too. Pointing the card
+  at it renders an identical `$0.00` and the suite stayed **green**. Its guard fabricates a
+  covered row now. *A cell that is always zero is a cell whose source is never checked* —
+  and "every card is a cell of the last ledger row" was true while being unverifiable for
+  one of the eight.
+- **A guard whose other branch the code refuses to reach cannot see a hardcode.** `Params`
+  rejects any `itm_rule` but `strict` (SD-6), so no page can render the inclusive wording —
+  and the test that claimed the ITM sentence was "re-derived from `params.itm_rule`" in fact
+  asserted the literal the strict fixture produces. A mutant replacing the call with that
+  exact string survived. The replacement is **structural**: `_itm_words` is made to answer
+  with a sentinel and the sentinel has to reach the page. 3 of 3 caught after; 9 of 9 on the
+  live-panel and write-up guards.
 
 **T-55 closed 2026-09-13 — all six strategy decisions are made** (PRD §15): window
 **`2026-07-06 → 2026-09-11`** (SD-2), **$75,000 fully funded** (SD-3), **nearest OTM** (SD-5),
@@ -997,7 +1064,7 @@ submission — PO to confirm the standing recommendation. The order that fits th
 the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions → T-78's entry → T-56 → T-57 → T-58 →
 T-79 → T-68 → T-69 → T-59~~ (all landed) → **T-60** → ship, with T-78's settlement leg on
 Friday 09-18. 1.1's brief is archived at `docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open.
-**705 tests green, no xfail** (2026-09-18, full run, **and in CI's own `python:3.12-slim` container**; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
+**710 tests green, no xfail** (2026-09-19, full run after T-60, the settlement leg and the account-card audit; the 705 that preceded them were verified **in CI's own `python:3.12-slim` container**; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
 Update this paragraph as things land (lockstep rule).
 
 **T-57 landed 2026-09-15 — `covered_call/engine.py`, so the book runs** (FR-15, FR-16, NFR-6).

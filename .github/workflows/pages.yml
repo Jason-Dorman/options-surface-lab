@@ -176,18 +176,15 @@ jobs:
           # element on this page with no figure behind it, so an unwritten slot is
           # invisible on a page that otherwise renders perfectly.
           #
-          # **Downgraded to a WARNING on 2026-09-18, at the PO's request**, so the page can
-          # be looked at before the prose exists. It blocked the deploy on 09-17 exactly as
-          # specified, which is the point — but "I cannot see the page" is a worse failure
-          # three days out than "the page is visibly unfinished", and the slots render in
-          # red so nothing about this is quiet.
-          #
-          # It goes back to `exit 1` the moment the write-up lands, and not by anyone
-          # remembering: tests/test_build_covered_call.py reads this line and FAILS if the
-          # posture and `writeup.ANSWERS` disagree. A waiver that cannot expire is a
-          # deleted guard with extra steps.
+          # Downgraded to a WARNING on 2026-09-18 at the PO's request, so the page could be
+          # looked at before the prose existed, and **restored the same day** when the PO
+          # wrote all five answers (T-60). It did not need anyone to remember:
+          # tests/test_build_covered_call.py reads this line and FAILS if the posture and
+          # `writeup.ANSWERS` disagree, so the waiver expired by itself the moment the
+          # write-up landed. A waiver that cannot expire is a deleted guard with extra steps.
           if grep -qF "[unwritten]" "$page"; then
-            echo "::warning::an FR-19 write-up answer is still unwritten — see options_surface_lab/covered_call/writeup.py (T-60). The page is PUBLISHED BUT NOT SUBMITTABLE."
+            echo "::error::an FR-19 write-up answer is still unwritten — see options_surface_lab/covered_call/writeup.py (T-60)"
+            exit 1
           fi
 
       - uses: actions/upload-pages-artifact@v3

@@ -15,8 +15,8 @@ With eight days left, the session **recommends deferring [BACKLOG.md](BACKLOG.md
 after the submission** and building this page on the current builder (T-79) — **PO to
 confirm**. Either way the tape and the engine are pure Python and start now. The order that
 fits the calendar: ~~T-62 spike~~ (✅ 2026-09-13) → ~~SD-2, SD-3, SD-5, SD-6 decided~~ (✅ 2026-09-13, T-55) → **T-65 rules + T-80 live leg, dry-run
-by Sunday** → ~~T-78 Monday's entry~~ (◐ **booked 2026-09-14**, settles 09-18) → ~~T-56 tape module~~ (✅ 2026-09-14) → ~~T-77 the pull~~ (✅ 2026-09-15) → ~~T-57 engine + invariants~~ (✅ 2026-09-15) → ~~T-58 the evidence~~ (✅ 2026-09-16) → ~~T-79 the second page~~ (✅ 2026-09-17) → ~~T-68 the theme~~ → ~~T-69 the figures~~ → ~~T-59 the page~~ (✅ 2026-09-17) → **T-60 the write-up** →
-T-71/T-72 ship by Saturday 09-19.
+by Sunday** → ~~T-78 Monday's entry~~ (◐ **booked 2026-09-14**, settles 09-18) → ~~T-56 tape module~~ (✅ 2026-09-14) → ~~T-77 the pull~~ (✅ 2026-09-15) → ~~T-57 engine + invariants~~ (✅ 2026-09-15) → ~~T-58 the evidence~~ (✅ 2026-09-16) → ~~T-79 the second page~~ (✅ 2026-09-17) → ~~T-68 the theme~~ → ~~T-69 the figures~~ → ~~T-59 the page~~ (✅ 2026-09-17) → ~~T-60 the write-up~~ (✅ 2026-09-18) →
+**T-71/T-72 ship by Saturday 09-19**. T-78's settlement leg ran 2026-09-18: `ASSIGN` at 721.33 against the 710 strike, book flat, cash $75,688.50.
 
 ---
 
@@ -88,7 +88,7 @@ T-71/T-72 ship by Saturday 09-19.
 
 | ID | Task | Maps to | Status |
 |---|---|---|---|
-| T-60 | **[PO]** The write-up: strike choice; wait-through-expiry; fill at mid (cite the R²); why Reg T; the analysis — what happened, where theory met tape, what to change. | FR-19 | ☐ |
+| T-60 | **[PO]** The write-up: strike choice; wait-through-expiry; fill at mid (cite the R²); why Reg T; the analysis — what happened, where theory met tape, what to change. | FR-19 | ✅ **2026-09-18.** All five answered by the PO. The three standalone paragraphs folded into the answers they qualified (two restated an answer's own first sentence; the $4.80/$4.81 midpoint example was weaker than the R² and the $49.50 bound the fill answer now cites). `OBSERVATION_POINT_FACTS` kept, so `select_strike` is still held to the argument. CI back to `::error::` — by a failing test, not by memory. |
 | T-71 | Browser drive of the built page (RUNBOOK §5 posture): 14 widths, tables scroll rather than deform, hover values on the NAV chart, zero page/console errors; incognito check of the Pages URL. | FR-18 | ☐ after T-59 |
 | T-72 | Docs lockstep + PRD §20 definition of done; **[PO]** Canvas submission. | all | ☐ |
 

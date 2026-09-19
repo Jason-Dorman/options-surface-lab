@@ -50,6 +50,44 @@ def _html(page) -> str:
     return "\n".join(page.panels)
 
 
+def _panel(page, title: str) -> str:
+    """The one panel whose header carries `title` — both blotters start with a `Time`
+    column, so a table lookup across the whole page silently hands back the wrong one."""
+    found = [p for p in page.panels if f">{title}<" in p]
+    assert len(found) == 1, f"expected one {title!r} panel, found {len(found)}"
+    return found[0]
+
+
+def _entry_call_row(live: dict) -> dict:
+    """The blotter row that wrote the call — named by its rule, never by the position."""
+    return next(
+        r for r in live["blotter"] if str(r["note"]).startswith("R-ENTRY-CALL")
+    )
+
+
+def _capture(live: dict, kind: str) -> dict | None:
+    """The live state's capture taken at an `entry` or a `closing` bar.
+
+    `bar_kind` arrived with T-81, after the 09-14 entry was booked, so a snapshot without
+    it is an entry — which is what it meant when that was the only leg.
+    """
+    for snapshot in reversed(live["captures"]):
+        if (snapshot.get("diagnostics") or {}).get("bar_kind", "entry") == kind:
+            return snapshot
+    return None
+
+
+def _kv(markup: str) -> dict:
+    """Every `label -> value` pair of the panel's key/value tables, tags stripped."""
+    out = {}
+    for row in re.findall(r"<tr>(.*?)</tr>", markup, re.S):
+        cells = [re.sub(r"<[^>]+>", "", c).strip()
+                 for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.S)]
+        if len(cells) == 2:
+            out.setdefault(cells[0], cells[1])
+    return out
+
+
 def _find_table(markup: str, want) -> tuple:
     """`(headers, rows)` of the one table matching `want`.
 
@@ -230,6 +268,37 @@ def test_the_cards_are_the_reg_t_account_at_the_last_booked_bar(real_page):
     ):
         shown = float(cards[label].replace("$", "").replace(",", "").replace("\u2212", "-"))
         assert shown == pytest.approx(float(last[column]), abs=5e-3), label
+
+
+def test_the_short_option_card_reads_the_option_column(real_tape, params):
+    """The one card no book can exercise, so the only one whose column is unverifiable.
+
+    The engine refuses a window that straddles a week (SPEC §3.2 item 3) and I-7 resolves
+    every open call, so the last **booked** bar is always a settlement bar and
+    `option_mv` there is always `0.0` — on the committed tape, on the synthetic one, and on
+    any tape that could be pulled. `short_calls` is `0` on that row too, so pointing the
+    card at it renders an identical `$0.00` and the suite stays green: verified by mutation
+    on 2026-09-18, and it survived.
+
+    The row is therefore fabricated rather than backtested. Nothing else on the strip needs
+    this — every other card differs from its neighbours on a real book.
+    """
+    book = page_mod.build_page(real_tape, params, shell=PageShell("t")).book
+    rows = book.event_ledger()
+    covered = rows.copy()
+    covered.loc[covered.index[-1], "option_mv"] = -1234.50
+    covered.loc[covered.index[-1], "short_calls"] = 1
+
+    class _Book:
+        params = book.params
+        def event_ledger(self):
+            return covered
+
+    cards = {label: value for label, value, *_ in page_mod._headline(_Book())}
+    assert cards["Short option"] == "−$1,234.50", (
+        "the Short option card does not read `option_mv` — it is $0.00 on every real book, "
+        "so nothing else can tell"
+    )
 
 
 def test_every_card_says_where_its_number_comes_from(real_page):
@@ -527,16 +596,38 @@ def test_the_printed_rule_is_the_rule_the_engine_ran(page):
     """FR-14: *"a test pins that sentence to `params` so the page cannot describe a rule the
     engine did not run"*.
 
-    `describe_strike_rule` is the rule's own words — rendered, never paraphrased — and the
-    ITM half is re-derived from `params.itm_rule` rather than asserted as a string, so
-    flipping SD-6 changes the page or fails here.
+    `describe_strike_rule` is the rule's own words — rendered, never paraphrased.
     """
     markup = _html(page)
     assert page.params.describe_strike_rule() in markup
 
-    strict = page.params.itm_rule == "strict"
-    assert ("strictly above the strike" in markup) is strict
-    assert ("at or above the strike" in markup) is not strict
+    assert page.params.itm_rule == "strict", "the fixture's own decision changed"
+    assert "strictly above the strike" in markup
+    assert "at or above the strike" not in markup
+
+
+def test_the_itm_sentence_comes_from_the_rule_and_not_from_a_literal(
+    synthetic_tape, params, monkeypatch
+):
+    """SD-6's other branch cannot be rendered, so the usual check cannot see a hardcode.
+
+    `Params` **refuses** any `itm_rule` but `"strict"` (rules.py), so no page exists that
+    prints the inclusive wording — which means a page that typed the strict sentence is
+    indistinguishable, by output, from one that derived it. A mutant doing precisely that
+    survived the test above on 2026-09-18, whose docstring had claimed the sentence was
+    "re-derived from `params.itm_rule`" while it asserted the literal the fixture happens
+    to produce.
+
+    The check is therefore structural: `_itm_words` is made to answer with a sentinel and
+    the sentinel has to reach the page. That proves the call site, which is the only thing
+    left that can be wrong while SD-6 is pinned — and it is what will make the rendered
+    sentence follow if SD-6 is ever revisited.
+    """
+    monkeypatch.setattr(page_mod, "_itm_words", lambda _: "SENTINEL-ITM-WORDS")
+    markup = _html(page_mod.build_page(synthetic_tape, params, shell=PageShell("t")))
+    assert "SENTINEL-ITM-WORDS" in markup, (
+        "the page's ITM sentence is a literal — it does not come from `_itm_words`"
+    )
 
 
 def test_the_page_prints_every_stated_simplification_the_spec_names(page):
@@ -579,25 +670,122 @@ def test_the_live_panel_carries_the_booked_rows_and_their_raw_quotes(real_page):
 
     markup = _html(real_page)
     for row in live["blotter"]:
-        assert page_mod._present(row["fill"]) in markup
         assert row["side"] in markup
 
-    capture = live["captures"][-1]
-    call = live["position"]["call"]
-    quoted = next(c for c in capture["chain"] if c["ric"] == call["ric"])
-    for value in (capture["underlying"]["trdprc_1"], quoted["bid"], quoted["ask"]):
-        assert page_mod._present(value) in markup, f"{value} is not beside the fill"
+    booked = _entry_call_row(live)
+    entry = _capture(live, "entry")
+    quoted = next(c for c in entry["chain"] if c["ric"] == booked["instrument"])
+    for value in (entry["underlying"]["trdprc_1"], quoted["bid"], quoted["ask"]):
+        assert f"{value:,.2f}" in markup, f"{value} is not beside the fill"
+
+
+def test_the_evidence_stays_on_the_entry_bar_after_the_week_settles(real_page):
+    """The defect this guard was written for shipped on 2026-09-18 and is reproduced below.
+
+    `settle` appends a second capture and sets `position["call"]` to None. The panel read
+    `captures[-1]` and identified the contract off the position, so a settled week printed
+    the **settlement** bar under the label "Entry bar", the settlement spot beside a fill
+    booked at a different price, and an empty bid/ask where FR-21's evidence belongs.
+
+    Addressed by label out of the rendered table rather than by rebuilding the panel's own
+    lookup — a guard that asks the page the same question the page asked itself gets the
+    page's own answer back (T-46, T-82).
+    """
+    live = real_page.live
+    entry, closing = _capture(live, "entry"), _capture(live, "closing")
+    assert closing is not None, (
+        "the committed book has not settled — this guard needs both legs to have run"
+    )
+    assert entry["entry_bar"] != closing["entry_bar"], "the two legs read the same bar"
+
+    values = _kv(_html(real_page))
+    assert values["Entry bar"] == str(entry["entry_bar"])
+    assert values["Expiry bar"] == str(closing["entry_bar"])
+    assert values["Stock print at that bar"] == f"{entry['underlying']['trdprc_1']:,.2f}"
+    assert values["Settlement print"] == f"{closing['underlying']['trdprc_1']:,.2f}"
+    assert values["Call bid / ask"].count("—") == 0, (
+        "the quotes behind the fill went missing when the week settled"
+    )
+
+
+def test_the_printed_fill_reconciles_against_the_cash_it_moved(real_page):
+    """A half-cent midpoint printed to two places leaves a fifty-cent hole in the one table
+    whose purpose is to show exactly what was booked.
+
+    Read back **out of the page** and multiplied by the row's own quantity, which is the
+    arithmetic a reader checking the blotter by hand performs. `_present` rounded 6.045 to
+    `6.04` beside a `Cash Δ` of `604.50` until 2026-09-18 — five of the eleven weeks on this
+    book wrote a call at a half-cent mid, and every one of them failed to add up.
+
+    Both blotters, because both carry fills: the backtest's is the graded table and the
+    live one is the week a reader can still check against a broker statement.
+    """
+    for panel, records in (
+        (_panel(real_page, "Blotter: Executed Trades"),
+         real_page.book.blotter.to_dict("records")),
+        (_panel(real_page, "Live book"), real_page.live["blotter"]),
+    ):
+        _, rows = _find_table(panel, "Time")
+        printed = {}
+        for row in rows:
+            cells = [re.sub(r"<[^>]+>", "", str(c)) for c in row]
+            printed[(cells[0], cells[2])] = cells[5]
+
+        checked = 0
+        for record in records:
+            if not record["cash_delta"]:
+                continue
+            cell = printed[(str(record["time"]), record["side"])]
+            # An option row's quantity is contracts; the cash it moved is per share.
+            per_unit = 100 if str(record.get("occ") or "").strip() else 1
+            moved = float(cell.replace(",", "")) * record["qty"] * per_unit
+            assert abs(moved - abs(record["cash_delta"])) < 0.005, (
+                f"the page prints {cell} for a row that moved {record['cash_delta']}"
+            )
+            checked += 1
+        assert checked, "no row moved cash — this guard checked nothing"
 
 
 def test_the_live_panel_says_which_half_of_the_page_is_live(real_page):
     """FR-21: *"the panel states what is historical and what is live"*.
 
     The two books are identical in a table and mean entirely different things — one is a
-    window that has already happened, the other is a position that is still open.
+    window that has already happened, the other is a position that may still be open. The
+    state sentence is asserted against the book's **actual** position rather than against
+    this week's, so it stays a test after the next `enter`.
     """
     markup = _html(real_page)
     assert "historical" in markup and "forward" in markup
-    assert "still open" in markup, "an open call must say so"
+    if (real_page.live.get("position") or {}).get("call"):
+        assert "still open" in markup, "an open call must say so"
+    else:
+        assert "Flat" in markup and "still open" not in markup
+
+
+def test_an_open_live_book_says_the_call_is_still_open(real_tape, params):
+    """The mirror of `test_a_settled_live_book_stops_claiming_an_open_position`.
+
+    The committed book settled on 2026-09-18, so the open branch is no longer reached by
+    the real state — and a branch no fixture reaches is a branch with no test, however many
+    tests name it (T-57). The open week is reconstructed by dropping the settlement leg.
+    """
+    import copy
+
+    live = copy.deepcopy(page_mod.live_mod.load_state(params))
+    booked = _entry_call_row(live)
+    live["blotter"] = [r for r in live["blotter"] if r["time"] == booked["time"]]
+    live["captures"] = [_capture(live, "entry")]
+    live["position"] = {
+        "shares": 100, "short_calls": 1,
+        "call": {"ric": booked["instrument"], "occ": booked["occ"],
+                 "strike": 710.0, "expiry": "2026-09-18"},
+    }
+
+    markup = _html(
+        page_mod.build_page(real_tape, params, shell=PageShell("t"), live=live)
+    )
+    assert "still open" in markup
+    assert "Flat —" not in markup
 
 
 def test_a_live_book_that_has_not_run_says_so_rather_than_rendering_empty(
@@ -656,14 +844,17 @@ def test_an_unwritten_answer_is_loud(page):
 
 
 def test_the_po_s_methodology_block_is_on_the_page(page):
-    """T-70's written half — the Rule / Fill / Stock / Audit / Limitation hierarchy and the
-    three paragraphs behind it. Rendered verbatim: this module may not paraphrase the PO."""
+    """T-70's written half — the Rule / Fill / Stock / Audit / Limitation hierarchy, and
+    FR-19's five answers. Rendered verbatim: this module may not paraphrase the PO.
+
+    The three standalone paragraphs folded into the answers on 2026-09-18, so what this
+    holds is the hierarchy plus `ANSWERS` — which is where their sentences now live.
+    """
     markup = _html(page)
     for _, text in writeup.METHOD:
         assert text in markup
-    for text in (writeup.OBSERVATION_POINT, writeup.SYNCHRONISATION,
-                 writeup.MIDPOINT_EVIDENCE):
-        assert text in markup
+    for answer in writeup.ANSWERS:
+        assert answer in markup
 
 
 # --------------------------------------------------------------------------
