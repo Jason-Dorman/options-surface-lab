@@ -806,16 +806,26 @@ PAGE_CSS = f"""
     color:{TEXT_MUTED}; font-size:9.5px; line-height:1.3; margin-top:1px;
   }}
 
-  /* **Only the exceptions are coloured** (PO, 2026-09-17): a skipped week and a breached
-     margin line. A blotter is a list of trades, so BUY / SELL / EXPIRE / ASSIGN all stay
-     TEXT -- colouring every side turns a record into a dashboard and makes the two rows that
-     actually want attention no louder than the twenty-four that do not.
+  /* The exceptions: a skipped week and a breached margin line.
 
      Amber on a skip reason is emphasis on a WORD, which is the licence `.osl-note b`
      already has (section 6 rule 2); it never lands on a number, where it would be an
      encoding. */
   .osl-table .osl-skip {{ color:{WARN}; font-weight:700; }}
   .osl-table .osl-flag {{ color:{NEGATIVE}; font-weight:700; }}
+
+  /* ---- direction, in the two columns that have one (PO, 2026-09-18) ----
+     The PO's 09-17 decision was that only the exceptions take colour, on the grounds that a
+     blotter is a record and not a dashboard; reversed here for the `side` and `cash Delta`
+     columns, which is the PO's call to make and now made.
+
+     These are `POSITIVE` and `NEGATIVE` -- the tokens the underlying's up and down candles
+     already use -- rather than two new greens. The palette's direction colours are the
+     palette's direction colours wherever direction appears, which is the whole point of
+     naming tokens for their job (section 3). EXPIRE and ASSIGN stay TEXT: they move no cash
+     and are not a side a trader took. */
+  .osl-table .osl-up {{ color:{POSITIVE}; }}
+  .osl-table .osl-down {{ color:{NEGATIVE}; }}
 
   /* The strategy's parameters are two columns of key and value, not a ledger. It opts out of
      the width floor -- a 2-column table that scrolls is a scrollbar for nothing -- and its

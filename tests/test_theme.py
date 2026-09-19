@@ -367,6 +367,8 @@ TABLE_CLASSES = [
     ".osl-label",         # a cell that names rather than measures
     ".osl-skip",          # a skip reason — amber, the one exception
     ".osl-flag",          # NEG_AVAILABLE — red, the other one
+    ".osl-up",            # cash in, and a BUY (PO, 2026-09-18)
+    ".osl-down",          # cash out, and a SELL
 ]
 
 
@@ -703,6 +705,12 @@ CONTRAST_PAIRS = [
     ("MARGIN_MM on SURFACE_ALT", T.MARGIN_MM, T.SURFACE_ALT),
     ("FIT_LINE on SURFACE_ALT", T.FIT_LINE, T.SURFACE_ALT),
     ("WARN on SURFACE", T.WARN, T.SURFACE),  # a skip reason in the skip log
+    # Direction in a blotter cell (PO, 2026-09-18). Measured on BOTH table grounds: a row
+    # takes SURFACE at rest and SURFACE_ALT under the cursor, and a colour that clears the
+    # floor only until someone hovers it is a colour that fails where it is being read.
+    ("POSITIVE on SURFACE", T.POSITIVE, T.SURFACE),
+    ("POSITIVE on SURFACE_ALT", T.POSITIVE, T.SURFACE_ALT),
+    ("NEGATIVE on SURFACE_ALT", T.NEGATIVE, T.SURFACE_ALT),
 ]
 
 

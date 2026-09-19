@@ -278,13 +278,18 @@ CAPTION_MARKERS = (
     "Fill assumption:",   # FR-17's fit line — SPEC §11's "require the R-squared line"
 )
 
-#: At least one entry was booked. A blotter side cell, not a rule id: the rule ids are also
-#: printed with the write-up, so grepping `R-ENTRY-STOCK` would pass on a page whose blotter
-#: was empty — which is the exact failure the guard exists to catch.
-BLOTTER_ENTRY_MARKER = "<td>BUY</td>"
+#: At least one entry was booked. A blotter side **cell**, not a rule id: the rule ids are
+#: also printed with the write-up, so grepping `R-ENTRY-STOCK` would pass on a page whose
+#: blotter was empty — the exact failure the guard exists to catch.
+#:
+#: It matches the cell's *end*, not `<td>BUY</td>`. The opening tag grew a class the day the
+#: PO asked for coloured sides (2026-09-18) and the guard stopped matching — it would have
+#: failed the deploy, and `tests/test_build_covered_call.py` caught it first, which is the
+#: whole reason these live beside the markup instead of only in the workflow (T-45).
+BLOTTER_ENTRY_MARKER = ">BUY</td>"
 
 #: ...and at least one week resolved. Either is enough; a window can be all of one.
-BLOTTER_SETTLED_MARKERS = ("<td>EXPIRE</td>", "<td>ASSIGN</td>")
+BLOTTER_SETTLED_MARKERS = (">EXPIRE</td>", ">ASSIGN</td>")
 
 
 def entries(book) -> int:
@@ -373,7 +378,7 @@ def _blotter_panel(shell: PageShell, book) -> str:
     note = f"FR-15 · {len(book.blotter)} rows"
     if len(book.skips):
         note += f" · {len(book.skips)} skips"
-    return shell.panel("Trades you actually made", note, body, n=3, width=T.W_FULL)
+    return shell.panel("Blotter: Executed Trades", note, body, n=3, width=T.W_FULL)
 
 
 #: The brief's blotter table, in the brief's order. `occ` is not a column — it rides inside
@@ -383,17 +388,43 @@ _BLOTTER_RENDERED = ("time", "instrument", "side", "qty", "limit", "fill", "cash
 _BLOTTER_HEADERS = tuple(COLUMN_LABELS[c] for c in _BLOTTER_RENDERED)
 
 
+#: The two blotter columns that carry a direction, and the class each takes (PO,
+#: 2026-09-18). `EXPIRE` and `ASSIGN` are absent on purpose: they move no cash and are not a
+#: side anyone took, so colouring them would make "something happened here" mean two
+#: different things in one column.
+SIDE_CLASS = {"BUY": "osl-up", "SELL": "osl-down"}
+
+
 def _blotter_row(record: dict) -> list:
-    """One blotter row, with the OCC stacked under the RIC."""
+    """One blotter row, with the OCC stacked under the RIC and direction in colour."""
     out = []
     for name in _BLOTTER_RENDERED:
         value = _present(record.get(name))
         if name == "instrument":
             occ = str(record.get("occ") or "").strip()
             out.append(Stacked(value, occ) if occ else value)
-            continue
-        out.append((value, "osl-num") if name in _NUMERIC else value)
+        elif name == "side":
+            out.append((value, SIDE_CLASS[value]) if value in SIDE_CLASS else value)
+        elif name == "cash_delta":
+            # Signed, so the class is read off the number rather than off the side: an
+            # ASSIGN's stock leg is a SELL that pays in, and a row whose cash did not move
+            # takes neither colour. Reading it from `side` would have been the same answer
+            # on this book and the wrong rule.
+            out.append((value, f"osl-num {_sign_class(record.get(name))}".strip()))
+        else:
+            out.append((value, "osl-num") if name in _NUMERIC else value)
     return out
+
+
+def _sign_class(value) -> str:
+    """`osl-up` / `osl-down` / "" — cash in, cash out, or cash unmoved."""
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return ""
+    if amount > 0:
+        return "osl-up"
+    return "osl-down" if amount < 0 else ""
 
 
 # --------------------------------------------------------------------------
@@ -730,6 +761,7 @@ def _present(value) -> str:
 
 __all__ = [
     "BLOTTER_ENTRY_MARKER",
+    "SIDE_CLASS",
     "BLOTTER_SETTLED_MARKERS",
     "CAPTION_MARKERS",
     "COLUMN_LABELS",

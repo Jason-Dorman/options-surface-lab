@@ -102,7 +102,7 @@ def test_the_page_carries_every_panel_the_spec_orders(page):
     assert re.findall(r'osl-panel-name">(.*?)<', markup) == [
         "Growth of the book",
         "Midpoint assumption",
-        "Trades you actually made",
+        "Blotter: Executed Trades",
         "Position, cash, and margin over time",
         "Covered-call rules and write-up",
         "Expired contracts this book queried",
@@ -373,6 +373,13 @@ BRIEF = Path(__file__).resolve().parents[2] / "docs" / "ASSIGNMENT-2-COVERED-CAL
 #: from the constant means deleting a column changes the page *and* the expectation together
 #: and the suite stays green. That is T-46's guard-that-reads-back-its-own-effect, and it
 #: survived a mutant here before this list existed.
+#: Which blotter sides take a direction colour, written out here rather than read from
+#: `page.SIDE_CLASS`, which is the thing under test. Deriving the expectation from the
+#: constant means adding `EXPIRE` to it changes the page *and* the expectation together and
+#: the suite stays green — T-46's guard-that-reads-back-its-own-effect, which survived a
+#: mutant here before this literal existed.
+DIRECTIONAL_SIDES = {"BUY": "osl-up", "SELL": "osl-down"}
+
 LEDGER_HEADERS = (
     "Date", "Cash", "Shares", "Short call", "Spot", "LMV", "Opt MV", "NAV",
     "Initial", "Maint", "Available",
@@ -406,6 +413,49 @@ def test_the_blotter_headers_are_exactly_the_ones_the_brief_names(real_page):
     rendered = _table_headers(_html(real_page), list(page_mod._BLOTTER_HEADERS))
     assert rendered == named, (
         f"the brief names {named} and the page renders {rendered}"
+    )
+
+
+def test_a_side_and_its_cash_carry_their_direction(real_page):
+    """PO, 2026-09-18, reversing the 09-17 decision that only exceptions take colour.
+
+    `BUY` green and `SELL` red in the side column; the cash column coloured by the **sign of
+    the number**, not by the side. Those are the same answer on this book — every BUY pays
+    out and every SELL pays in — and reading it off the side would still be the wrong rule:
+    an assignment's stock leg is a `SELL` that pays in, and a row whose cash did not move
+    must take neither colour.
+    """
+    markup = _html(real_page)
+    blotter = re.search(r'<table class="osl-table">.*?</table>', markup, re.S).group(0)
+    rows = re.findall(r"<tr>(.*?)</tr>", blotter, re.S)[1:]
+    assert rows, "no blotter rows to check"
+
+    side_at = page_mod._BLOTTER_RENDERED.index("side")
+    cash_at = page_mod._BLOTTER_RENDERED.index("cash_delta")
+    sides = set()
+    for row in rows:
+        cells = re.findall(r"<td([^>]*)>(.*?)</td>", row, re.S)
+        side_cls, side = cells[side_at]
+        cash_cls, cash = cells[cash_at]
+        sides.add(side.strip())
+
+        expected = DIRECTIONAL_SIDES.get(side.strip(), "")
+        assert (expected in side_cls) if expected else ("osl-up" not in side_cls
+                                                        and "osl-down" not in side_cls), (
+            f"{side.strip()} is classed {side_cls!r}"
+        )
+
+        amount = float(cash.replace(",", "").replace("\u2212", "-"))
+        want = "osl-up" if amount > 0 else "osl-down" if amount < 0 else ""
+        if want:
+            assert want in cash_cls, f"cash {amount} is classed {cash_cls!r}"
+        else:
+            assert "osl-up" not in cash_cls and "osl-down" not in cash_cls
+
+    assert {"BUY", "SELL"} <= sides, "the fixture never exercises both directions"
+    assert sides & {"EXPIRE", "ASSIGN"}, "no resolution row to prove it stays uncoloured"
+    assert page_mod.SIDE_CLASS == DIRECTIONAL_SIDES, (
+        "SIDE_CLASS has gained or lost a side — see DIRECTIONAL_SIDES"
     )
 
 

@@ -162,9 +162,9 @@ jobs:
             echo "::error::expected FR-16's account chart and FR-17's scatter, found $figs"; exit 1; }
           # A book with no trades renders perfectly and is wrong: every table is present,
           # every heading is right, and the strategy simply never fired.
-          grep -q "<td>BUY</td>" "$page" || {
+          grep -q ">BUY</td>" "$page" || {
             echo "::error::the blotter booked no entry — the book is empty"; exit 1; }
-          if ! grep -q "<td>EXPIRE</td>" "$page" && ! grep -q "<td>ASSIGN</td>" "$page"; then
+          if ! grep -q ">EXPIRE</td>" "$page" && ! grep -q ">ASSIGN</td>" "$page"; then
             echo "::error::no week ever resolved — every position is still open"; exit 1
           fi
           # FR-17's fit. Plain ASCII with no "/" and no "·" on purpose: the caption exists

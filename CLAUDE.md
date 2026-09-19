@@ -75,7 +75,7 @@ Conda `base` is Python 3.8 — the wrong one. In Git Bash: `conda activate algo`
 ```bash
 python build_preview.py       # 1.1's page — the static index.html Pages serves at /
 python build_covered_call.py  # A2's page — Pages serves it at /covered-call/
-pytest                        # 699 tests in tests/ — all green, no xfail
+pytest                        # 705 tests in tests/ — all green, no xfail
 reflex run                    # local dev server (FR-1); not what gets published
 
 # Both take `--site DIR` (CI passes `--site _site`): the page lands at DIR/<route> with its
@@ -624,6 +624,26 @@ strategy, Reg T account, blotter + skip log, daily ledger, mid vs print, live bo
 plus `PageShell.table` for the HTML tables and every remaining publish guard in `pages.yml`.
 **30 new tests; 28 of 28 injected defects caught; 687 green, no xfail.**
 
+**Colour marks direction in the blotter now (PO, 2026-09-18), reversing the 09-17 decision
+that only exceptions take colour.** `BUY` green, `SELL` red, and the cash column classed by
+the **sign of the number** rather than by the side — the same answer on this book, and the
+side would still be the wrong rule, because an assignment's stock leg is a `SELL` that pays
+*in* and a row whose cash did not move must take neither colour. `EXPIRE` / `ASSIGN` stay
+`TEXT`: they move no cash and are not a side anyone took. Panel [3] is **Blotter: Executed
+Trades**. Two things worth carrying:
+
+- **The colouring broke the CI publish guard, and a test caught it before the push.** The
+  guard grepped `<td>BUY</td>`; the opening tag grew a class and the guard silently stopped
+  matching the page it guards — T-45's defect, arriving from the one direction nobody watches,
+  a *styling* change. The markers match the cell's end (`>BUY</td>`) now. This is exactly why
+  `page.BLOTTER_ENTRY_MARKER` lives beside the markup with a test pinning it to `pages.yml`,
+  rather than as a literal in the workflow.
+- **T-46 caught me a fourth time in this task.** The colour test read `page.SIDE_CLASS` — the
+  thing under test — so a mutant adding `EXPIRE` to it moved the page and the expectation
+  together and the suite stayed green. It is pinned to a literal now, like `LEDGER_HEADERS`.
+  *Four times in one task is not bad luck; deriving an expectation from the constant under
+  test is the default way to write a test, and it has to be resisted deliberately every time.*
+
 **CI went red on a suite that was green here, again — and this time the log was unreadable
 (2026-09-18).** The cause was one character. **Plotly picks its JSON serializer at run time**:
 `orjson` when it is importable, the standard library otherwise, and the two escape non-ASCII
@@ -977,7 +997,7 @@ submission — PO to confirm the standing recommendation. The order that fits th
 the top of `docs/BACKLOG-2.md`: ~~T-62 spike → decisions → T-78's entry → T-56 → T-57 → T-58 →
 T-79 → T-68 → T-69 → T-59~~ (all landed) → **T-60** → ship, with T-78's settlement leg on
 Friday 09-18. 1.1's brief is archived at `docs/archive/ASSIGNMENT-1.md`. M4's T-20/T-22 remain open.
-**699 tests green, no xfail** (2026-09-18, full run, **and in CI's own `python:3.12-slim` container**; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
+**705 tests green, no xfail** (2026-09-18, full run, **and in CI's own `python:3.12-slim` container**; the 588 that preceded T-68 were verified in a clean Linux venv on the pinned versions *and* on pandas 3).
 Update this paragraph as things land (lockstep rule).
 
 **T-57 landed 2026-09-15 — `covered_call/engine.py`, so the book runs** (FR-15, FR-16, NFR-6).

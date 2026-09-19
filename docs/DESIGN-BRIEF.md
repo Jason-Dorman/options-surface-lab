@@ -467,21 +467,44 @@ two table behaviours on one page — and the two-column strategy table opts out 
 length of the page, and the header is `position:sticky` so scrolling never costs a reader the
 column names.
 
-**Only the exceptions are coloured** (PO, 2026-09-17): a skipped week and a breached margin
-line, and nothing else.
+**Colour marks the exceptions, and — since 2026-09-18 — direction.**
+
+The 09-17 decision was that only the exceptions take colour: *"a blotter is a list of trades;
+colouring every side turns a record into a dashboard."* **The PO reversed it for the two
+columns that carry a direction** (2026-09-18), which is the PO's call and is now made. The
+argument against still holds for the rest of the table, and the rest of the table is still
+`TEXT`.
+
+`POSITIVE` / `NEGATIVE` rather than two new greens: they are the tokens the underlying's up
+and down candles already use, and the palette's direction colours are the palette's direction
+colours wherever direction appears (§3). **`EXPIRE` and `ASSIGN` stay `TEXT`** — they move no
+cash and are not a side anyone took, so colouring them would make "something happened here"
+mean two different things in one column.
+
+The cash column is classed by the **sign of the number**, never by the side. They are the same
+answer on this book — every `BUY` pays out, every `SELL` pays in — and the side would still be
+the wrong rule: an assignment's stock leg is a `SELL` that pays *in*, and a row whose cash did
+not move must take neither colour.
 
 | Class | Colour | What it marks |
 |---|---|---|
+| `.osl-up` | `POSITIVE` `#2FD4A0` | a `BUY`, and cash coming in |
+| `.osl-down` | `NEGATIVE` `#FF4D6D` | a `SELL`, and cash going out |
 | `.osl-skip` | `WARN` `#FFB000` | a skip reason in the skip log |
 | `.osl-subcell` | `TEXT_MUTED` 9.5px | a second line inside a cell — the blotter's OCC under its RIC (the brief: *"Stock or option RIC; OCC as a subtitle"*) |
 | `.osl-readout-hint` | `TEXT_MUTED` 10px | the line under a card's number saying where it comes from — *"NAV − initial. Room for a new risk."* A Reg T figure a reader cannot check is one they have to take on trust |
 | `.osl-flag` | `NEGATIVE` `#FF4D6D` | `NEG_AVAILABLE` on a ledger row |
 
-`BUY` / `SELL` / `EXPIRE` / `ASSIGN` all stay `TEXT`. A blotter is a list of trades; colouring
-every side turns a record into a dashboard and leaves the two rows that want attention no louder
-than the twenty-four that do not. Amber on a skip reason is emphasis on a **word**, which is the
-licence `.osl-note b` already has under §6 rule 2 — it never lands on a number, where it would
-be an encoding rather than emphasis.
+Amber on a skip reason is emphasis on a **word**, which is the licence `.osl-note b` already
+has under §6 rule 2 — it never lands on a number, where it would be an encoding rather than
+emphasis. The direction colours *are* an encoding, deliberately, on the two columns that have
+a direction to encode.
+
+**One consequence, recorded rather than hidden:** on every row the side and its cash delta take
+*opposite* colours — a `BUY` is green and pays out, a `SELL` is red and pays in. That is
+correct under both rules and it is the assignment example's reason for doing the reverse
+(it colours by cash, so `BUY` is red there). The PO chose buy-green / sell-red on 2026-09-18
+with that trade-off stated.
 
 ### What is pinned, and what T-68 could not pin
 
